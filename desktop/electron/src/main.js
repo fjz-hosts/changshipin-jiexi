@@ -427,6 +427,17 @@ function buildMenu() {
         { type: 'separator' },
         { label: '打开配置目录', click: () => shell.openPath(userDataDir) },
         { label: '打开日志目录', click: () => shell.openPath(LOG_DIR) },
+        {
+          label: '重新创建桌面快捷方式',
+          click: () => {
+            const result = createDesktopShortcut()
+            if (result.ok) {
+              dialog.showMessageBox({ type: 'info', title: '快捷方式', message: '已在桌面重新创建「长视频解析」快捷方式', buttons: ['好'], noLink: true })
+            } else {
+              dialog.showMessageBox({ type: 'warning', title: '快捷方式', message: '创建失败', detail: result.error || '', buttons: ['好'], noLink: true })
+            }
+          },
+        },
         { type: 'separator' },
         { label: '退出', accelerator: 'Alt+F4', click: () => quitApp() },
       ],
@@ -521,6 +532,27 @@ function toggleFullscreen() {
 function quitApp() {
   quitting = true
   app.quit()
+}
+
+function createDesktopShortcut() {
+  if (!app.isPackaged) {
+    return { ok: false, error: '开发模式下不创建快捷方式' }
+  }
+  try {
+    const shortcutPath = path.join(app.getPath('desktop'), '长视频解析.lnk')
+    const ok = shell.writeShortcutLink(shortcutPath, 'create', {
+      target: process.execPath,
+      cwd: path.dirname(process.execPath),
+      icon: iconPath(),
+      iconIndex: 0,
+      description: '长视频解析 · 四平台链接解析播放',
+    })
+    log(`重建桌面快捷方式：${shortcutPath} ok=${ok}`)
+    return { ok, path: shortcutPath }
+  } catch (error) {
+    log(`重建桌面快捷方式失败：${error?.message || error}`)
+    return { ok: false, error: String(error?.message || error) }
+  }
 }
 
 function showAbout() {
@@ -690,6 +722,7 @@ function registerIpc() {
   ipcMain.handle('shell:open-external', (_event, url) => safeOpenExternal(url))
   ipcMain.handle('app:open-userdata', () => shell.openPath(userDataDir))
   ipcMain.handle('app:open-logs', () => shell.openPath(LOG_DIR))
+  ipcMain.handle('app:create-shortcut', () => createDesktopShortcut())
   ipcMain.handle('app:about', () => showAbout())
   ipcMain.handle('app:toggle-fullscreen', () => {
     toggleFullscreen()

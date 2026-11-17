@@ -52,7 +52,9 @@ class UpdateManager {
     this.started = true
 
     autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = true
+    // 不自动安装：下载完成后必须由用户点「立即重启安装」，
+    // 安装时显示正常的 NSIS 向导，避免静默卸载后安装失败导致程序消失。
+    autoUpdater.autoInstallOnAppQuit = false
     autoUpdater.allowPrerelease = false
     autoUpdater.disableWebInstaller = true
     // 加速镜像对多段 Range 支持不好，单连接整包下载最稳
@@ -213,7 +215,9 @@ class UpdateManager {
     } catch {
       /* 清理失败也继续安装 */
     }
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
+    // isSilent=false：显示安装向导，保留原安装目录和快捷方式；
+    // isForceRunAfter=true：安装完成后自动启动新版本。
+    setImmediate(() => autoUpdater.quitAndInstall(false, true))
   }
 
   dispose() {
@@ -236,7 +240,7 @@ class UpdateManager {
       type: 'info',
       title: '发现新版本',
       message: `长视频解析 v${version} 已下载完成`,
-      detail: '重启程序即可完成更新。选择「稍后」会在下次退出程序时自动安装。',
+      detail: '重启后会打开安装向导，选择原来的安装目录即可覆盖升级，配置和桌面快捷方式都会保留。选择「稍后」则下次启动再提示。',
       buttons: ['立即重启安装', '稍后'],
       defaultId: 0,
       cancelId: 1,

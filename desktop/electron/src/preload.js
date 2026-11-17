@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('desktop', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   openUserData: () => ipcRenderer.invoke('app:open-userdata'),
   openLogs: () => ipcRenderer.invoke('app:open-logs'),
+  createShortcut: () => ipcRenderer.invoke('app:create-shortcut'),
   about: () => ipcRenderer.invoke('app:about'),
   focusMain: () => ipcRenderer.invoke('app:focus-main'),
   setFullscreen: (flag) => ipcRenderer.invoke('app:set-fullscreen', Boolean(flag)),

@@ -74,6 +74,7 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
       "language": "2052",
       "artifactName": "changshipin-Setup-${version}.${ext}"
     },

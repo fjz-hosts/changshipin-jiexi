@@ -1019,6 +1019,11 @@
     $('#btn-open-repo').addEventListener('click', () => window.desktop.openExternal(state.info?.repo || 'https://github.com/fjz-hosts/changshipin-jiexi'))
     $('#btn-open-userdata').addEventListener('click', () => window.desktop.openUserData())
     $('#btn-open-logs').addEventListener('click', () => window.desktop.openLogs())
+    $('#btn-create-shortcut').addEventListener('click', async () => {
+      const result = await window.desktop.createShortcut()
+      if (result?.ok) toast('已在桌面重新创建快捷方式', 'ok')
+      else toast(`创建失败：${result?.error || '未知错误'}`, 'error')
+    })
 
     // 工具栏快捷键 & 主进程菜单事件
     document.addEventListener('keydown', (event) => {
