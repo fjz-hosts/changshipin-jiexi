@@ -220,19 +220,22 @@ function createMainWindow() {
   mainWindow.on('leave-full-screen', () => sendCommand('window:fullscreen', false))
 }
 
-function createPlatformWindow(key) {
+function createPlatformWindow(key, options = {}) {
   const platform = platformByKey(key)
   if (!platform) return null
   const existing = [...platformWindows.values()].find((item) => item.key === key && item.win && !item.win.isDestroyed())
   if (existing) {
+    if (options.search && !existing.win.isDestroyed()) {
+      existing.win.webContents.send('platform:search', options.search)
+    }
     existing.win.show()
     existing.win.focus()
     return existing.win
   }
   const win = new BrowserWindow({
-    width: 1240,
-    height: 840,
-    minWidth: 900,
+    width: 1280,
+    height: 860,
+    minWidth: 940,
     minHeight: 620,
     show: false,
     title: `${platform.name} · 内置浏览器`,
@@ -249,7 +252,9 @@ function createPlatformWindow(key) {
     },
   })
   win.setMenuBarVisibility(false)
-  win.loadFile(path.join(__dirname, 'renderer', 'platform.html'), { query: { key } })
+  win.loadFile(path.join(__dirname, 'renderer', 'platform.html'), {
+    query: { key, q: options.search || '', u: options.url || '' },
+  })
   platformWindows.set(win.webContents.id, { win, key })
   win.on('closed', () => {
     platformWindows.delete(win.webContents.id)
@@ -271,6 +276,43 @@ function sendCommand(channel, payload) {
   }
 }
 
+function isPlatformUrl(rawUrl, key) {
+  const platform = platformByKey(key)
+  if (!platform) return false
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase()
+    return platform.hosts.some((item) => host === item || host.endsWith(`.${item}`))
+  } catch {
+    return false
+  }
+}
+
+// 平台里「在新窗口打开」的目标如果本身就是某一集，直接在当前内置浏览器里打开；
+// 登录 / 授权弹窗仍然允许单独弹出，避免把登录流程打断。
+function looksLikeVideoUrl(rawUrl, key) {
+  try {
+    const url = new URL(rawUrl)
+    const host = url.hostname.toLowerCase()
+    const pathname = url.pathname
+    if (key === 'iqiyi') {
+      return host.endsWith('iqiyi.com') && (/^\/v_[A-Za-z0-9]+\.html$/.test(pathname) || /^\/a_[A-Za-z0-9]+\.html$/.test(pathname))
+    }
+    if (key === 'qq') {
+      if (!host.endsWith('v.qq.com')) return false
+      return /^\/x\/(cover|page)\/.+\.html$/.test(pathname)
+    }
+    if (key === 'youku') {
+      return host.endsWith('youku.com') && /^\/v_show\/id_[A-Za-z0-9=]+\.html$/.test(pathname)
+    }
+    if (key === 'mgtv') {
+      return host.endsWith('mgtv.com') && /^\/b\/\d+\/\d+\.html$/.test(pathname)
+    }
+  } catch {
+    return false
+  }
+  return false
+}
+
 function pickUrlFromArgv(argv) {
   for (const arg of argv) {
     const normalized = normalizeUrlText(arg)
@@ -287,6 +329,22 @@ app.on('web-contents-created', (_event, contents) => {
     const parentWindow = host ? BrowserWindow.fromWebContents(host) : null
     const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
     if (entry && /^https?:\/\//i.test(url)) {
+      // 平台内部的「新窗口打开播放页」直接在当前内置浏览器里打开，
+      // 这样地址栏、复制链接、自动解析都能跟着走，不会停留在首页。
+      if (isPlatformUrl(url, entry.key) && looksLikeVideoUrl(url, entry.key)) {
+        try {
+          contents.loadURL(url)
+        } catch {
+          /* 忽略 */
+        }
+        return { action: 'deny' }
+      }
+      // 搜索结果里的「外站播放」：如果是其它平台的剧集页，切到那个平台的内置窗口
+      const targetPlatform = detectPlatformByUrl(url)
+      if (targetPlatform && looksLikeVideoUrl(url, targetPlatform.key)) {
+        createPlatformWindow(targetPlatform.key, { url })
+        return { action: 'deny' }
+      }
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
@@ -357,7 +415,7 @@ function buildMenu() {
         { label: '更换线路', accelerator: 'CommandOrControl+Shift+N', click: () => sendCommand('app:next-line') },
         { label: '刷新画面', accelerator: 'F5', click: () => sendCommand('app:reload') },
         { type: 'separator' },
-        { label: '全屏', accelerator: 'F11', click: () => toggleFullscreen() },
+        { label: '全屏', accelerator: 'F11', click: () => sendCommand('app:fullscreen-toggle') },
         { label: '在系统浏览器打开当前链接', click: () => sendCommand('app:open-external') },
       ],
     },
@@ -580,6 +638,29 @@ function registerIpc() {
     return platform ? safeOpenExternal(platform.home) : false
   })
 
+  ipcMain.handle('platform:search', (_event, payload = {}) => {
+    const key = String(payload.key || '')
+    const query = String(payload.query || '').trim().slice(0, 80)
+    if (!platformByKey(key) || !query) return false
+    createPlatformWindow(key, { search: query })
+    return true
+  })
+
+  // 全屏：主进程把窗口铺满屏幕，渲染进程进入影院模式（隐藏工具栏）
+  ipcMain.handle('app:set-fullscreen', (_event, flag) => {
+    if (!mainWindow) return false
+    const on = Boolean(flag)
+    mainWindow.setFullScreen(on)
+    return on
+  })
+
+  ipcMain.handle('app:fullscreen-state', () => mainWindow?.isFullScreen() || false)
+
+  ipcMain.handle('app:focus-main', () => {
+    showMainWindow()
+    return true
+  })
+
   ipcMain.handle('shell:open-external', (_event, url) => safeOpenExternal(url))
   ipcMain.handle('app:open-userdata', () => shell.openPath(userDataDir))
   ipcMain.handle('app:open-logs', () => shell.openPath(LOG_DIR))
@@ -601,8 +682,18 @@ function registerIpc() {
   ipcMain.handle('platform:send-to-parse', (_event, payload = {}) => {
     const url = normalizeUrlText(payload.url)
     if (!isHttpUrl(url)) return { ok: false, error: '当前页面不是视频链接' }
-    showMainWindow()
-    sendCommand('app:external-parse', { url, auto: Boolean(payload.auto) })
+    const focus = payload.focus !== false
+    if (focus) {
+      showMainWindow()
+    } else {
+      // 自动解析时不抢焦点，只闪一下任务栏
+      try {
+        mainWindow?.flashFrame(true)
+      } catch {
+        /* 忽略 */
+      }
+    }
+    sendCommand('app:external-parse', { url, auto: Boolean(payload.auto), focus })
     return { ok: true }
   })
 }

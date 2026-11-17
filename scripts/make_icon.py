@@ -1,6 +1,7 @@
 """生成长视频解析的应用图标（build/icon.ico + brand-assets/icon.png）。
 
-设计：深色圆角方块 + 霓虹绿/青渐变播放键，可在 16px 托盘尺寸下辨认。
+设计：深色圆角方块 + 四段平台色光环（绿/蓝/橙/紫）+ 中央播放键。
+四段环分别呼应爱奇艺、腾讯视频、优酷、芒果TV。
 用法：python scripts/make_icon.py
 """
 from __future__ import annotations
@@ -14,119 +15,137 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "desktop" / "electron" / "build"
 ASSETS = ROOT / "brand-assets"
+RENDERER_ASSETS = ROOT / "desktop" / "electron" / "src" / "renderer" / "assets"
 SIZE = 1024
-RADIUS = int(SIZE * 0.225)
+SS = 2  # 超采样
+S = SIZE * SS
+RADIUS = int(S * 0.225)
+
+COLORS = {
+    "green": (0x35, 0xE0, 0x8B),
+    "blue": (0x2B, 0x8C, 0xFF),
+    "orange": (0xFF, 0x9A, 0x3D),
+    "purple": (0xA0, 0x6B, 0xFF),
+}
 
 
 def rounded_mask(size: int, radius: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle((0, 0, size - 1, size - 1), radius=radius, fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size - 1, size - 1), radius=radius, fill=255)
     return mask
 
 
-def gradient_background() -> Image.Image:
-    """深蓝黑底 + 左上绿光 + 右下青光。"""
-    y, x = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32) / SIZE
-    # 对角线性渐变
-    base = np.zeros((SIZE, SIZE, 3), dtype=np.float32)
-    for channel, (top, bottom) in enumerate(zip((16, 30, 48), (4, 8, 15))):
-        base[..., channel] = (top * (1 - y * 0.9) + bottom * (y * 0.9)) / 255.0
+def background() -> Image.Image:
+    y, x = np.mgrid[0:S, 0:S].astype(np.float32) / S
+    base = np.zeros((S, S, 3), dtype=np.float32)
+    for channel, (top, bottom) in enumerate(zip((14, 26, 44), (3, 6, 11))):
+        base[..., channel] = (top * (1 - y * 0.85) + bottom * (y * 0.85)) / 255.0
 
-    def glow(cx: float, cy: float, radius: float, color: tuple[float, float, float], strength: float) -> np.ndarray:
+    def glow(cx, cy, radius, color, strength):
         dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2) / radius
-        falloff = np.clip(1.0 - dist, 0.0, 1.0) ** 2.2
+        falloff = np.clip(1 - dist, 0, 1) ** 2.4
         tint = np.zeros_like(base)
-        for channel, value in enumerate(color):
-            tint[..., channel] = value
+        for i, value in enumerate(color):
+            tint[..., i] = value / 255.0
         return tint * (falloff * strength)[..., None]
 
-    # 绿光在左上、蓝光在右下，叠成霓虹感
-    base += glow(0.22, 0.16, 0.85, (0.16, 1.0, 0.52), 0.32)
-    base += glow(0.84, 0.88, 0.8, (0.16, 0.68, 1.0), 0.28)
-    base += glow(0.5, 0.5, 0.72, (0.10, 0.55, 0.95), 0.10)
-
-    rgb = np.clip(base, 0, 1) * 255
-    return Image.fromarray(rgb.astype(np.uint8), "RGB").convert("RGBA")
+    base += glow(0.18, 0.14, 0.75, COLORS["green"], 0.22)
+    base += glow(0.84, 0.16, 0.72, COLORS["blue"], 0.20)
+    base += glow(0.9, 0.88, 0.72, COLORS["orange"], 0.20)
+    base += glow(0.12, 0.9, 0.72, COLORS["purple"], 0.18)
+    return Image.fromarray((np.clip(base, 0, 1) * 255).astype(np.uint8), "RGB").convert("RGBA")
 
 
-def play_triangle(size: int) -> Image.Image:
-    """霓虹渐变播放三角形（带一点圆角）。"""
-    scale = 4
-    big = size * scale
-    layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+def ring_layer() -> Image.Image:
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
-    # 指向右侧的三角形，视觉重心略向右
-    cx, cy = big * 0.52, big * 0.5
-    r = big * 0.28
-    points = []
+    cx = cy = S / 2
+    r = S * 0.31
+    width = int(S * 0.052)
+    gap = 9  # 角度间隙
+    segments = [
+        (-45, 45, COLORS["green"]),
+        (45, 135, COLORS["blue"]),
+        (135, 225, COLORS["orange"]),
+        (225, 315, COLORS["purple"]),
+    ]
+    for start, end, color in segments:
+        a0 = start + gap
+        a1 = end - gap
+        draw.arc((cx - r, cy - r, cx + r, cy + r), a0, a1, fill=color + (255,), width=width)
+        # 圆角端点
+        for angle in (a0, a1):
+            rad = math.radians(angle)
+            px = cx + r * math.cos(rad)
+            py = cy + r * math.sin(rad)
+            draw.ellipse((px - width / 2, py - width / 2, px + width / 2, py + width / 2), fill=color + (255,))
+    return layer
+
+
+def play_layer() -> Image.Image:
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    cx, cy = S * 0.515, S * 0.5
+    r = S * 0.155
+    pts = []
     for angle in (0, 120, 240):
         rad = math.radians(angle)
-        points.append((cx + r * math.cos(rad), cy + r * math.sin(rad)))
-    draw.polygon(points, fill=(255, 255, 255, 255))
-
-    layer = layer.resize((size, size), Image.LANCZOS)
-    # 用绿→青的横向渐变给三角形上色
-    gradient = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    gdraw = ImageDraw.Draw(gradient)
-    for px in range(size):
-        t = px / max(1, size - 1)
-        r = int(70 + (30 - 70) * t)
-        g = int(240 + (196 - 240) * t)
-        b = int(156 + (255 - 156) * t)
-        gdraw.line([(px, 0), (px, size)], fill=(r, g, b, 255))
-    gradient.putalpha(layer.getchannel("A"))
-    return gradient
+        pts.append((cx + r * math.cos(rad), cy + r * math.sin(rad)))
+    draw.polygon(pts, fill=(255, 255, 255, 255))
+    layer = layer.filter(ImageFilter.GaussianBlur(S * 0.002))
+    # 给播放键加一点从白到浅青的渐变
+    grad = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(grad)
+    for px in range(0, S, 2):
+        t = px / S
+        color = (
+            int(255 - 10 * t),
+            int(255 - 4 * t),
+            int(255),
+            255,
+        )
+        gd.rectangle((px, 0, px + 2, S), fill=color)
+    grad.putalpha(layer.getchannel("A"))
+    return grad
 
 
 def main() -> None:
-    bg = gradient_background()
+    bg = background()
+    ring = ring_layer()
+    # 光环的柔光
+    halo = ring.filter(ImageFilter.GaussianBlur(S * 0.028))
+    halo.putalpha(halo.getchannel("A").point(lambda v: int(v * 0.55)))
 
-    # 屏幕内框：细描边，营造"播放器"感
-    frame = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    fdraw = ImageDraw.Draw(frame)
-    inset = int(SIZE * 0.135)
-    fdraw.rounded_rectangle(
-        (inset, inset, SIZE - inset, SIZE - inset),
-        radius=int(SIZE * 0.145),
-        outline=(174, 255, 219, 44),
-        width=int(SIZE * 0.018),
+    # 内圈：让播放键更聚焦
+    inner = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(inner).ellipse(
+        (S * 0.235, S * 0.235, S * 0.765, S * 0.765),
+        fill=(6, 12, 20, 60),
+        outline=(255, 255, 255, 18),
+        width=int(S * 0.004),
     )
 
-    # 播放键阴影
-    glow_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    gdraw = ImageDraw.Draw(glow_layer)
-    gdraw.ellipse(
-        (int(SIZE * 0.24), int(SIZE * 0.2), int(SIZE * 0.8), int(SIZE * 0.8)),
-        fill=(55, 224, 139, 70),
-    )
-    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(int(SIZE * 0.09)))
+    icon = Image.alpha_composite(bg, halo)
+    icon = Image.alpha_composite(icon, inner)
+    icon = Image.alpha_composite(icon, ring)
+    icon.alpha_composite(play_layer())
 
-    triangle = play_triangle(int(SIZE * 0.52))
-    tri_offset = ((SIZE - triangle.width) // 2, (SIZE - triangle.height) // 2)
-    triangle = triangle.filter(ImageFilter.GaussianBlur(0.6))
+    # 轻微高光：左上角一道弧形反光
+    sheen = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sheen)
+    sd.arc((S * 0.07, S * 0.05, S * 0.93, S * 0.55), 200, 320, fill=(255, 255, 255, 26), width=int(S * 0.012))
+    sheen = sheen.filter(ImageFilter.GaussianBlur(S * 0.012))
+    icon = Image.alpha_composite(icon, sheen)
 
-    icon = Image.alpha_composite(bg, frame)
-    icon = Image.alpha_composite(icon, glow_layer)
-    icon.alpha_composite(triangle, dest=tri_offset)
-
-    # 底部一条霓虹装饰线
-    line = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    ldraw = ImageDraw.Draw(line)
-    ldraw.rounded_rectangle(
-        (int(SIZE * 0.34), int(SIZE * 0.815), int(SIZE * 0.66), int(SIZE * 0.838)),
-        radius=int(SIZE * 0.012),
-        fill=(55, 224, 139, 160),
-    )
-    icon = Image.alpha_composite(icon, line)
-
-    # 圆角裁切
-    icon.putalpha(rounded_mask(SIZE, RADIUS))
+    icon.putalpha(rounded_mask(S, RADIUS))
+    icon = icon.resize((SIZE, SIZE), Image.LANCZOS)
 
     BUILD.mkdir(parents=True, exist_ok=True)
     ASSETS.mkdir(parents=True, exist_ok=True)
+    RENDERER_ASSETS.mkdir(parents=True, exist_ok=True)
 
     icon.resize((512, 512), Image.LANCZOS).save(ASSETS / "icon.png")
+    icon.resize((128, 128), Image.LANCZOS).save(RENDERER_ASSETS / "app-icon.png")
     icon.resize((256, 256), Image.LANCZOS).save(
         BUILD / "icon.ico",
         format="ICO",

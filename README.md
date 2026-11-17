@@ -1,136 +1,75 @@
-# 长视频解析
+﻿# 闀胯棰戣В鏋?
+Windows 妗岄潰绔殑瑙嗛閾炬帴瑙ｆ瀽鎾斁宸ュ叿锛氭妸 **鐖卞鑹?/ 鑵捐瑙嗛 / 浼橀叿 / 鑺掓灉TV** 鐨勮棰戦〉閾炬帴绮樿繘鏉ワ紝閫変竴鏉¤В鏋愮嚎璺紝鐩存帴鍦ㄥ唴缃挱鏀惧櫒閲岃鐪嬨€?
+绋嬪簭鏈韩涓嶆彁渚涖€佷笉瀛樺偍銆佷笉鍒嗗彂浠讳綍瑙嗛鍐呭锛涜В鏋愯兘鍔涙潵鑷簰鑱旂綉涓婂叕寮€鐨勭涓夋柟瑙ｆ瀽鎺ュ彛锛岀嚎璺け鏁堟椂鍙嚜琛屾洿鎹㈡垨娣诲姞銆?
+![涓荤晫闈(docs/screenshot-main.png)
 
-Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视频 / 优酷 / 芒果TV** 的视频页链接粘进来，选一条解析线路，直接在内置播放器里观看。
+## 鍔熻兘
 
-程序本身不提供、不存储、不分发任何视频内容；解析能力来自互联网上公开的第三方解析接口，线路失效时可自行更换或添加。
+- **閾炬帴瑙ｆ瀽鐩磋繛鎾斁**锛氱矘璐磋棰戦〉閾炬帴 鈫?鑷姩璇嗗埆骞冲彴 鈫?瑙ｆ瀽 鈫?鍐呭祵鎾斁锛堥〉闈㈡挱鏀惧櫒鎴?m3u8/mp4 鍘熺敓鎾斁锛夈€?- **鍥涗釜骞冲彴蹇嵎鍏ュ彛**锛氱埍濂囪壓銆佽吘璁棰戙€佷紭閰枫€佽姃鏋淭V 浣跨敤瀹樻柟 App 鍥炬爣锛屼竴閿墦寮€瀹樼綉锛堝唴缃祻瑙堝櫒绐楀彛鍙櫥褰曚細鍛橈級锛涜棰戦〉涓€閿€屽～鍏ヨВ鏋愩€嶃€?- **鎵惧墽 路 璺ㄥ钩鍙版悳绱?*锛氳緭鍏ュ墽鍚嶏紝鍕鹃€変竴涓垨澶氫釜骞冲彴锛岀洿鎺ュ湪鍚勮嚜鐨勫唴缃祻瑙堝櫒閲屾墦寮€鎼滅储缁撴灉锛涚偣寮€浠绘剰鍓ч泦鎴栨煇涓€闆嗭紝绋嬪簭鑷姩瑙ｆ瀽鍒颁富鐣岄潰鎾斁锛屼笉鐢ㄥ啀鎵嬪姩澶嶅埗閾炬帴銆?- **鑷姩瑙ｆ瀽 / 澶嶅埗鏈泦**锛氬唴缃祻瑙堝櫒浼氳瘑鍒墽闆嗘挱鏀鹃〉锛岃嚜鍔ㄦ妸銆屽叿浣撴煇涓€闆嗐€嶉€佺粰涓荤晫闈紱鍦ㄩ潪鍓ч泦椤电偣銆屽鍒舵湰闆嗐€嶄細鎻愮ず鍏堣繘鍏ュ叿浣撴煇涓€闆嗭紝閬垮厤澶嶅埗鎴愰椤甸摼鎺ャ€?- **鐪熉峰叏灞?*锛氫竴閿妸绐楀彛閾烘弧鏁翠釜灞忓箷骞惰繘鍏ュ奖闄㈡ā寮忥紙闅愯棌鎵€鏈夊伐鍏锋爮锛夛紝鍐嶆寜 Esc / F11 閫€鍑恒€?- **澶氱嚎璺?+ 澶辫触鑷姩鎹㈢嚎**锛氬唴缃鏉″叕寮€绾胯矾锛屽彲鍦ㄣ€岀嚎璺鐞嗐€嶉噷鍚仠銆佹帓搴忋€佸鍒犮€佹祴閫熴€佸湪绾挎洿鏂般€?- **鏈湴鍙栨祦浠ｇ悊**锛氱涓夋柟鎺ュ彛缁欑殑 m3u8/mp4 鍦板潃寰€寰€鏍￠獙 Referer/UA锛屼富杩涚▼鐢ㄦ湰鍦?`127.0.0.1` 浠ｇ悊琛ラ綈璇锋眰澶村苟鏀瑰啓 HLS 鎾斁鍒楄〃锛堝垎鐗囥€佸瘑閽ャ€佸瓙鍒楄〃锛夛紝瑙ｅ喅闃茬洍閾惧鑷寸殑鏃犳硶鎾斁銆?- **鑷姩鏇存柊**锛歟lectron-updater + GitHub Releases锛屽鍔犻€熼暅鍍忚嚜鍔ㄥ垏鎹紱鍚姩鏃堕潤榛樻鏌ワ紝鍚庡彴涓嬭浇锛屾彁绀洪噸鍚畨瑁呫€?- **妗岄潰浣撻獙**锛氬崟瀹炰緥銆佹墭鐩樸€佽彍鍗曞揩鎹烽敭銆佹嫋鎷介摼鎺ヨ繘绐楀彛銆佹渶杩戣В鏋愯褰曘€侀厤缃笌鏃ュ織鐩綍鍙竴閿墦寮€銆?
+## 涓嬭浇涓庡畨瑁?
+鍒?[Releases](https://github.com/fjz-hosts/changshipin-jiexi/releases/latest) 涓嬭浇 `changshipin-Setup-<鐗堟湰>.exe`锛屽弻鍑诲畨瑁呭嵆鍙紙涓嶇鍚嶏紝SmartScreen 棣栨杩愯鐐广€屾洿澶氫俊鎭?鈫?浠嶈杩愯銆嶏級銆?
+瑕佹眰锛歐indows 10/11 x64銆?
+## 浣跨敤
 
-![主界面](docs/screenshot-main.png)
+1. **蹇嵎鍏ュ彛**锛氱偣椤堕儴鍥涗釜骞冲彴鍗＄墖锛屽湪鍐呯疆娴忚鍣ㄩ噷娴忚瑙嗛锛涙壘鍒拌棰戦〉鍚庣偣銆屽～鍏ヨВ鏋愩€嶏紝閾炬帴浼氳嚜鍔ㄥ洖鍒颁富鐣岄潰骞跺紑濮嬭В鏋愩€?2. **鎵惧墽**锛氱偣鍙充笂瑙掋€屾壘鍓с€嶏紝杈撳叆鍓у悕骞跺嬀閫夊钩鍙帮紙鍙閫夛級锛屼細鍒嗗埆鎵撳紑鍚勫钩鍙版悳绱㈢粨鏋溿€傜偣寮€浠绘剰鍓ч泦/鏌愪竴闆嗗悗锛岀▼搴忎細鑷姩瑙ｆ瀽骞跺湪涓荤晫闈㈡挱鏀撅紱骞冲彴绐楀彛淇濇寔鎵撳紑锛屾柟渚跨户缁€夐泦銆?3. **鎵嬪姩绮樿创**锛氬鍒惰棰戦〉閾炬帴锛堝 `https://www.iqiyi.com/v_xxx.html`銆乣https://v.qq.com/x/cover/.../xxx.html`銆乣https://v.youku.com/v_show/id_xxx.html`銆乣https://www.mgtv.com/b/xxx/xxx.html`锛夛紝绮樿创鍒拌緭鍏ユ锛屽洖杞︽垨鐐广€岃В鏋愭挱鏀俱€嶃€?4. **鎹㈢嚎璺?*锛氳В鏋愰〉娌℃湁鐢婚潰 / 鐧藉睆 / 鎶ラ敊鏃讹紝鐐广€屾崲绾胯矾銆嶏紱寮€鍚€屽け璐ヨ嚜鍔ㄦ崲绾裤€嶅悗绋嬪簭浼氳嚜鍔ㄦ寜椤哄簭灏濊瘯涓嬩竴鏉＄嚎璺€?5. **浼氬憳鍐呭**锛氬凡鐧诲綍浼氬憳鍙妸绾胯矾鍒囧埌銆屽畼缃戦〉闈紙浼氬憳鐧诲綍锛夈€嶇洿鎺ョ湅鍘熺墖锛屼笉璧扮涓夋柟瑙ｆ瀽銆?6. **鍏ㄥ睆**锛氱偣鎾斁鍖哄彸涓婅銆屽叏灞忋€嶏紙鎴?F11锛夛紝绐楀彛浼氶摵婊℃暣鍧楀睆骞曞苟闅愯棌宸ュ叿鏍忥紱Esc 閫€鍑恒€?
+鏇村缁嗚妭瑙?[浣跨敤璇存槑.txt](desktop/浣跨敤璇存槑.txt)銆?
+## 瑙ｆ瀽绾胯矾
 
-## 功能
+绾胯矾鍒嗕笁绉嶏細
 
-- **链接解析直连播放**：粘贴视频页链接 → 自动识别平台 → 解析 → 内嵌播放（页面播放器或 m3u8/mp4 原生播放）。
-- **四个平台快捷入口**：爱奇艺、腾讯视频、优酷、芒果TV 一键打开官网（内置浏览器窗口可登录会员），视频页一键「填入解析」。
-- **多线路 + 失败自动换线**：内置多条公开线路，可在「线路管理」里启停、排序、增删、测速、在线更新。
-- **本地取流代理**：第三方接口给的 m3u8/mp4 地址往往校验 Referer/UA，主进程用本地 `127.0.0.1` 代理补齐请求头并改写 HLS 播放列表（分片、密钥、子列表），解决防盗链导致的无法播放。
-- **自动更新**：electron-updater + GitHub Releases，多加速镜像自动切换；启动时静默检查，后台下载，提示重启安装。
-- **桌面体验**：单实例、托盘、菜单快捷键、拖拽链接进窗口、最近解析记录、配置与日志目录可一键打开。
-
-## 下载与安装
-
-到 [Releases](https://github.com/fjz-hosts/changshipin-jiexi/releases/latest) 下载 `changshipin-Setup-<版本>.exe`，双击安装即可（不签名，SmartScreen 首次运行点「更多信息 → 仍要运行」）。
-
-要求：Windows 10/11 x64。
-
-## 使用
-
-1. **快捷入口**：点顶部四个平台卡片，在内置浏览器里浏览视频；找到视频页后点「填入解析」，链接会自动回到主界面并开始解析。
-2. **手动粘贴**：复制视频页链接（如 `https://www.iqiyi.com/v_xxx.html`、`https://v.qq.com/x/cover/.../xxx.html`、`https://v.youku.com/v_show/id_xxx.html`、`https://www.mgtv.com/b/xxx/xxx.html`），粘贴到输入框，回车或点「解析播放」。
-3. **换线路**：解析页没有画面 / 白屏 / 报错时，点「换线路」；开启「失败自动换线」后程序会自动按顺序尝试下一条线路。
-4. **会员内容**：已登录会员可把线路切到「官网页面（会员登录）」直接看原片，不走第三方解析。
-
-更多细节见 [使用说明.txt](desktop/使用说明.txt)。
-
-## 解析线路
-
-线路分三种：
-
-| 类型 | 含义 | 典型地址 |
+| 绫诲瀷 | 鍚箟 | 鍏稿瀷鍦板潃 |
 | --- | --- | --- |
-| 网页 (`page`) | 在内置浏览器里打开第三方解析页，由解析页自己播放 | `https://jx.example.com/?url={url}` |
-| 接口 (`api`) | 主进程请求接口，从 JSON/HTML 里提取 m3u8/mp4，再用内置播放器播放 | `https://api.example.com/parse?url={url}` |
-| 直连 (`direct`) | 不解析，直接打开原片页面（适合已登录会员） | `direct://video` |
+| 缃戦〉 (`page`) | 鍦ㄥ唴缃祻瑙堝櫒閲屾墦寮€绗笁鏂硅В鏋愰〉锛岀敱瑙ｆ瀽椤佃嚜宸辨挱鏀?| `https://jx.example.com/?url={url}` |
+| 鎺ュ彛 (`api`) | 涓昏繘绋嬭姹傛帴鍙ｏ紝浠?JSON/HTML 閲屾彁鍙?m3u8/mp4锛屽啀鐢ㄥ唴缃挱鏀惧櫒鎾斁 | `https://api.example.com/parse?url={url}` |
+| 鐩磋繛 (`direct`) | 涓嶈В鏋愶紝鐩存帴鎵撳紑鍘熺墖椤甸潰锛堥€傚悎宸茬櫥褰曚細鍛橈級 | `direct://video` |
 
-- `{url}` 会被替换为 `encodeURIComponent(视频链接)`；也支持 `{urlRaw}` 原样拼接。
-- 接口线路会自动在返回内容里递归查找 `m3u8 / mp4 / flv` 地址（支持 JSON 字段、转义斜杠、URL 编码、HTML 内嵌地址）。
-- 内置线路全部是公开接口，**随时可能失效**。默认启用的是实测能出画面的三条：789解析、PlayM3U8、盘古解析。可在「设置 → 解析线路」里：
-  - 单条「测试」，看是否可访问；
-  - 「在线更新线路」，从本仓库的 [`lines.json`](lines.json) 拉取最新清单（不会覆盖你自建的线路）；
-  - 「恢复内置线路」，回到随程序发布的默认清单。
-- 想把线路经验分享给所有人：直接改 `lines.json` 提 PR 即可，客户端在线更新后生效。
-
-> 解析线路来自第三方，程序无法保证任何一条线路的长期可用性，也不对第三方内容负责。
-
-## 自动更新与发版
-
+- `{url}` 浼氳鏇挎崲涓?`encodeURIComponent(瑙嗛閾炬帴)`锛涗篃鏀寔 `{urlRaw}` 鍘熸牱鎷兼帴銆?- 鎺ュ彛绾胯矾浼氳嚜鍔ㄥ湪杩斿洖鍐呭閲岄€掑綊鏌ユ壘 `m3u8 / mp4 / flv` 鍦板潃锛堟敮鎸?JSON 瀛楁銆佽浆涔夋枩鏉犮€乁RL 缂栫爜銆丠TML 鍐呭祵鍦板潃锛夈€?- 鍐呯疆绾胯矾鍏ㄩ儴鏄叕寮€鎺ュ彛锛?*闅忔椂鍙兘澶辨晥**銆傞粯璁ゅ惎鐢ㄧ殑鏄疄娴嬭兘鍑虹敾闈㈢殑涓夋潯锛?89瑙ｆ瀽銆丳layM3U8銆佺洏鍙よВ鏋愩€傚彲鍦ㄣ€岃缃?鈫?瑙ｆ瀽绾胯矾銆嶉噷锛?  - 鍗曟潯銆屾祴璇曘€嶏紝鐪嬫槸鍚﹀彲璁块棶锛?  - 銆屽湪绾挎洿鏂扮嚎璺€嶏紝浠庢湰浠撳簱鐨?[`lines.json`](lines.json) 鎷夊彇鏈€鏂版竻鍗曪紙涓嶄細瑕嗙洊浣犺嚜寤虹殑绾胯矾锛夛紱
+  - 銆屾仮澶嶅唴缃嚎璺€嶏紝鍥炲埌闅忕▼搴忓彂甯冪殑榛樿娓呭崟銆?- 鎯虫妸绾胯矾缁忛獙鍒嗕韩缁欐墍鏈変汉锛氱洿鎺ユ敼 `lines.json` 鎻?PR 鍗冲彲锛屽鎴风鍦ㄧ嚎鏇存柊鍚庣敓鏁堛€?
+> 瑙ｆ瀽绾胯矾鏉ヨ嚜绗笁鏂癸紝绋嬪簭鏃犳硶淇濊瘉浠讳綍涓€鏉＄嚎璺殑闀挎湡鍙敤鎬э紝涔熶笉瀵圭涓夋柟鍐呭璐熻矗銆?
+## 鑷姩鏇存柊涓庡彂鐗?
 ```
-本地 release.ps1
-   ├─ 改版本号（desktop/electron/package.json）
-   ├─ electron-builder 打包 NSIS 安装包 + latest.yml + blockmap
-   ├─ gh release create/upload → GitHub Releases
-   └─ git commit / tag vX.Y.Z / push
-                │
-                ▼
-GitHub Releases（安装包 + latest.yml）
-                │  gh.monlor.com / gh-proxy.com / ghfile.geekertao.top / hk.gh-proxy.com / github.com
-                ▼
-客户端 electron-updater：启动 6 秒后检查 → 后台整包下载 → 提示重启安装
+鏈湴 release.ps1
+   鈹溾攢 鏀圭増鏈彿锛坉esktop/electron/package.json锛?   鈹溾攢 electron-builder 鎵撳寘 NSIS 瀹夎鍖?+ latest.yml + blockmap
+   鈹溾攢 gh release create/upload 鈫?GitHub Releases
+   鈹斺攢 git commit / tag vX.Y.Z / push
+                鈹?                鈻?GitHub Releases锛堝畨瑁呭寘 + latest.yml锛?                鈹? gh.monlor.com / gh-proxy.com / ghfile.geekertao.top / hk.gh-proxy.com / github.com
+                鈻?瀹㈡埛绔?electron-updater锛氬惎鍔?6 绉掑悗妫€鏌?鈫?鍚庡彴鏁村寘涓嬭浇 鈫?鎻愮ず閲嶅惎瀹夎
 ```
 
-- 更新配置在 `desktop/electron/package.json` 的 `build.publish`（generic provider，指向 `gh.monlor.com` 镜像）。
-- 客户端 `src/updater.js` 内置 5 个更新源，按顺序回退；镜像不可用时自动换下一个。
-- 安装包与 `latest.yml` 同名同级，`latest.yml` 里的下载地址是相对路径，因此换哪个镜像都能下载。
-- 发布新版本：`powershell -ExecutionPolicy Bypass -File desktop\release.ps1 -Version 1.0.1`
-  - 只打包：`-SkipPublish`；只上传：`-SkipBuild`；不推 git：`-NoPush`。
-  - 只打安装包：`desktop\build.ps1`；只上传：`desktop\publish.ps1`。
-
-GitHub Actions（`.github/workflows/build.yml`）会在推送 `v*` tag 时做一次干净环境构建，产物上传为 workflow artifact，便于验证「别人 clone 下来能不能构建」。
-
-## 目录结构
+- 鏇存柊閰嶇疆鍦?`desktop/electron/package.json` 鐨?`build.publish`锛坓eneric provider锛屾寚鍚?`gh.monlor.com` 闀滃儚锛夈€?- 瀹㈡埛绔?`src/updater.js` 鍐呯疆 5 涓洿鏂版簮锛屾寜椤哄簭鍥為€€锛涢暅鍍忎笉鍙敤鏃惰嚜鍔ㄦ崲涓嬩竴涓€?- 瀹夎鍖呬笌 `latest.yml` 鍚屽悕鍚岀骇锛宍latest.yml` 閲岀殑涓嬭浇鍦板潃鏄浉瀵硅矾寰勶紝鍥犳鎹㈠摢涓暅鍍忛兘鑳戒笅杞姐€?- 鍙戝竷鏂扮増鏈細`powershell -ExecutionPolicy Bypass -File desktop\release.ps1 -Version 1.0.2`
+  - 鍙墦鍖咃細`-SkipPublish`锛涘彧涓婁紶锛歚-SkipBuild`锛涗笉鎺?git锛歚-NoPush`銆?  - 鍙墦瀹夎鍖咃細`desktop\build.ps1`锛涘彧涓婁紶锛歚desktop\publish.ps1`銆?
+GitHub Actions锛坄.github/workflows/build.yml`锛変細鍦ㄦ帹閫?`v*` tag 鏃跺仛涓€娆″共鍑€鐜鏋勫缓锛屼骇鐗╀笂浼犱负 workflow artifact锛屼究浜庨獙璇併€屽埆浜?clone 涓嬫潵鑳戒笉鑳芥瀯寤恒€嶃€?
+## 鐩綍缁撴瀯
 
 ```
 desktop/
-  build.ps1                # 构建安装包
-  publish.ps1              # 上传到 GitHub Releases
-  release.ps1              # 一键发版（版本号 → 构建 → 发布 → 打 tag → 校验镜像）
-  使用说明.txt
+  build.ps1                # 鏋勫缓瀹夎鍖?  publish.ps1              # 涓婁紶鍒?GitHub Releases
+  release.ps1              # 涓€閿彂鐗堬紙鐗堟湰鍙?鈫?鏋勫缓 鈫?鍙戝竷 鈫?鎵?tag 鈫?鏍￠獙闀滃儚锛?  浣跨敤璇存槑.txt
   electron/
-    package.json           # appId / 版本 / electron-builder / publish
+    package.json           # appId / 鐗堟湰 / electron-builder / publish
     src/
-      main.js              # 主进程：窗口、菜单、托盘、IPC、官网窗口
-      proxy.js             # 本地取流代理（m3u8 改写 / Referer / Range）
-      lines.js             # 内置线路、解析、地址提取、在线线路清单
-      store.js             # 配置 / 线路 / 历史（%APPDATA%\长视频解析\config.json）
-      updater.js           # electron-updater + 多镜像回退
-      preload.js           # 主界面 IPC 桥
-      platform-preload.js  # 内置官网窗口 IPC 桥
-      smoke.js             # 无头自检（--smoke-test）
-      renderer/            # 主界面、内置官网页、hls.js
+      main.js              # 涓昏繘绋嬶細绐楀彛銆佽彍鍗曘€佹墭鐩樸€両PC銆佸畼缃戠獥鍙?      proxy.js             # 鏈湴鍙栨祦浠ｇ悊锛坢3u8 鏀瑰啓 / Referer / Range锛?      lines.js             # 鍐呯疆绾胯矾銆佽В鏋愩€佸湴鍧€鎻愬彇銆佸湪绾跨嚎璺竻鍗?      store.js             # 閰嶇疆 / 绾胯矾 / 鍘嗗彶锛?APPDATA%\闀胯棰戣В鏋怽config.json锛?      updater.js           # electron-updater + 澶氶暅鍍忓洖閫€
+      preload.js           # 涓荤晫闈?IPC 妗?      platform-preload.js  # 鍐呯疆瀹樼綉绐楀彛 IPC 妗?      smoke.js             # 鏃犲ご鑷锛?-smoke-test锛?      renderer/            # 涓荤晫闈€佸唴缃畼缃戦〉銆乭ls.js
     build/icon.ico
-scripts/make_icon.py       # 生成图标
-tools/webview-probe/       # 线路探针（开发用）
-lines.json                 # 在线线路清单
+scripts/make_icon.py       # 鐢熸垚鍥炬爣
+tools/webview-probe/       # 绾胯矾鎺㈤拡锛堝紑鍙戠敤锛?lines.json                 # 鍦ㄧ嚎绾胯矾娓呭崟
 ```
 
-## 开发
-
+## 寮€鍙?
 ```powershell
 cd desktop\electron
-npm install          # 首次
-npm start            # 开发运行
-
-# 无头自检（代理改写 / 平台识别 / 渲染进程 / 配置）
-node_modules\.bin\electron . --smoke-test
-# 再带上外网链路检查
-$env:CHANGSPIN_SMOKE_ONLINE="1"; node_modules\.bin\electron . --smoke-test
+npm install          # 棣栨
+npm start            # 寮€鍙戣繍琛?
+# 鏃犲ご鑷锛堜唬鐞嗘敼鍐?/ 骞冲彴璇嗗埆 / 娓叉煋杩涚▼ / 閰嶇疆锛?node_modules\.bin\electron . --smoke-test
+# 鍐嶅甫涓婂缃戦摼璺鏌?$env:CHANGSPIN_SMOKE_ONLINE="1"; node_modules\.bin\electron . --smoke-test
 ```
 
-- 自检会输出 PASS/FAIL，并以非零退出码表示失败；可用 `CHANGSPIN_USERDATA` 指定独立配置目录，避免污染真实配置。
-- 开发/调试时如果环境设置了 `ELECTRON_RUN_AS_NODE=1`，electron 会以纯 Node 模式启动，需要先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`（构建脚本已处理）。
-- 图标：`python scripts/make_icon.py`（需要 Pillow）。
-- 线路探针：`electron tools/webview-probe`，会逐个打开线路并检查播放器 iframe 里是否出现 `<video>`，结果写到 `tools/webview-probe/probe-result.json`。
+- 鑷浼氳緭鍑?PASS/FAIL锛屽苟浠ラ潪闆堕€€鍑虹爜琛ㄧず澶辫触锛涘彲鐢?`CHANGSPIN_USERDATA` 鎸囧畾鐙珛閰嶇疆鐩綍锛岄伩鍏嶆薄鏌撶湡瀹為厤缃€?- 寮€鍙?璋冭瘯鏃跺鏋滅幆澧冭缃簡 `ELECTRON_RUN_AS_NODE=1`锛宔lectron 浼氫互绾?Node 妯″紡鍚姩锛岄渶瑕佸厛 `Remove-Item Env:ELECTRON_RUN_AS_NODE`锛堟瀯寤鸿剼鏈凡澶勭悊锛夈€?- 鍥炬爣锛歚python scripts/make_icon.py`锛堥渶瑕?Pillow锛夈€?- 绾胯矾鎺㈤拡锛歚electron tools/webview-probe`锛屼細閫愪釜鎵撳紑绾胯矾骞舵鏌ユ挱鏀惧櫒 iframe 閲屾槸鍚﹀嚭鐜?`<video>`锛岀粨鏋滃啓鍒?`tools/webview-probe/probe-result.json`銆?
+## 鏁版嵁涓庨殣绉?
+- 閰嶇疆銆佸巻鍙茶褰曘€佹洿鏂扮紦瀛橈細`%APPDATA%\闀胯棰戣В鏋怽`锛堣彍鍗曘€屾枃浠?鈫?鎵撳紑閰嶇疆鐩綍銆嶏級銆?- 鏃ュ織锛歚%APPDATA%\闀胯棰戣В鏋怽logs\desktop.log`銆?- 鐧诲綍鐘舵€佹寜骞冲彴闅旂鍦?Electron 鐨?`persist:platform-*` 鍒嗗尯閲岋紱绋嬪簭涓嶄笂浼犱换浣曟湰鍦版暟鎹€?- 瑙ｆ瀽璇锋眰鐩存帴鍙戝線浣犻€夋嫨鐨勭涓夋柟鎺ュ彛锛涖€屽畼缃戦〉闈€嶇嚎璺洿鎺ヨ闂搴斿钩鍙般€?
+## 鏇存柊璁板綍
 
-## 数据与隐私
+- **1.0.2** 鈥?骞冲彴蹇嵎鍏ュ彛鎹㈡垚瀹樻柟 App 鍥炬爣锛涙柊澧炪€屾壘鍓с€嶈法骞冲彴鎼滅储銆佺偣闆嗚嚜鍔ㄨВ鏋愩€佸鍒舵湰闆嗘牎楠岋紱淇鍏ㄥ睆涓嶉摵婊″睆骞曪紱鐏拌壊绾胯矾鐐瑰嚮鍗冲彲鍚敤锛涜В鏋愰〉寮圭獥鏀逛负褰撳墠鍐呯疆绐楀彛鎵撳紑銆?- **1.0.1** 鈥?瑙ｆ瀽椤靛姞杞借秴鏃舵斁瀹藉埌 45 绉掞紱鍏ㄩ儴绾胯矾澶辫触鏃舵彁绀哄凡灏濊瘯鐨勭嚎璺暟閲忎笌鍘熷洜銆?- **1.0.0** 鈥?棣栦釜鐗堟湰锛氬洓骞冲彴蹇嵎鍏ュ彛銆侀摼鎺ヨВ鏋愭挱鏀俱€佸绾胯矾鑷姩鍒囨崲銆佹湰鍦板彇娴佷唬鐞嗐€佽嚜鍔ㄦ洿鏂般€?
+## 鍏嶈矗澹版槑
 
-- 配置、历史记录、更新缓存：`%APPDATA%\长视频解析\`（菜单「文件 → 打开配置目录」）。
-- 日志：`%APPDATA%\长视频解析\logs\desktop.log`。
-- 登录状态按平台隔离在 Electron 的 `persist:platform-*` 分区里；程序不上传任何本地数据。
-- 解析请求直接发往你选择的第三方接口；「官网页面」线路直接访问对应平台。
-
-## 更新记录
-
-- **1.0.1** — 解析页加载超时放宽到 45 秒；全部线路失败时提示已尝试的线路数量与原因。
-- **1.0.0** — 首个版本：四平台快捷入口、链接解析播放、多线路自动切换、本地取流代理、自动更新。
-
-## 免责声明
-
-本项目仅用于学习 Electron / 流媒体播放技术，以及个人合法范围内的观看。请遵守各视频平台的用户协议与当地法律法规，不要用于传播盗版内容或商业用途。解析线路由第三方提供，其可用性、安全性与合法性由提供方负责。
+鏈」鐩粎鐢ㄤ簬瀛︿範 Electron / 娴佸獟浣撴挱鏀炬妧鏈紝浠ュ強涓汉鍚堟硶鑼冨洿鍐呯殑瑙傜湅銆傝閬靛畧鍚勮棰戝钩鍙扮殑鐢ㄦ埛鍗忚涓庡綋鍦版硶寰嬫硶瑙勶紝涓嶈鐢ㄤ簬浼犳挱鐩楃増鍐呭鎴栧晢涓氱敤閫斻€傝В鏋愮嚎璺敱绗笁鏂规彁渚涳紝鍏跺彲鐢ㄦ€с€佸畨鍏ㄦ€т笌鍚堟硶鎬х敱鎻愪緵鏂硅礋璐ｃ€?

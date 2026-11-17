@@ -25,6 +25,7 @@
     hls: null,
     webviewPending: null,
     draftLines: null,
+    fullscreen: false,
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -117,6 +118,27 @@
   function setView(name) {
     for (const id of ['empty', 'loading', 'error', 'video', 'webview']) {
       $(`#view-${id}`).hidden = id !== name
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 全屏（窗口铺满屏幕 + 影院模式隐藏工具栏）
+  // ---------------------------------------------------------------------------
+
+  function applyCinema(on) {
+    state.fullscreen = Boolean(on)
+    document.body.classList.toggle('cinema', state.fullscreen)
+    $('#btn-fullscreen').textContent = state.fullscreen ? '退出全屏' : '全屏'
+    $('#btn-fullscreen').title = state.fullscreen ? '退出全屏（Esc / F11）' : '全屏（F11）'
+  }
+
+  async function toggleFullscreen() {
+    const next = !state.fullscreen
+    applyCinema(next)
+    try {
+      await window.desktop.setFullscreen(next)
+    } catch {
+      /* 忽略 */
     }
   }
 
@@ -438,9 +460,15 @@
         <span class="line-state ${status ? (status.ok ? 'ok' : 'fail') : ''}"></span>
         <span class="line-name" title="${escapeHtml(line.url || '')}">${escapeHtml(line.name)}</span>
         <span class="line-ms">${status ? (status.ok ? `${status.ms || ''} ms` : '失效') : ''}</span>
-        <button class="line-play" title="用这条线路解析">${icons.play}</button>
+        <button class="line-play ${line.enabled ? '' : 'enable'}" title="${line.enabled ? '用这条线路解析' : '启用这条线路'}">${
+          line.enabled ? icons.play : '启用'
+        }</button>
       `
       item.addEventListener('click', () => {
+        if (!line.enabled) {
+          enableLine(line)
+          return
+        }
         state.currentLineId = line.id
         $('#line-select').value = line.id
         $('#stage-line').textContent = line.name
@@ -450,7 +478,7 @@
       item.querySelector('.line-play').addEventListener('click', (event) => {
         event.stopPropagation()
         if (!line.enabled) {
-          toast('这条线路已停用，请先在线路管理里启用', 'warn')
+          enableLine(line)
           return
         }
         if (!state.currentVideoUrl) {
@@ -674,6 +702,66 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 找剧 / 跨平台搜索
+  // ---------------------------------------------------------------------------
+
+  function openSearchModal() {
+    $('#search-modal').hidden = false
+    setTimeout(() => $('#search-input').focus(), 30)
+  }
+
+  function closeSearchModal() {
+    $('#search-modal').hidden = true
+  }
+
+  async function submitSearch() {
+    const query = $('#search-input').value.trim()
+    if (!query) {
+      toast('先输入想看的剧名', 'warn')
+      $('#search-input').focus()
+      return
+    }
+    const picked = $$('#platform-picks .pick')
+      .filter((item) => item.querySelector('input').checked)
+      .map((item) => item.dataset.platform)
+    if (!picked.length) {
+      toast('至少选择一个平台', 'warn')
+      return
+    }
+    const button = $('#search-submit')
+    button.disabled = true
+    button.textContent = '打开中…'
+    try {
+      for (const key of picked) {
+        await window.desktop.searchPlatform(key, query)
+      }
+      closeSearchModal()
+      toast(`已在 ${picked.length} 个平台打开「${query}」的搜索结果`, 'ok')
+      setStatus('在平台窗口点开任意剧集或某一集，程序会自动解析到主界面播放')
+    } catch (error) {
+      toast(`搜索失败：${String(error?.message || error)}`, 'error')
+    } finally {
+      button.disabled = false
+      button.textContent = '开始搜索'
+    }
+  }
+
+  async function enableLine(line) {
+    try {
+      const lines = state.config.lines.map((item) =>
+        item.id === line.id ? { ...item, enabled: true } : item,
+      )
+      state.config = await window.desktop.saveLines(lines, line.id)
+      state.currentLineId = line.id
+      renderLineSelect()
+      renderLineList()
+      toast(`已启用线路「${line.name}」`, 'ok')
+    } catch (error) {
+      toast(`启用失败：${String(error?.message || error)}`, 'error')
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // 事件绑定
   // ---------------------------------------------------------------------------
 
@@ -752,7 +840,24 @@
       if (isHttpUrl(target)) window.desktop.openExternal(target)
       else toast('还没有可打开的链接', 'warn')
     })
-    $('#btn-fullscreen').addEventListener('click', () => window.desktop.toggleFullscreen())
+    $('#btn-fullscreen').addEventListener('click', () => toggleFullscreen())
+
+    // 找剧：跨平台搜索
+    $('#btn-search').addEventListener('click', openSearchModal)
+    $('#search-close').addEventListener('click', closeSearchModal)
+    $('#search-modal').addEventListener('click', (event) => {
+      if (event.target === $('#search-modal')) closeSearchModal()
+    })
+    $('#search-submit').addEventListener('click', submitSearch)
+    $('#search-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submitSearch()
+    })
+    $$('.quick-searches button').forEach((button) => {
+      button.addEventListener('click', () => {
+        $('#search-input').value = button.dataset.q || ''
+        submitSearch()
+      })
+    })
 
     $('#btn-copy-source').addEventListener('click', async () => {
       const target = state.currentVideoUrl || $('#url-input').value
@@ -917,7 +1022,16 @@
 
     // 工具栏快捷键 & 主进程菜单事件
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && !$('#modal').hidden) closeModal()
+      if (event.key !== 'Escape') return
+      if (!$('#search-modal').hidden) {
+        closeSearchModal()
+        return
+      }
+      if (!$('#modal').hidden) {
+        closeModal()
+        return
+      }
+      if (state.fullscreen) toggleFullscreen()
     })
 
     window.desktop.onPasteParse(async () => {
@@ -942,13 +1056,17 @@
       $('#url-input').value = payload.url
       updateBadge()
       if (payload.auto !== false) {
+        if (payload.focus === false) toast('平台窗口自动送来本集，正在解析…', 'ok')
         startParse({ lineId: state.currentLineId, url: payload.url })
       } else {
         toast('链接已填入，点击「解析播放」开始')
       }
     })
     window.desktop.onFullscreen((flag) => {
-      $('#btn-fullscreen').textContent = flag ? '退出全屏' : '全屏'
+      applyCinema(flag)
+    })
+    window.desktop.onFullscreenToggle(() => {
+      toggleFullscreen()
     })
     window.desktop.onUpdateState((update) => {
       renderUpdateState(update)
@@ -1039,6 +1157,7 @@
         platformInfo,
         getState: () => state,
         startParse,
+        toggleFullscreen,
       }
     } catch (error) {
       console.error(error)

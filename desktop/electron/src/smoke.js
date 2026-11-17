@@ -45,8 +45,10 @@ async function runSmoke({ app, window, proxy, store }) {
   const title = await window.webContents.executeJavaScript('document.title')
   check('窗口标题', String(title).includes('长视频解析'), title)
 
-  const cards = await window.webContents.executeJavaScript('document.querySelectorAll("[data-platform]").length')
+  const cards = await window.webContents.executeJavaScript('document.querySelectorAll(".platform-card[data-platform]").length')
   check('四个平台快捷入口', cards === 4, String(cards))
+  const picks = await window.webContents.executeJavaScript('document.querySelectorAll("#platform-picks .pick").length')
+  check('找剧支持四个平台', picks === 4, String(picks))
 
   const detect = await window.webContents.executeJavaScript(`(() => {
     const cases = [

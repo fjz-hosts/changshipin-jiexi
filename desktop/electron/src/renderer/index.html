@@ -11,14 +11,10 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app">
+    <div class="app" id="app">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 32 32" fill="none">
-              <path d="M11 8.5v15l13-7.5-13-7.5Z" fill="currentColor" />
-            </svg>
-          </div>
+          <img class="brand-img" src="assets/app-icon.png" alt="" />
           <div class="brand-text">
             <strong>长视频解析</strong>
             <span>爱奇艺 · 腾讯视频 · 优酷 · 芒果TV</span>
@@ -29,6 +25,13 @@
             <span class="status-dot" id="update-dot"></span>
             <span id="update-text">v1.0.0</span>
           </button>
+          <button class="ghost-btn accent" id="btn-search">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M15.4 15.4 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            找剧
+          </button>
           <button class="ghost-btn" id="btn-lines">线路管理</button>
           <button class="ghost-btn" id="btn-settings">设置</button>
         </div>
@@ -37,36 +40,36 @@
       <section class="quick-row" aria-label="平台快捷入口">
         <div class="quick-head">
           <span>快捷入口</span>
-          <small>点击进入平台官网（内置窗口，可登录会员）；把视频页链接粘回上方即可解析</small>
+          <small>点卡片进入平台官网（内置窗口，可登录会员）；点「找剧」可跨平台搜索</small>
         </div>
         <div class="platform-grid">
-          <div class="platform-card" data-platform="iqiyi" style="--brand: #00d95f; --brand-soft: rgba(0, 217, 95, 0.16)">
+          <div class="platform-card" data-platform="iqiyi" style="--brand: #00d95f; --brand-soft: rgba(0, 217, 95, 0.18)">
             <button class="card-main" data-action="open">
-              <span class="logo">爱</span>
+              <img class="logo" src="assets/platform-iqiyi.png" alt="" />
               <span class="platform-meta"><b>爱奇艺</b><small>www.iqiyi.com</small></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
           </div>
-          <div class="platform-card" data-platform="qq" style="--brand: #2b8cff; --brand-soft: rgba(43, 140, 255, 0.16)">
+          <div class="platform-card" data-platform="qq" style="--brand: #2b8cff; --brand-soft: rgba(43, 140, 255, 0.18)">
             <button class="card-main" data-action="open">
-              <span class="logo">腾</span>
+              <img class="logo" src="assets/platform-qq.png" alt="" />
               <span class="platform-meta"><b>腾讯视频</b><small>v.qq.com</small></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
           </div>
-          <div class="platform-card" data-platform="youku" style="--brand: #35a6ff; --brand-soft: rgba(53, 166, 255, 0.16)">
+          <div class="platform-card" data-platform="youku" style="--brand: #35a6ff; --brand-soft: rgba(53, 166, 255, 0.18)">
             <button class="card-main" data-action="open">
-              <span class="logo">优</span>
+              <img class="logo" src="assets/platform-youku.png" alt="" />
               <span class="platform-meta"><b>优酷</b><small>www.youku.com</small></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
           </div>
-          <div class="platform-card" data-platform="mgtv" style="--brand: #ff8a1f; --brand-soft: rgba(255, 138, 31, 0.16)">
+          <div class="platform-card" data-platform="mgtv" style="--brand: #ff8a1f; --brand-soft: rgba(255, 138, 31, 0.18)">
             <button class="card-main" data-action="open">
-              <span class="logo">芒</span>
+              <img class="logo" src="assets/platform-mgtv.png" alt="" />
               <span class="platform-meta"><b>芒果TV</b><small>www.mgtv.com</small></span>
               <span class="card-go">进入</span>
             </button>
@@ -167,7 +170,7 @@
         <aside class="side">
           <section class="panel">
             <header>
-              <h3>解析线路</h3>
+              <h3>解析线路 <span class="legend">灰=未启用，点一下启用</span></h3>
               <button class="mini-btn" id="btn-test-all">测速</button>
             </header>
             <ul class="line-list" id="line-list"></ul>
@@ -185,8 +188,61 @@
 
       <footer class="statusbar">
         <span class="status-main" id="status-text">就绪</span>
-        <span class="status-meta"><span id="version-text">v1.0.0</span> · 快捷键 Enter 解析 / F11 全屏</span>
+        <span class="status-meta"><span id="version-text">v1.0.0</span> · Enter 解析 / F11 全屏 / Ctrl+Shift+V 粘贴解析</span>
       </footer>
+    </div>
+
+    <!-- 找剧：跨平台搜索 -->
+    <div class="modal-mask" id="search-modal" hidden>
+      <div class="modal search-modal" role="dialog" aria-modal="true" aria-labelledby="search-title">
+        <header class="modal-head">
+          <h2 id="search-title">找剧 · 跨平台搜索</h2>
+          <button class="icon-btn" id="search-close" title="关闭">✕</button>
+        </header>
+        <div class="search-body">
+          <div class="search-input-row">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M15.4 15.4 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            <input id="search-input" type="text" placeholder="输入剧名、综艺、动漫，例如：庆余年" spellcheck="false" />
+            <button class="primary-sm" id="search-submit">开始搜索</button>
+          </div>
+          <div class="platform-picks" id="platform-picks">
+            <label class="pick" data-platform="iqiyi">
+              <img src="assets/platform-iqiyi.png" alt="" />
+              <span>爱奇艺</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="qq">
+              <img src="assets/platform-qq.png" alt="" />
+              <span>腾讯视频</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="youku">
+              <img src="assets/platform-youku.png" alt="" />
+              <span>优酷</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="mgtv">
+              <img src="assets/platform-mgtv.png" alt="" />
+              <span>芒果TV</span>
+              <input type="checkbox" checked />
+            </label>
+          </div>
+          <p class="hint">
+            会在所选平台的内置浏览器里打开搜索结果页。点开任意剧集或某一集后，程序会自动解析并在主界面播放；
+            可以同时开着多个平台窗口对比。
+          </p>
+          <div class="quick-searches">
+            <span>试试：</span>
+            <button data-q="庆余年">庆余年</button>
+            <button data-q="甄嬛传">甄嬛传</button>
+            <button data-q="披荆斩棘">披荆斩棘</button>
+            <button data-q="漫长的季节">漫长的季节</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="modal-mask" id="modal" hidden>
@@ -205,13 +261,13 @@
           <section class="tab-pane" data-pane="lines">
             <p class="hint">
               线路顺序即自动切换顺序。网页线路需要「地址 + ?url=」，接口线路返回 JSON 或 HTML 时程序会自动提取
-              m3u8 / mp4 地址。失效线路请删除或在线更新。
+              m3u8 / mp4 地址。失效线路请删除或在线更新；灰色的那条只是没有启用，保存后即可使用。
             </p>
             <div class="line-editor" id="line-editor"></div>
             <div class="row-btns">
               <button class="ghost-sm" id="btn-add-line">+ 新增线路</button>
               <button class="ghost-sm" id="btn-online-lines">在线更新线路</button>
-              <button class="ghost-sm danger" id="btn-reset-lines">恢复内置线路</button>
+              <button class="ghost-sm" id="btn-reset-lines">恢复内置线路</button>
               <span class="spacer"></span>
               <button class="primary-sm" id="btn-save-lines">保存线路</button>
             </div>

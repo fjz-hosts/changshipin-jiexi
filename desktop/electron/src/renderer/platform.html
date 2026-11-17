@@ -17,17 +17,25 @@
         <button id="btn-reload" class="nav-btn" title="刷新 (F5)">⟳</button>
         <button id="btn-home" class="nav-btn" title="回到首页">⌂</button>
       </div>
-      <div class="brand" id="brand">
-        <span class="logo" id="brand-logo">爱</span>
+      <div class="brand">
+        <img id="brand-icon" class="brand-icon" src="assets/platform-iqiyi.png" alt="" />
         <span id="brand-name">爱奇艺</span>
       </div>
       <div class="address">
         <input id="address" type="text" spellcheck="false" placeholder="输入网址，回车打开" />
         <span class="page-badge" id="page-badge">首页</span>
       </div>
+      <div class="search-mini">
+        <input id="search-box" type="text" spellcheck="false" placeholder="搜索本站剧集" />
+        <button id="btn-search" class="act" title="在本平台搜索">搜</button>
+      </div>
       <div class="actions">
-        <button id="btn-copy" class="act" title="复制当前页面链接">复制链接</button>
-        <button id="btn-parse" class="act primary" title="把当前页面链接发到主界面解析">填入解析</button>
+        <label class="auto" title="点开某一集/视频页时自动送到主界面解析">
+          <input type="checkbox" id="auto-parse" />
+          <span>自动解析</span>
+        </label>
+        <button id="btn-copy" class="act" title="复制当前剧集链接">复制本集</button>
+        <button id="btn-parse" class="act primary" title="把本集送到主界面解析播放">解析本集</button>
         <button id="btn-external" class="act" title="用系统浏览器打开">浏览器</button>
       </div>
     </header>
