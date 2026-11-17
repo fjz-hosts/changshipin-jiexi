@@ -174,12 +174,12 @@ class StreamProxy {
     })
   }
 
-  _rewritePlaylist(text, baseUrl, cookie = '') {
+  _rewritePlaylist(text, baseUrl, cookie = '', referer = '') {
     const proxy = this
     const rewrite = (relative) => {
       try {
         const absolute = new URL(relative, baseUrl).href
-        return proxy.resourceUrl(absolute, baseUrl, cookie)
+        return proxy.resourceUrl(absolute, referer || baseUrl, cookie)
       } catch {
         return relative
       }
@@ -243,7 +243,7 @@ class StreamProxy {
         return
       }
       const body = Buffer.concat(chunks).toString('utf8')
-      const rewritten = body.trimStart().startsWith('#EXTM3U') ? this._rewritePlaylist(body, target, cookie) : body
+      const rewritten = body.trimStart().startsWith('#EXTM3U') ? this._rewritePlaylist(body, target, cookie, referer) : body
       const buffer = Buffer.from(rewritten, 'utf8')
       delete outHeaders['content-length']
       delete outHeaders['accept-ranges']

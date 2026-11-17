@@ -350,7 +350,7 @@ async function extractMango(videoUrl, cookieHeader = '') {
   let source
   try {
     source = await fetchJson(
-      `https://tinker.glb.mgtv.com/player/getSource?_support=10000000&tk2=${encodeURIComponent(tk2)}&pm2=${encodeURIComponent(pm2)}&video_id=${videoId}&type=pch5&auth_mode=1&cxid=&supportMse=1&src=intelmgtv&abroad=10&allowedRC=1`,
+      `https://tinker.glb.mgtv.com/player/getSource?_support=10000000&tk2=${encodeURIComponent(tk2)}&pm2=${encodeURIComponent(pm2)}&video_id=${videoId}&type=pch5&auth_mode=1&cxid=&supportMse=1&src=mgtv&abroad=10&allowedRC=1`,
       headersFor(),
     )
     jar = mergeCookieHeader(jar, source.setCookies)
