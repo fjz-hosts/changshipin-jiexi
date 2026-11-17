@@ -243,7 +243,8 @@ class UpdateManager {
       noLink: true,
     }
     const window = this.deps.getWindow()
-    const show = window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options)
+    const usable = window && !window.isDestroyed() ? window : null
+    const show = usable ? dialog.showMessageBox(usable, options) : dialog.showMessageBox(options)
     show
       .then((result) => {
         if (result.response === 0) this.install()
@@ -253,8 +254,9 @@ class UpdateManager {
 
   _dialog(options) {
     const window = this.deps.getWindow()
+    const usable = window && !window.isDestroyed() ? window : null
     try {
-      return window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options)
+      return usable ? dialog.showMessageBox(usable, options) : dialog.showMessageBox(options)
     } catch {
       return Promise.resolve()
     }

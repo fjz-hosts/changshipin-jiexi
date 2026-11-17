@@ -79,6 +79,15 @@ function log(...args) {
 
 prepareLog()
 
+// 运行期兜底：窗口在播放/关闭过程中抛出的未捕获异常只写日志，
+// 不再弹出「A JavaScript error occurred in the main process」。
+process.on('uncaughtException', (error) => {
+  log(`[未捕获异常] ${error?.stack || error}`)
+})
+process.on('unhandledRejection', (reason) => {
+  log(`[未处理的 Promise] ${reason?.stack || reason}`)
+})
+
 let mainWindow = null
 let tray = null
 let store = null
@@ -255,9 +264,12 @@ function createPlatformWindow(key, options = {}) {
   win.loadFile(path.join(__dirname, 'renderer', 'platform.html'), {
     query: { key, q: options.search || '', u: options.url || '' },
   })
-  platformWindows.set(win.webContents.id, { win, key })
+  // 必须在 closed 之前把 id 存下来：closed 触发时 webContents 已经销毁，
+  // 再去读 win.webContents.id 就会抛 "Object has been destroyed"。
+  const winId = win.webContents.id
+  platformWindows.set(winId, { win, key })
   win.on('closed', () => {
-    platformWindows.delete(win.webContents.id)
+    platformWindows.delete(winId)
   })
   win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     delete webPreferences.preload
@@ -266,7 +278,9 @@ function createPlatformWindow(key, options = {}) {
     webPreferences.sandbox = true
     if (!/^https?:\/\//i.test(params.src || '')) event.preventDefault()
   })
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show()
+  })
   return win
 }
 
@@ -325,46 +339,54 @@ function pickUrlFromArgv(argv) {
 app.on('web-contents-created', (_event, contents) => {
   if (contents.getType() !== 'webview') return
   contents.setWindowOpenHandler(({ url }) => {
-    const host = contents.hostWebContents
-    const parentWindow = host ? BrowserWindow.fromWebContents(host) : null
-    const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
-    if (entry && /^https?:\/\//i.test(url)) {
-      // 平台内部的「新窗口打开播放页」直接在当前内置浏览器里打开，
-      // 这样地址栏、复制链接、自动解析都能跟着走，不会停留在首页。
-      if (isPlatformUrl(url, entry.key) && looksLikeVideoUrl(url, entry.key)) {
-        try {
-          contents.loadURL(url)
-        } catch {
-          /* 忽略 */
+    try {
+      if (contents.isDestroyed()) return { action: 'deny' }
+      const host = contents.hostWebContents
+      if (!host || host.isDestroyed()) return { action: 'deny' }
+      const parentWindow = BrowserWindow.fromWebContents(host)
+      if (!parentWindow || parentWindow.isDestroyed()) return { action: 'deny' }
+      const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
+      if (entry && /^https?:\/\//i.test(url)) {
+        // 平台内部的「新窗口打开播放页」直接在当前内置浏览器里打开，
+        // 这样地址栏、复制链接、自动解析都能跟着走，不会停留在首页。
+        if (isPlatformUrl(url, entry.key) && looksLikeVideoUrl(url, entry.key)) {
+          try {
+            contents.loadURL(url)
+          } catch {
+            /* 忽略 */
+          }
+          return { action: 'deny' }
         }
-        return { action: 'deny' }
-      }
-      // 搜索结果里的「外站播放」：如果是其它平台的剧集页，切到那个平台的内置窗口
-      const targetPlatform = detectPlatformByUrl(url)
-      if (targetPlatform && looksLikeVideoUrl(url, targetPlatform.key)) {
-        createPlatformWindow(targetPlatform.key, { url })
-        return { action: 'deny' }
-      }
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 1020,
-          height: 780,
-          autoHideMenuBar: true,
-          title: '登录',
-          icon: iconPath(),
-          backgroundColor: '#070b12',
-          webPreferences: {
-            partition: `persist:platform-${entry.key}`,
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
+        // 搜索结果里的「外站播放」：如果是其它平台的剧集页，切到那个平台的内置窗口
+        const targetPlatform = detectPlatformByUrl(url)
+        if (targetPlatform && looksLikeVideoUrl(url, targetPlatform.key)) {
+          createPlatformWindow(targetPlatform.key, { url })
+          return { action: 'deny' }
+        }
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 1020,
+            height: 780,
+            autoHideMenuBar: true,
+            title: '登录',
+            icon: iconPath(),
+            backgroundColor: '#070b12',
+            webPreferences: {
+              partition: `persist:platform-${entry.key}`,
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+            },
           },
-        },
+        }
       }
+      if (/^https?:\/\//i.test(url)) log(`[解析页弹窗已拦截] ${url}`)
+      return { action: 'deny' }
+    } catch (error) {
+      log(`[弹窗处理失败] ${error?.message || error}`)
+      return { action: 'deny' }
     }
-    if (/^https?:\/\//i.test(url)) log(`[解析页弹窗已拦截] ${url}`)
-    return { action: 'deny' }
   })
   contents.on('will-navigate', (event, url) => {
     if (!/^https?:\/\//i.test(url)) event.preventDefault()
@@ -485,14 +507,14 @@ function createTray() {
 }
 
 function showMainWindow() {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
 }
 
 function toggleFullscreen() {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.setFullScreen(!mainWindow.isFullScreen())
 }
 
@@ -502,7 +524,7 @@ function quitApp() {
 }
 
 function showAbout() {
-  dialog.showMessageBox(mainWindow || undefined, {
+  const options = {
     type: 'info',
     title: '关于长视频解析',
     message: `长视频解析 v${app.getVersion()}`,
@@ -513,7 +535,9 @@ function showAbout() {
       `项目地址：${REPO_URL}`,
     buttons: ['好'],
     noLink: true,
-  })
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) dialog.showMessageBox(mainWindow, options)
+  else dialog.showMessageBox(options)
 }
 
 // ---------------------------------------------------------------------------
@@ -648,13 +672,15 @@ function registerIpc() {
 
   // 全屏：主进程把窗口铺满屏幕，渲染进程进入影院模式（隐藏工具栏）
   ipcMain.handle('app:set-fullscreen', (_event, flag) => {
-    if (!mainWindow) return false
+    if (!mainWindow || mainWindow.isDestroyed()) return false
     const on = Boolean(flag)
     mainWindow.setFullScreen(on)
     return on
   })
 
-  ipcMain.handle('app:fullscreen-state', () => mainWindow?.isFullScreen() || false)
+  ipcMain.handle('app:fullscreen-state', () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.isFullScreen() : false,
+  )
 
   ipcMain.handle('app:focus-main', () => {
     showMainWindow()
@@ -688,7 +714,7 @@ function registerIpc() {
     } else {
       // 自动解析时不抢焦点，只闪一下任务栏
       try {
-        mainWindow?.flashFrame(true)
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.flashFrame(true)
       } catch {
         /* 忽略 */
       }
