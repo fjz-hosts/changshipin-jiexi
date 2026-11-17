@@ -173,7 +173,7 @@
         if (state.webviewPending && state.webviewPending.finish === finish) state.webviewPending = null
         resolve({ ok, error })
       }
-      const timer = setTimeout(() => finish(false, '页面加载超时'), 35000)
+      const timer = setTimeout(() => finish(false, '页面加载超时'), 45000)
       state.webviewPending = { finish }
       setView('loading')
       $('#loading-title').textContent = '正在加载解析页面…'
@@ -341,7 +341,10 @@
 
     state.running = false
     $('#btn-parse').disabled = false
-    showError('所有线路都没能解析成功', failures.slice(0, 4).join('\n') || '请检查链接是否有效，或在「线路管理」里更换线路。')
+    showError(
+      '所有线路都没能解析成功',
+      `已按顺序尝试 ${failures.length} 条线路：\n${failures.slice(0, 4).join('\n')}\n\n请检查链接是否有效，或在「线路管理」里更换线路。`,
+    )
   }
 
   async function onParseSuccess(line) {
