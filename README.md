@@ -6,6 +6,8 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 
 ![主界面](docs/screenshot-main.png)
 
+![平台网页直接在主窗口内打开](docs/screenshot-browser.png)
+
 ## 功能
 
 - **链接解析直连播放**：粘贴视频页链接 → 自动识别平台 → 解析 → 内嵌播放（页面播放器或 m3u8/mp4 原生播放）。
