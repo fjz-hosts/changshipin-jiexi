@@ -70,7 +70,7 @@ async function runSmoke({ app, window, proxy, store }) {
   check('解析输入框与按钮', shell)
 
   // ---- 2. 取流代理 ----
-  const received = { referer: '', ranges: [] }
+  const received = { referer: '', cookie: '', ranges: [] }
   let segmentCounter = 0
   const testServer = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1')
@@ -93,6 +93,7 @@ async function runSmoke({ app, window, proxy, store }) {
     if (url.pathname === '/seg1.ts' || url.pathname === '/seg2.ts') {
       segmentCounter += 1
       received.referer = String(request.headers.referer || '')
+      received.cookie = String(request.headers.cookie || '')
       received.ranges.push(String(request.headers.range || ''))
       response.writeHead(200, { 'content-type': 'video/mp2t' })
       response.end(`SEGMENT-${url.pathname}`)
@@ -115,7 +116,7 @@ async function runSmoke({ app, window, proxy, store }) {
   const upstreamPlaylist = `http://127.0.0.1:${testPort}/test.m3u8`
 
   try {
-    const proxied = proxy.resourceUrl(upstreamPlaylist, 'https://www.iqiyi.com/')
+    const proxied = proxy.resourceUrl(upstreamPlaylist, 'https://www.iqiyi.com/', 'sid=cookie-test')
     const playlistResponse = await net.fetch(proxied)
     const playlistText = await playlistResponse.text()
     check('代理播放列表 200', playlistResponse.status === 200, `${playlistResponse.status} ${playlistText.slice(0, 120)}`)
@@ -135,6 +136,7 @@ async function runSmoke({ app, window, proxy, store }) {
       const segmentBody = await segmentResponse.text()
       check('代理分片可播放', segmentResponse.status === 200 && segmentBody.startsWith('SEGMENT-'), segmentBody)
       check('分片 Referer 透传', received.referer === upstreamPlaylist, received.referer)
+      check('分片 Cookie 透传', received.cookie === 'sid=cookie-test', received.cookie)
     }
 
     const mp4 = await net.fetch(proxy.resourceUrl(`http://127.0.0.1:${testPort}/video.mp4`, 'https://v.qq.com/'))

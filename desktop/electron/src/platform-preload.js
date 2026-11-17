@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld('platformApi', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   focusMain: () => ipcRenderer.invoke('app:focus-main'),
   onSearch: (callback) => on('platform:search', callback),
+  onLoad: (callback) => on('platform:load', callback),
 })

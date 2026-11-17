@@ -237,6 +237,9 @@ function createPlatformWindow(key, options = {}) {
     if (options.search && !existing.win.isDestroyed()) {
       existing.win.webContents.send('platform:search', options.search)
     }
+    if (options.url && !existing.win.isDestroyed()) {
+      existing.win.webContents.send('platform:load', options.url)
+    }
     existing.win.show()
     existing.win.focus()
     return existing.win
@@ -301,6 +304,21 @@ function isPlatformUrl(rawUrl, key) {
   }
 }
 
+// 登录 / 支付 / 授权类弹窗仍用独立小窗，避免打断 OAuth 流程；
+// 其它链接一律用带工具栏的内置浏览器打开。
+function isAuthUrl(rawUrl) {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase()
+    return /(^|\.)(passport|login|sso|oauth|accounts)\./.test(host) ||
+      host === 'graph.qq.com' ||
+      host === 'open.weixin.qq.com' ||
+      host === 'pay.qq.com' ||
+      host.endsWith('passport.mgtv.com')
+  } catch {
+    return false
+  }
+}
+
 // 平台里「在新窗口打开」的目标如果本身就是某一集，直接在当前内置浏览器里打开；
 // 登录 / 授权弹窗仍然允许单独弹出，避免把登录流程打断。
 function looksLikeVideoUrl(rawUrl, key) {
@@ -347,9 +365,38 @@ app.on('web-contents-created', (_event, contents) => {
       if (!parentWindow || parentWindow.isDestroyed()) return { action: 'deny' }
       const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
       if (entry && /^https?:\/\//i.test(url)) {
+        // 登录 / 授权 / 支付弹窗照旧独立打开
+        if (isAuthUrl(url)) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 1020,
+              height: 780,
+              autoHideMenuBar: true,
+              title: '登录',
+              icon: iconPath(),
+              backgroundColor: '#070b12',
+              webPreferences: {
+                partition: `persist:platform-${entry.key}`,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+              },
+            },
+          }
+        }
         // 平台内部的「新窗口打开播放页」直接在当前内置浏览器里打开，
         // 这样地址栏、复制链接、自动解析都能跟着走，不会停留在首页。
         if (isPlatformUrl(url, entry.key) && looksLikeVideoUrl(url, entry.key)) {
+          try {
+            contents.loadURL(url)
+          } catch {
+            /* 忽略 */
+          }
+          return { action: 'deny' }
+        }
+        // 同平台的其它页面（首页、列表、搜索等）也留在当前窗口
+        if (isPlatformUrl(url, entry.key)) {
           try {
             contents.loadURL(url)
           } catch {
@@ -363,23 +410,10 @@ app.on('web-contents-created', (_event, contents) => {
           createPlatformWindow(targetPlatform.key, { url })
           return { action: 'deny' }
         }
-        return {
-          action: 'allow',
-          overrideBrowserWindowOptions: {
-            width: 1020,
-            height: 780,
-            autoHideMenuBar: true,
-            title: '登录',
-            icon: iconPath(),
-            backgroundColor: '#070b12',
-            webPreferences: {
-              partition: `persist:platform-${entry.key}`,
-              contextIsolation: true,
-              nodeIntegration: false,
-              sandbox: true,
-            },
-          },
-        }
+        // 其它站点（比如平台广告里的音乐站、资讯站）同样用带工具栏的内置浏览器打开，
+        // 保证每个窗口上方都有「自动解析 / 复制 / 解析本集 / 浏览器」这一排按钮。
+        createPlatformWindow('browser', { url })
+        return { action: 'deny' }
       }
       if (/^https?:\/\//i.test(url)) log(`[解析页弹窗已拦截] ${url}`)
       return { action: 'deny' }
@@ -625,7 +659,19 @@ function registerIpc() {
     const line = lines.find((item) => item.id === payload.lineId) || lines.find((item) => item.enabled)
     if (!line) return { ok: false, error: '没有可用的解析线路，请先在「线路管理」里启用一条线路' }
     try {
-      const result = await parseWithLine({ videoUrl: url, line })
+      let cookieHeader = ''
+      if (line.kind === 'mgtv') {
+        try {
+          const cookies = await session
+            .fromPartition('persist:platform-mgtv')
+            .cookies.get({ domain: 'mgtv.com' })
+          cookieHeader = cookies.map((item) => `${item.name}=${item.value}`).join('; ')
+          log(`芒果TV 原生解析：携带 ${cookies.length} 条登录 Cookie`)
+        } catch {
+          /* 没有登录也没关系 */
+        }
+      }
+      const result = await parseWithLine({ videoUrl: url, line, cookieHeader })
       if (result.kind === 'page') {
         log(`解析 ${line.name} → 页面 ${result.url}`)
         return { ok: true, kind: 'page', url: result.url, line: publicLine(line), platform: detectPlatformByUrl(url)?.name || '未知' }
@@ -633,13 +679,14 @@ function registerIpc() {
       if (result.kind === 'stream') {
         const platform = detectPlatformByUrl(url)
         const referer = result.referer || platform?.home || url
-        const playUrl = proxy.resourceUrl(result.streamUrl, referer)
+        const playUrl = proxy.resourceUrl(result.streamUrl, referer, cookieHeader)
         log(`解析 ${line.name} → 流地址 ${result.streamUrl}`)
         return {
           ok: true,
           kind: 'stream',
           playUrl,
           original: result.streamUrl,
+          title: result.title || '',
           line: publicLine(line),
           platform: platform?.name || '未知',
         }
@@ -657,8 +704,9 @@ function registerIpc() {
       const draft = {
         id: 'draft',
         name: String(payload.draft.name || '临时线路'),
-        kind: ['page', 'api', 'direct'].includes(payload.draft.kind) ? payload.draft.kind : 'page',
+        kind: ['page', 'api', 'mgtv', 'direct'].includes(payload.draft.kind) ? payload.draft.kind : 'page',
         url: String(payload.draft.url || ''),
+        platform: String(payload.draft.platform || ''),
         enabled: true,
       }
       return { draft: await testLine(draft, sample) }

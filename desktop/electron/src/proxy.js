@@ -41,6 +41,12 @@ class StreamProxy {
         delete headers['X-Proxy-Referer']
         delete headers['x-proxy-referer']
       }
+      const cookie = headers['X-Proxy-Cookie'] || headers['x-proxy-cookie']
+      if (cookie) {
+        headers.Cookie = cookie
+        delete headers['X-Proxy-Cookie']
+        delete headers['x-proxy-cookie']
+      }
       callback({ requestHeaders: headers })
     })
     await new Promise((resolve, reject) => {
@@ -68,11 +74,12 @@ class StreamProxy {
     this.server = null
   }
 
-  resourceUrl(target, referer = '') {
+  resourceUrl(target, referer = '', cookie = '') {
     const search = new URLSearchParams()
     search.set('t', this.token)
     search.set('u', Buffer.from(String(target), 'utf8').toString('base64url'))
     if (referer) search.set('r', Buffer.from(String(referer), 'utf8').toString('base64url'))
+    if (cookie) search.set('c', Buffer.from(String(cookie), 'utf8').toString('base64url'))
     return `${this.base}/stream?${search.toString()}`
   }
 
@@ -97,7 +104,8 @@ class StreamProxy {
       return
     }
     const referer = this._decode(url.searchParams.get('r')) || ''
-    await this._pipe(request, response, target, referer)
+    const cookie = this._decode(url.searchParams.get('c')) || ''
+    await this._pipe(request, response, target, referer, cookie)
   }
 
   _decode(value) {
@@ -166,12 +174,12 @@ class StreamProxy {
     })
   }
 
-  _rewritePlaylist(text, baseUrl) {
+  _rewritePlaylist(text, baseUrl, cookie = '') {
     const proxy = this
     const rewrite = (relative) => {
       try {
         const absolute = new URL(relative, baseUrl).href
-        return proxy.resourceUrl(absolute, baseUrl)
+        return proxy.resourceUrl(absolute, baseUrl, cookie)
       } catch {
         return relative
       }
@@ -189,7 +197,7 @@ class StreamProxy {
       .join('\n')
   }
 
-  async _pipe(request, response, target, referer) {
+  async _pipe(request, response, target, referer, cookie = '') {
     const headers = {
       'user-agent': UA,
       accept: '*/*',
@@ -197,6 +205,7 @@ class StreamProxy {
       'accept-encoding': 'identity',
     }
     if (referer) headers['X-Proxy-Referer'] = referer.replace(/[^\x20-\x7e]/g, '')
+    if (cookie) headers['X-Proxy-Cookie'] = cookie.replace(/[\r\n]/g, '')
     if (request.headers.range) headers.range = request.headers.range
 
     const upstream = await this._request(target, headers)
@@ -234,7 +243,7 @@ class StreamProxy {
         return
       }
       const body = Buffer.concat(chunks).toString('utf8')
-      const rewritten = body.trimStart().startsWith('#EXTM3U') ? this._rewritePlaylist(body, target) : body
+      const rewritten = body.trimStart().startsWith('#EXTM3U') ? this._rewritePlaylist(body, target, cookie) : body
       const buffer = Buffer.from(rewritten, 'utf8')
       delete outHeaders['content-length']
       delete outHeaders['accept-ranges']

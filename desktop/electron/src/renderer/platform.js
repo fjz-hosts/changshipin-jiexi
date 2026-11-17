@@ -30,6 +30,13 @@
       icon: 'assets/platform-mgtv.png',
       search: (q) => `https://so.mgtv.com/so?k=${encodeURIComponent(q)}`,
     },
+    browser: {
+      name: '内置浏览器',
+      color: '#37e08b',
+      home: 'https://www.bing.com/',
+      icon: 'assets/app-icon.png',
+      search: (q) => `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
+    },
   }
 
   const params = new URLSearchParams(location.search)
@@ -49,6 +56,7 @@
   document.title = `${meta.name} · 内置浏览器`
   $('#brand-icon').src = meta.icon
   $('#brand-name').textContent = meta.name
+  document.documentElement.style.setProperty('--brand', meta.color)
 
   autoParse.checked = localStorage.getItem('csp.autoParse') !== '0'
   autoParse.addEventListener('change', () => {
@@ -257,12 +265,12 @@
   $('#btn-copy').addEventListener('click', async () => {
     const url = currentUrl()
     if (!url) return
-    if (!isVideoPage(url)) {
+    if (key !== 'browser' && !isVideoPage(url)) {
       bump('请先点开具体某一集，再复制链接')
       return
     }
     await window.platformApi.copyText(url)
-    bump('已复制本集链接')
+    bump(key === 'browser' ? '已复制当前页面链接' : '已复制本集链接')
   })
 
   $('#btn-parse').addEventListener('click', async () => {
@@ -300,6 +308,16 @@
   if (window.platformApi.onSearch) {
     window.platformApi.onSearch((query) => {
       navigateSearch(query)
+    })
+  }
+  if (window.platformApi.onLoad) {
+    window.platformApi.onLoad((url) => {
+      if (!url) return
+      try {
+        webview.loadURL(url)
+      } catch {
+        /* 忽略 */
+      }
     })
   }
 

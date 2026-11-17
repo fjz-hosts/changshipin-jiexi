@@ -17,7 +17,7 @@ function cleanText(value, max = 300) {
 
 function normalizeLine(raw, index) {
   if (!raw || typeof raw !== 'object') return null
-  const kind = ['page', 'api', 'direct'].includes(raw.kind) ? raw.kind : 'page'
+  const kind = ['page', 'api', 'mgtv', 'direct'].includes(raw.kind) ? raw.kind : 'page'
   const url = cleanText(raw.url, 600)
   if (!url) return null
   const id = cleanText(raw.id, 80) || `line-${Date.now()}-${index}`
@@ -29,6 +29,7 @@ function normalizeLine(raw, index) {
     enabled: raw.enabled !== false,
     builtin: Boolean(raw.builtin),
     note: cleanText(raw.note, 120),
+    platform: cleanText(raw.platform, 20),
     createdAt: Number(raw.createdAt) || Date.now(),
   }
 }
@@ -73,6 +74,22 @@ class Store {
       const raw = fs.readFileSync(this.file, 'utf8')
       const data = JSON.parse(raw)
       const lines = Array.isArray(data.lines) ? data.lines.map(normalizeLine).filter(Boolean) : []
+      for (const line of lines) {
+        if (line.id === 'builtin-mgtv-native') {
+          line.kind = 'mgtv'
+          line.url = 'mgtv://auto'
+          line.platform = 'mgtv'
+        }
+      }
+      // 升级时把新版本新增的内置线路补进旧配置（例如芒果TV 原生解析），
+      // 用户自己删掉/改过的线路保持原样。
+      const present = new Set(lines.map((line) => line.id))
+      for (const builtin of defaults.lines) {
+        if (builtin.builtin && !present.has(builtin.id)) {
+          lines.push({ ...builtin })
+          present.add(builtin.id)
+        }
+      }
       const merged = {
         ...defaults,
         ...data,

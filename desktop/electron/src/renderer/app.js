@@ -278,10 +278,15 @@
     return lines.find((line) => line.id === state.currentLineId) || enabledLines()[0] || lines[0] || null
   }
 
-  function parseChain(primaryId) {
-    const enabled = enabledLines()
-    if (!enabled.length) return []
-    const primary = enabled.find((line) => line.id === primaryId) || enabled[0]
+  function parseChain(primaryId, videoUrl) {
+    const all = enabledLines()
+    if (!all.length) return []
+    const platformKey = detectPlatform(videoUrl)
+    const fitting = platformKey ? all.filter((line) => !line.platform || line.platform === platformKey) : all
+    const enabled = fitting.length ? fitting : all
+    const matching = platformKey ? enabled.filter((line) => line.platform === platformKey) : []
+    // 平台专属线路（例如芒果TV 原生解析）优先，避免通用线路“页面能打开但视频是空的”也算成功
+    const primary = matching[0] || enabled.find((line) => line.id === primaryId) || enabled[0]
     const chain = [primary, ...enabled.filter((line) => line.id !== primary.id)]
     return state.config?.autoFallback === false ? [primary] : chain
   }
@@ -300,7 +305,7 @@
     const platform = platformInfo(detectPlatform(videoUrl))
     if (!platform) toast('未识别的平台，仍会尝试用线路解析', 'warn')
 
-    const lines = chain ? parseChain(lineId || state.currentLineId) : (state.config.lines.filter((l) => l.id === lineId))
+    const lines = chain ? parseChain(lineId || state.currentLineId, videoUrl) : (state.config.lines.filter((l) => l.id === lineId))
     if (!lines.length) {
       toast('没有启用的解析线路，请先到「线路管理」里启用或添加', 'error')
       return
@@ -432,7 +437,9 @@
     for (const line of enabled) {
       const option = document.createElement('option')
       option.value = line.id
-      option.textContent = line.name
+      option.textContent = line.platform
+        ? `${line.name} · ${platformInfo(line.platform)?.name || line.platform}`
+        : line.name
       select.appendChild(option)
     }
     const target = enabled.find((line) => line.id === state.currentLineId) || enabled[0]
@@ -586,6 +593,7 @@
   const LINE_KINDS = [
     { value: 'page', label: '网页' },
     { value: 'api', label: '接口' },
+    { value: 'mgtv', label: '芒果内置' },
     { value: 'direct', label: '直连' },
   ]
 
@@ -607,7 +615,7 @@
         <select class="line-kind">
           ${LINE_KINDS.map((kind) => `<option value="${kind.value}" ${line.kind === kind.value ? 'selected' : ''}>${kind.label}</option>`).join('')}
         </select>
-        <input type="text" class="line-url" value="${escapeHtml(line.url || '')}" placeholder="https://jx.example.com/?url={url}" spellcheck="false" ${line.kind === 'direct' ? 'disabled' : ''} />
+        <input type="text" class="line-url" value="${escapeHtml(line.url || '')}" placeholder="https://jx.example.com/?url={url}" spellcheck="false" ${line.kind === 'direct' || line.kind === 'mgtv' ? 'disabled' : ''} />
         <button class="row-btn line-test" title="用示例链接测一下">测试</button>
         <button class="row-btn line-del" title="删除">删除</button>
         <div class="row-note">${escapeHtml(line.note || '')}</div>
@@ -615,12 +623,12 @@
       row.querySelector('.line-kind').addEventListener('change', (event) => {
         const kind = event.target.value
         const urlInput = row.querySelector('.line-url')
-        if (kind === 'direct') {
-          urlInput.value = 'direct://video'
+        if (kind === 'direct' || kind === 'mgtv') {
+          urlInput.value = kind === 'direct' ? 'direct://video' : 'mgtv://auto'
           urlInput.disabled = true
         } else {
           urlInput.disabled = false
-          if (urlInput.value === 'direct://video') urlInput.value = ''
+          if (urlInput.value === 'direct://video' || urlInput.value === 'mgtv://auto') urlInput.value = ''
         }
       })
       row.querySelector('.line-del').addEventListener('click', () => {
@@ -663,6 +671,7 @@
     line.kind = row.querySelector('.line-kind').value
     line.url = row.querySelector('.line-url').value.trim()
     if (line.kind === 'direct' && !line.url) line.url = 'direct://video'
+    if (line.kind === 'mgtv' && !line.url) line.url = 'mgtv://auto'
     return line
   }
 

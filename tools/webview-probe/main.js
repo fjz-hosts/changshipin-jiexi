@@ -18,7 +18,10 @@ const OUTPUT = path.join(__dirname, 'probe-result.json')
 const SHOTS = path.join(__dirname, 'shots')
 
 const only = process.env.PROBE_LINES ? new Set(process.env.PROBE_LINES.split(',')) : null
-const lines = DEFAULT_LINES.filter((line) => line.kind !== 'direct' && (!only || only.has(line.id)))
+const custom = process.env.PROBE_CUSTOM ? JSON.parse(process.env.PROBE_CUSTOM) : null
+const lines = custom && custom.length
+  ? custom
+  : DEFAULT_LINES.filter((line) => line.kind !== 'direct' && (!only || only.has(line.id)))
 
 app.userAgentFallback = UA
 app.on('certificate-error', (event, contents, url, error, certificate, callback) => {

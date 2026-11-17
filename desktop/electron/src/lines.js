@@ -1,5 +1,6 @@
 'use strict'
 
+const crypto = require('node:crypto')
 const { net } = require('electron')
 
 const UA =
@@ -100,6 +101,16 @@ const DEFAULT_LINES = [
     enabled: false,
     builtin: true,
     note: '站点已改版，仅作备用',
+  },
+  {
+    id: 'builtin-mgtv-native',
+    name: '芒果TV 原生解析',
+    kind: 'mgtv',
+    url: 'mgtv://auto',
+    enabled: true,
+    builtin: true,
+    platform: 'mgtv',
+    note: '内置芒果TV 接口，需国内网络；在芒果内置窗口登录会员后可解 VIP',
   },
   {
     id: 'builtin-direct',
@@ -234,10 +245,161 @@ async function fetchText(target, timeout = 15000) {
   }
 }
 
-async function parseWithLine({ videoUrl, line }) {
+// ---------------------------------------------------------------------------
+// 芒果TV 原生解析（按 yt-dlp 的 tk2 / getSource 流程移植）
+// 不依赖第三方解析站，但受芒果 TV 的地区限制与会员鉴权影响。
+// ---------------------------------------------------------------------------
+
+function mgtvVideoId(videoUrl) {
+  const match = String(videoUrl).match(/\/(\d+)\.html/)
+  return match ? match[1] : ''
+}
+
+function mgtvTk2() {
+  const raw = `did=${crypto.randomUUID()}|pno=1030|ver=0.3.0301|clit=${Math.floor(Date.now() / 1000)}`
+  const base64 = Buffer.from(raw, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+  return base64.split('').reverse().join('')
+}
+
+async function fetchJson(target, headers, timeout = 15000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  try {
+    // 这里用 Node 的 fetch：Chromium 的 net 模块会拦截手动设置的 Referer/Cookie，
+    // 而芒果TV 接口必须带 Referer 与登录 Cookie。
+    const response = await fetch(target, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers,
+    })
+    const text = await response.text()
+    let json = null
+    try {
+      json = JSON.parse(text)
+    } catch {
+      /* 非 JSON */
+    }
+    const setCookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : []
+    return { ok: response.ok, status: response.status, json, text, setCookies }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function mergeCookieHeader(existing, setCookies = []) {
+  const jar = new Map()
+  for (const part of String(existing || '').split(';')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const index = trimmed.indexOf('=')
+    if (index <= 0) continue
+    jar.set(trimmed.slice(0, index).trim(), trimmed.slice(index + 1).trim())
+  }
+  for (const raw of setCookies) {
+    const first = String(raw || '').split(';')[0]
+    const index = first.indexOf('=')
+    if (index <= 0) continue
+    jar.set(first.slice(0, index).trim(), first.slice(index + 1).trim())
+  }
+  return [...jar.entries()].map(([key, value]) => `${key}=${value}`).join('; ')
+}
+
+async function extractMango(videoUrl, cookieHeader = '') {
+  const videoId = mgtvVideoId(videoUrl)
+  if (!videoId) return { kind: 'none', error: '无法从链接中识别芒果TV 视频 ID' }
+  const tk2 = mgtvTk2()
+  let jar = cookieHeader
+  const headersFor = (extra = {}) => {
+    const headers = {
+      'user-agent': UA,
+      referer: videoUrl,
+      origin: 'https://www.mgtv.com',
+      accept: 'application/json, text/plain, */*',
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
+      ...extra,
+    }
+    if (jar) headers.cookie = jar
+    return headers
+  }
+
+  let player
+  try {
+    player = await fetchJson(
+      `https://pcweb.api.mgtv.com/player/video?tk2=${encodeURIComponent(tk2)}&video_id=${videoId}&type=pch5`,
+      headersFor(),
+    )
+    jar = mergeCookieHeader(jar, player.setCookies)
+  } catch (error) {
+    return { kind: 'none', error: `芒果TV 接口请求失败：${String(error?.message || error).slice(0, 60)}` }
+  }
+  const pm2 = player.json?.data?.atc?.pm2
+  if (!pm2) {
+    const message = player.json?.msg || player.json?.err_msg || ''
+    if (/地区|country|region|地域/i.test(message) || player.status === 403) {
+      return { kind: 'none', error: '芒果TV 提示地区限制（需要在中国大陆网络下使用）' }
+    }
+    return {
+      kind: 'none',
+      error: `芒果TV 没有返回播放参数${message ? `：${message}` : ''}（可能需要登录芒果会员）`,
+    }
+  }
+
+  let source
+  try {
+    source = await fetchJson(
+      `https://tinker.glb.mgtv.com/player/getSource?_support=10000000&tk2=${encodeURIComponent(tk2)}&pm2=${encodeURIComponent(pm2)}&video_id=${videoId}&type=pch5&auth_mode=1&cxid=&supportMse=1&src=intelmgtv&abroad=10&allowedRC=1`,
+      headersFor(),
+    )
+    jar = mergeCookieHeader(jar, source.setCookies)
+  } catch (error) {
+    return { kind: 'none', error: `芒果TV 取流接口失败：${String(error?.message || error).slice(0, 60)}` }
+  }
+  if (source.json?.code === 40005 || /地区|country|region/i.test(source.json?.msg || '')) {
+    return { kind: 'none', error: '芒果TV 提示地区限制（需要在中国大陆网络下使用）' }
+  }
+  const data = source.json?.data || {}
+  const streams = (Array.isArray(data.stream) ? data.stream : []).filter((item) => item && item.url)
+  if (!streams.length) {
+    const message = source.json?.msg || source.json?.err_msg || ''
+    return {
+      kind: 'none',
+      error: `芒果TV 没有返回可播放流${message ? `：${message}` : ''}（VIP 内容需要在芒果内置窗口登录会员）`,
+    }
+  }
+
+  const domains = [].concat(data.stream_domain || []).filter(Boolean)
+  const domain = domains[0] || 'https://tinker.glb.mgtv.com'
+  streams.sort((a, b) => (Number(b.filebitrate) || 0) - (Number(a.filebitrate) || 0))
+
+  for (const stream of streams.slice(0, 6)) {
+    try {
+      const target = /^https?:/i.test(stream.url) ? stream.url : new URL(stream.url, domain).href
+      const info = await fetchJson(target, headersFor({ referer: videoUrl }))
+      jar = mergeCookieHeader(jar, info.setCookies)
+      const streamUrl = info.json?.info || info.json?.data?.info
+      if (typeof streamUrl === 'string' && /^https?:\/\//i.test(streamUrl)) {
+        return {
+          kind: 'stream',
+          streamUrl,
+          referer: videoUrl,
+          title: player.json?.data?.info?.title || '',
+        }
+      }
+    } catch {
+      /* 尝试下一种清晰度 */
+    }
+  }
+  return { kind: 'none', error: '芒果TV 播放地址解析失败（可能需要在芒果内置窗口登录会员）' }
+}
+
+async function parseWithLine({ videoUrl, line, cookieHeader = '' }) {
   if (!videoUrl || !isHttpUrl(videoUrl)) throw new Error('视频链接格式不正确')
   if (!line) throw new Error('没有可用的解析线路')
   if (line.kind === 'direct') return { kind: 'page', url: videoUrl, note: '官网页面模式' }
+  if (line.kind === 'mgtv') return await extractMango(videoUrl, cookieHeader)
   const target = buildLineUrl(line.url, videoUrl)
   if (line.kind === 'page') return { kind: 'page', url: target }
   if (line.kind === 'api') {
@@ -255,8 +417,17 @@ async function parseWithLine({ videoUrl, line }) {
 async function testLine(line, sampleUrl = SAMPLE_URL) {
   if (!line) return { ok: false, ms: 0, note: '线路不存在' }
   if (line.kind === 'direct') return { ok: true, ms: 0, note: '本地模式，无需网络' }
+  if (line.platform && !new RegExp(`${line.platform}\\.com`, 'i').test(sampleUrl)) {
+    return { ok: false, ms: 0, note: '仅用于芒果TV（当前测速链接不是芒果TV）' }
+  }
   const started = Date.now()
   try {
+    if (line.kind === 'mgtv') {
+      const result = await extractMango(sampleUrl)
+      const ms = Date.now() - started
+      if (result.kind === 'stream') return { ok: true, ms, note: '已解析出芒果TV 播放地址' }
+      return { ok: false, ms, note: result.error || '芒果TV 解析失败' }
+    }
     if (line.kind === 'api') {
       const result = await parseWithLine({ videoUrl: sampleUrl, line })
       const ms = Date.now() - started

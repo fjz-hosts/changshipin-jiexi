@@ -4,6 +4,15 @@
 // 渲染进程里有一份精简版（src/renderer/app.js）用于识别链接。
 const PLATFORMS = [
   {
+    key: 'browser',
+    name: '内置浏览器',
+    home: 'https://www.bing.com/',
+    color: '#37e08b',
+    partition: 'persist:browser',
+    hosts: [],
+    hint: '',
+  },
+  {
     key: 'iqiyi',
     name: '爱奇艺',
     home: 'https://www.iqiyi.com/',
