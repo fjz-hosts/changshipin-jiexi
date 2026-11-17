@@ -1,5 +1,5 @@
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms))
-const EP='http://127.0.0.1:9345'
+const EP=process.env.CDP_ENDPOINT || 'http://127.0.0.1:9345'
 const list=async()=>await (await fetch(EP+'/json/list')).json()
 function connect(url){return new Promise((resolve,reject)=>{const ws=new WebSocket(url);let id=1;const pending=new Map();ws.addEventListener('open',()=>resolve({send(method,params={}){const i=id++;ws.send(JSON.stringify({id:i,method,params}));return new Promise((res,rej)=>{const t=setTimeout(()=>rej(new Error('timeout')),40000);pending.set(i,m=>{clearTimeout(t);res(m)})})},close:()=>ws.close()}));ws.addEventListener('error',reject);ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){pending.get(m.id)(m);pending.delete(m.id)}})})}
 async function ev(c,expr){const r=await c.send('Runtime.evaluate',{expression:expr,returnByValue:true,awaitPromise:true});if(r.result?.exceptionDetails)throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0,300));return r.result?.result?.value}
@@ -31,6 +31,10 @@ await ev(main,"document.querySelector('#browser-back').click()")
 await sleep(3000)
 const backUrl=await ev(main,`window.__app.getState().browsers.get('iqiyi').webview.getURL()`)
 check('回退可回到上一步',String(backUrl).includes('iqiyi.com'),backUrl)
+await ev(main,"document.querySelector('#browser-close').click()")
+await sleep(1200)
+const restored=await ev(main,`JSON.stringify({panelHidden:document.querySelector('#browser-panel').hidden, workspaceVisible:!document.querySelector('.workspace').hidden})`)
+check('返回首页恢复主界面',JSON.parse(restored).panelHidden===true && JSON.parse(restored).workspaceVisible===true,restored)
 const finalTargets=(await list()).filter(t=>t.type==='page')
 check('全程没有多开窗口',finalTargets.length===1,String(finalTargets.length))
 main.close()
