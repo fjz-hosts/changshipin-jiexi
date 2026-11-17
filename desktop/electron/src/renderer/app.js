@@ -224,7 +224,9 @@
       const hls = new window.Hls({
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        enableWorker: true,
+        // 打包后 Chromium 的 blob worker 偶尔起不来，导致清单一直不解析；
+        // 关掉 worker 用主线程解析，代价很小，但播放稳定得多。
+        enableWorker: false,
         lowLatencyMode: false,
         backBufferLength: 30,
       })

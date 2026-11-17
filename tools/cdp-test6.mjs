@@ -1,5 +1,5 @@
-﻿const sleep=(ms)=>new Promise(r=>setTimeout(r,ms))
-const list=await (await fetch('http://127.0.0.1:9226/json/list')).json()
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms))
+const list=await (await fetch((process.env.CDP_ENDPOINT || 'http://127.0.0.1:9226') + '/json/list')).json()
 const main=list.find(t=>t.type==='page'&&t.url.includes('index.html'))
 const ws=new WebSocket(main.webSocketDebuggerUrl)
 let id=1; const pending=new Map()
