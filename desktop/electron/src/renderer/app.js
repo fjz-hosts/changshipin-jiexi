@@ -3,11 +3,18 @@
 
   // 与主进程 platforms.js 保持一致的精简版
   const PLATFORMS = [
-    { key: 'iqiyi', name: '爱奇艺', color: '#00d95f', hosts: ['iqiyi.com', 'iq.com'], home: 'https://www.iqiyi.com/' },
-    { key: 'qq', name: '腾讯视频', color: '#2b8cff', hosts: ['v.qq.com', 'qq.com'], home: 'https://v.qq.com/' },
-    { key: 'youku', name: '优酷', color: '#35a6ff', hosts: ['youku.com', 'tudou.com'], home: 'https://www.youku.com/' },
-    { key: 'mgtv', name: '芒果TV', color: '#ff8a1f', hosts: ['mgtv.com'], home: 'https://www.mgtv.com/' },
+    { key: 'iqiyi', name: '爱奇艺', color: '#00d95f', hosts: ['iqiyi.com', 'iq.com'], home: 'https://www.iqiyi.com/', icon: 'assets/platform-iqiyi.png' },
+    { key: 'qq', name: '腾讯视频', color: '#2b8cff', hosts: ['v.qq.com', 'qq.com'], home: 'https://v.qq.com/', icon: 'assets/platform-qq.png' },
+    { key: 'youku', name: '优酷', color: '#35a6ff', hosts: ['youku.com', 'tudou.com'], home: 'https://www.youku.com/', icon: 'assets/platform-youku.png' },
+    { key: 'mgtv', name: '芒果TV', color: '#ff8a1f', hosts: ['mgtv.com'], home: 'https://www.mgtv.com/', icon: 'assets/platform-mgtv.png' },
   ]
+
+  const SEARCH_URLS = {
+    iqiyi: (q) => `https://so.iqiyi.com/so/q_${encodeURIComponent(q)}`,
+    qq: (q) => `https://v.qq.com/x/search/?q=${encodeURIComponent(q)}`,
+    youku: (q) => `https://so.youku.com/search_video/q_${encodeURIComponent(q)}`,
+    mgtv: (q) => `https://so.mgtv.com/so?k=${encodeURIComponent(q)}`,
+  }
 
   const icons = {
     play: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>',
@@ -26,6 +33,16 @@
     webviewPending: null,
     draftLines: null,
     fullscreen: false,
+    pendingTitle: '',
+    pendingEpisode: '',
+    currentTitle: '',
+    currentEpisode: '',
+    resumeAt: 0,
+    runWatchdog: null,
+    browsers: new Map(),
+    browserKey: '',
+    browserOpen: false,
+    browserAutoParse: true,
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -82,6 +99,31 @@
     return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, '0')}`
   }
 
+  function cleanTitle(raw) {
+    let text = String(raw || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^【[^】]*】\s*/, '')
+      .trim()
+    if (!text) return ''
+    text = text
+      .replace(/\s*[-_|]\s*(爱奇艺|腾讯视频|优酷|芒果TV|芒果tv|在线观看|高清完整正版视频在线观看).*$/i, '')
+      .replace(/\s*[-_|]\s*芒果TV.*$/i, '')
+      .trim()
+    if (!text || text.length < 2) return ''
+    if (/在线视频网站|海量正版|高清完整正版|天生青春|腾讯视频$|爱奇艺$/i.test(text)) return ''
+    return text.slice(0, 100)
+  }
+
+  function episodeOf(title) {
+    const match = String(title || '').match(/(第\s*[0-9一二三四五六七八九十百千]+\s*[集期话回]|EP?\s*\d+|S\d+E\d+)/i)
+    return match ? match[0].replace(/\s+/g, '') : ''
+  }
+
+  function historyTitle(item) {
+    if (item.title) return item.title
+    return `${item.platform || '视频'} · ${platformInfo(detectPlatform(item.url))?.name || '未命名'}`
+  }
+
   function setStatus(text) {
     $('#status-text').textContent = text
   }
@@ -109,6 +151,216 @@
     badge.classList.toggle('known', Boolean(platform))
     if (platform) badge.style.setProperty('--brand', platform.color)
     else badge.style.removeProperty('--brand')
+  }
+
+  // ---------------------------------------------------------------------------
+  // 主窗口内置浏览器（平台网页不再另开窗口）
+  // ---------------------------------------------------------------------------
+
+  function detectVideoPlatform(rawUrl) {
+    let parsed
+    try {
+      parsed = new URL(String(rawUrl || ''))
+    } catch {
+      return null
+    }
+    const host = parsed.hostname.toLowerCase()
+    const pathname = parsed.pathname
+    if (
+      (host === 'iqiyi.com' || host.endsWith('.iqiyi.com')) &&
+      (/^\/v_[A-Za-z0-9]+\.html$/.test(pathname) || /^\/a_[A-Za-z0-9]+\.html$/.test(pathname))
+    ) {
+      return 'iqiyi'
+    }
+    if (host === 'v.qq.com' || host.endsWith('.v.qq.com')) {
+      const parts = pathname.split('/').filter(Boolean)
+      const last = parts[parts.length - 1] || ''
+      if (parts[0] === 'x' && /\.html$/.test(last)) {
+        if (parts[1] === 'cover' && parts.length >= 4) return 'qq'
+        if (parts[1] === 'page' && parts.length >= 3) return 'qq'
+      }
+    }
+    if ((host === 'youku.com' || host.endsWith('.youku.com')) && /^\/v_show\/id_[A-Za-z0-9=]+\.html$/.test(pathname)) {
+      return 'youku'
+    }
+    if ((host === 'mgtv.com' || host.endsWith('.mgtv.com')) && /^\/b\/\d+\/\d+\.html$/.test(pathname)) {
+      return 'mgtv'
+    }
+    return null
+  }
+
+  function browserMeta(key) {
+    return PLATFORMS.find((item) => item.key === key) || null
+  }
+
+  function webviewTitle(webview) {
+    try {
+      return cleanTitle(webview.getTitle())
+    } catch {
+      return ''
+    }
+  }
+
+  function ensureBrowser(key) {
+    const existing = state.browsers.get(key)
+    if (existing) return existing
+    const meta = browserMeta(key)
+    if (!meta) return null
+    const webview = document.createElement('webview')
+    webview.className = 'browser-webview'
+    webview.setAttribute('partition', `persist:platform-${key}`)
+    webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no')
+    webview.setAttribute('allowpopups', '')
+    webview.src = meta.home
+    webview.style.display = 'none'
+    $('#browser-viewport').appendChild(webview)
+
+    const record = { key, webview, lastAuto: '', timer: null }
+    state.browsers.set(key, record)
+
+    webview.addEventListener('did-start-loading', () => {
+      if (state.browserKey === key) setStatus(`正在加载 ${meta.name}…`)
+    })
+    webview.addEventListener('did-stop-loading', () => refreshBrowser(key))
+    webview.addEventListener('did-navigate', () => refreshBrowser(key))
+    webview.addEventListener('did-navigate-in-page', () => refreshBrowser(key))
+    webview.addEventListener('page-title-updated', () => {
+      if (state.browserKey === key) refreshBrowser(key)
+    })
+    webview.addEventListener('did-fail-load', (event) => {
+      if (!event.isMainFrame || event.errorCode === -3) return
+      if (state.browserKey !== key) return
+      toast(`${meta.name} 页面加载失败：${event.errorDescription || event.errorCode}`, 'error')
+    })
+    return record
+  }
+
+  function refreshBrowser(key) {
+    if (state.browserKey !== key || !state.browserOpen) return
+    const record = state.browsers.get(key)
+    if (!record) return
+    const meta = browserMeta(key)
+    let url = ''
+    try {
+      url = record.webview.getURL() || ''
+    } catch {
+      /* 忽略 */
+    }
+    if (url && document.activeElement !== $('#browser-address')) $('#browser-address').value = url
+    $('#browser-icon').src = meta.icon
+    $('#browser-name').textContent = meta.name
+    try {
+      $('#browser-back').disabled = !record.webview.canGoBack()
+      $('#browser-forward').disabled = !record.webview.canGoForward()
+    } catch {
+      /* 忽略 */
+    }
+    const videoPlatform = detectVideoPlatform(url)
+    const badge = $('#browser-badge')
+    badge.classList.toggle('video', Boolean(videoPlatform))
+    badge.textContent = videoPlatform ? `视频页 · ${browserMeta(videoPlatform)?.name || ''} · 可解析` : '浏览中'
+    if (videoPlatform && $('#browser-auto').checked) scheduleBrowserParse(record, url)
+  }
+
+  function scheduleBrowserParse(record, url) {
+    if (!url || record.lastAuto === url) return
+    record.lastAuto = url
+    clearTimeout(record.timer)
+    record.timer = setTimeout(() => {
+      if (!state.browserOpen || state.browserKey !== record.key) return
+      const current = (() => {
+        try {
+          return record.webview.getURL()
+        } catch {
+          return ''
+        }
+      })()
+      if (!detectVideoPlatform(current)) return
+      const title = webviewTitle(record.webview)
+      hideBrowser({ mute: true })
+      startParse({ url: current, title, episode: episodeOf(title) })
+      toast('已自动解析本集；点平台卡片可以回来继续选集', 'ok', 5000)
+    }, 1000)
+  }
+
+  function openBrowser(key, { url = '', query = '', background = false } = {}) {
+    const record = ensureBrowser(key)
+    if (!record) return
+    const meta = browserMeta(key)
+    const target = url || (query ? SEARCH_URLS[key]?.(query) || '' : '')
+    if (target) {
+      try {
+        record.webview.src = target
+      } catch {
+        /* 忽略 */
+      }
+    }
+    if (background) return
+    state.browserKey = key
+    state.browserOpen = true
+    for (const [itemKey, item] of state.browsers) {
+      item.webview.style.display = itemKey === key ? 'flex' : 'none'
+      if (itemKey !== key) {
+        try {
+          item.webview.setAudioMuted(true)
+        } catch {
+          /* 忽略 */
+        }
+      }
+    }
+    try {
+      record.webview.setAudioMuted(false)
+    } catch {
+      /* 忽略 */
+    }
+    $('#browser-panel').hidden = false
+    document.querySelector('.parse-row').hidden = true
+    document.querySelector('.workspace').hidden = true
+    $$('.platform-card').forEach((card) => card.classList.toggle('active', card.dataset.platform === key))
+    $('#browser-icon').src = meta.icon
+    $('#browser-name').textContent = meta.name
+    $('#browser-badge').textContent = '浏览中'
+    $('#browser-badge').classList.remove('video')
+    if (!target) {
+      try {
+        if (!record.webview.getURL()) record.webview.src = meta.home
+      } catch {
+        /* 忽略 */
+      }
+    }
+    setStatus(`正在浏览 ${meta.name}`)
+    refreshBrowser(key)
+  }
+
+  function hideBrowser({ mute = true } = {}) {
+    if (!state.browserOpen) return
+    state.browserOpen = false
+    $('#browser-panel').hidden = true
+    document.querySelector('.parse-row').hidden = false
+    document.querySelector('.workspace').hidden = false
+    $$('.platform-card').forEach((card) => card.classList.remove('active'))
+    for (const record of state.browsers.values()) {
+      if (!mute) continue
+      try {
+        record.webview.setAudioMuted(true)
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+
+  function currentBrowserUrl() {
+    const record = state.browsers.get(state.browserKey)
+    try {
+      return record ? record.webview.getURL() || '' : ''
+    } catch {
+      return ''
+    }
+  }
+
+  function currentBrowserTitle() {
+    const record = state.browsers.get(state.browserKey)
+    return record ? webviewTitle(record.webview) : ''
   }
 
   // ---------------------------------------------------------------------------
@@ -215,6 +467,39 @@
     })
   }
 
+  function applyResumeAndProgress(video) {
+    const resume = Number(state.resumeAt) || 0
+    const seek = () => {
+      if (resume > 5 && Number.isFinite(video.duration) && resume < video.duration - 5) {
+        try {
+          video.currentTime = resume
+          toast(`已从上次观看位置继续（${Math.floor(resume / 60)} 分 ${Math.floor(resume % 60)} 秒）`, 'ok')
+        } catch {
+          /* 忽略 */
+        }
+      }
+      state.resumeAt = 0
+    }
+    video.addEventListener('loadedmetadata', seek, { once: true })
+    let lastSaved = 0
+    const save = () => {
+      if (!state.currentVideoUrl || !Number.isFinite(video.currentTime)) return
+      if (!Number.isFinite(video.duration) || video.duration < 5) return
+      const now = Date.now()
+      if (now - lastSaved < 8000) return
+      lastSaved = now
+      window.desktop
+        .updateHistory({ url: state.currentVideoUrl, progress: video.currentTime, duration: video.duration })
+        .then((history) => {
+          state.config.history = history
+          renderHistory()
+        })
+        .catch(() => {})
+    }
+    video.ontimeupdate = save
+    video.onpause = save
+  }
+
   function playStream(result) {
     stopPlayback()
     setView('video')
@@ -264,6 +549,7 @@
     video.onerror = () => {
       showError('视频播放失败', '视频流无法被浏览器内核播放，点击「换线路」试试其它解析接口。')
     }
+    applyResumeAndProgress(video)
   }
 
   // ---------------------------------------------------------------------------
@@ -293,11 +579,21 @@
     return state.config?.autoFallback === false ? [primary] : chain
   }
 
-  async function startParse({ lineId, url, chain = true } = {}) {
+  function clearRunWatchdog() {
+    if (state.runWatchdog) clearTimeout(state.runWatchdog)
+    state.runWatchdog = null
+    $('#btn-parse').classList.remove('busy')
+  }
+
+  async function startParse({ lineId, url, chain = true, resume = 0, title = '', episode = '' } = {}) {
+    if (state.browserOpen) hideBrowser({ mute: true })
     if (state.running) {
       state.runToken += 1
       stopPlayback()
     }
+    state.resumeAt = Number(resume) || 0
+    state.currentTitle = cleanTitle(title)
+    state.currentEpisode = episode || episodeOf(state.currentTitle)
     const videoUrl = normalizeUrlText(url || $('#url-input').value)
     if (!isHttpUrl(videoUrl)) {
       toast('请先粘贴完整的视频链接（http/https）', 'warn')
@@ -320,7 +616,14 @@
     $('#source-url').textContent = videoUrl
     $('#source-url').title = videoUrl
     $('#stage-title-text').textContent = platform ? `${platform.name} · 准备解析` : '准备解析'
-    $('#btn-parse').disabled = true
+    $('#btn-parse').classList.add('busy')
+    clearRunWatchdog()
+    state.runWatchdog = setTimeout(() => {
+      if (token !== state.runToken) return
+      state.running = false
+      clearRunWatchdog()
+      showError('解析超时', '线路长时间没有响应，可能网络或解析接口卡住了。可以点「重新解析」或「换线路」。')
+    }, 90000)
     setStatus('正在解析…')
 
     const failures = []
@@ -351,7 +654,7 @@
         // 只会得到一个空播放器，不如直接把真实原因告诉用户。
         if (line.platform === 'mgtv' && /地区限制|版权限制|会员|登录|地域/i.test(errorText)) {
           state.running = false
-          $('#btn-parse').disabled = false
+          clearRunWatchdog()
           showError(
             '芒果TV 无法解析',
             `${errorText}\n\n芒果TV 当前把本机网络判定为境外/地区受限。请使用中国大陆网络，或先切换到国内线路后再试；` +
@@ -382,7 +685,7 @@
     }
 
     state.running = false
-    $('#btn-parse').disabled = false
+    clearRunWatchdog()
     showError(
       '所有线路都没能解析成功',
       `已按顺序尝试 ${failures.length} 条线路：\n${failures.slice(0, 4).join('\n')}\n\n请检查链接是否有效，或在「线路管理」里更换线路。`,
@@ -392,22 +695,51 @@
   async function onParseSuccess(line) {
     state.currentLineId = line.id
     $('#stage-line').textContent = line.name
-    $('#stage-title-text').textContent = `${platformInfo(detectPlatform(state.currentVideoUrl))?.name || '视频'} · 正在播放`
+    const platformName = platformInfo(detectPlatform(state.currentVideoUrl))?.name || '视频'
+    const knownTitle = cleanTitle(state.currentTitle) || cleanTitle(state.lastResult?.title)
+    const title = knownTitle
+    const episode = state.currentEpisode || episodeOf(title)
+    state.currentTitle = title
+    state.currentEpisode = episode
+    $('#stage-title-text').textContent = title ? `${title} · ${line.name}` : `${platformName} · 正在播放`
     setStatus(`解析成功：${line.name}`)
     state.lineStatus[line.id] = { ok: true, ms: null, note: '上次解析成功' }
     renderLineList()
-    $('#btn-parse').disabled = false
+    clearRunWatchdog()
     state.running = false
     try {
       const history = await window.desktop.addHistory({
         url: state.currentVideoUrl,
         lineId: line.id,
         lineName: line.name,
+        title,
+        episode,
       })
       state.config.history = history
       renderHistory()
     } catch {
       /* 历史记录失败无关紧要 */
+    }
+    // 手动粘贴的链接没有页面标题：后台补一次，拿到后回填到观看历史
+    if (!title) {
+      const targetUrl = state.currentVideoUrl
+      window.desktop
+        .pageTitle(targetUrl)
+        .then((raw) => {
+          const cleaned = cleanTitle(raw)
+          if (!cleaned) return
+          const ep = episodeOf(cleaned)
+          return window.desktop.updateHistory({ url: targetUrl, title: cleaned, episode: ep }).then((history) => {
+            state.config.history = history
+            renderHistory()
+            if (state.currentVideoUrl === targetUrl) {
+              state.currentTitle = cleaned
+              state.currentEpisode = ep
+              $('#stage-title-text').textContent = `${cleaned} · ${state.currentLineId === line.id ? line.name : ''}`
+            }
+          })
+        })
+        .catch(() => {})
     }
     // 记住默认线路
     if (state.config.defaultLineId !== line.id) {
@@ -518,28 +850,77 @@
     const history = state.config?.history || []
     list.innerHTML = ''
     if (!history.length) {
-      list.innerHTML = '<li class="empty-row">还没有解析记录。解析成功后会自动记在这里，方便重看。</li>'
+      list.innerHTML = '<li class="empty-row">还没有观看记录。解析成功后会自动记在这里，像视频平台一样保留剧名、集数和观看进度。</li>'
       return
     }
     for (const item of history) {
       const platform = platformInfo(detectPlatform(item.url))
+      const title = cleanTitle(item.title) || ''
+      const episode = item.episode || episodeOf(title)
+      const percent =
+        item.duration > 5 ? Math.max(0, Math.min(100, Math.round((item.progress / item.duration) * 100))) : 0
       const li = document.createElement('li')
       li.className = 'history-item'
       li.innerHTML = `
         <div class="history-top">
-          <span class="history-platform" ${platform ? `style="color:${platform.color}"` : ''}>${escapeHtml(item.platform || platform?.name || '其他')}</span>
-          <span class="history-line">${escapeHtml(item.lineName || '')}</span>
+          <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
+            title || `${platform?.name || '视频'} · 未命名视频`,
+          )}</span>
           <span class="history-time">${timeAgo(item.at)}</span>
         </div>
-        <div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>
+        <div class="history-meta">
+          ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(item.platform || platform.name)}</span>` : ''}
+          ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
+          <span class="history-line">${escapeHtml(item.lineName || '')}</span>
+          ${percent ? `<span class="history-percent">已看 ${percent}%</span>` : ''}
+        </div>
+        ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
+        ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
+        <button class="history-del" title="删除这条记录">×</button>
       `
       li.addEventListener('click', () => {
         $('#url-input').value = item.url
         updateBadge()
         state.currentLineId = item.lineId || state.currentLineId
-        startParse({ url: item.url, lineId: item.lineId })
+        startParse({
+          url: item.url,
+          lineId: item.lineId,
+          resume: item.progress || 0,
+          title,
+          episode,
+        })
+      })
+      li.querySelector('.history-del').addEventListener('click', async (event) => {
+        event.stopPropagation()
+        try {
+          state.config.history = await window.desktop.removeHistory(item.url)
+          renderHistory()
+        } catch {
+          /* 忽略 */
+        }
       })
       list.appendChild(li)
+    }
+  }
+
+  // 旧版本只存了网址；启动后在后台补一次标题，最多 4 条，避免拖慢启动
+  async function backfillHistoryTitles() {
+    const history = state.config?.history || []
+    const missing = history.filter((item) => !cleanTitle(item.title)).slice(0, 4)
+    for (const item of missing) {
+      try {
+        const raw = await window.desktop.pageTitle(item.url)
+        const title = cleanTitle(raw)
+        if (!title) continue
+        state.config.history = await window.desktop.updateHistory({
+          url: item.url,
+          title,
+          episode: episodeOf(title),
+        })
+        renderHistory()
+      } catch {
+        /* 忽略 */
+      }
     }
   }
 
@@ -757,11 +1138,12 @@
     button.textContent = '打开中…'
     try {
       for (const key of picked) {
-        await window.desktop.searchPlatform(key, query)
+        openBrowser(key, { query, background: true })
       }
+      openBrowser(picked[0], { query })
       closeSearchModal()
       toast(`已在 ${picked.length} 个平台打开「${query}」的搜索结果`, 'ok')
-      setStatus('在平台窗口点开任意剧集或某一集，程序会自动解析到主界面播放')
+      setStatus('在当前窗口点开任意剧集或某一集，会自动解析到主界面播放')
     } catch (error) {
       toast(`搜索失败：${String(error?.message || error)}`, 'error')
     } finally {
@@ -837,13 +1219,83 @@
     $$('.platform-card').forEach((card) => {
       const key = card.dataset.platform
       card.querySelector('.card-main').addEventListener('click', () => {
-        window.desktop.openPlatform(key)
-        setStatus(`正在打开${platformInfo(key)?.name || '平台'}官网…`)
+        openBrowser(key)
       })
       card.querySelector('.card-ext').addEventListener('click', () => {
         window.desktop.openPlatformSite(key)
       })
     })
+    // 主窗口内置浏览器工具栏
+    $('#browser-back').addEventListener('click', () => {
+      try {
+        state.browsers.get(state.browserKey)?.webview.goBack()
+      } catch {
+        /* 忽略 */
+      }
+    })
+    $('#browser-forward').addEventListener('click', () => {
+      try {
+        state.browsers.get(state.browserKey)?.webview.goForward()
+      } catch {
+        /* 忽略 */
+      }
+    })
+    $('#browser-reload').addEventListener('click', () => {
+      try {
+        state.browsers.get(state.browserKey)?.webview.reload()
+      } catch {
+        /* 忽略 */
+      }
+    })
+    $('#browser-home').addEventListener('click', () => {
+      const meta = browserMeta(state.browserKey)
+      if (!meta) return
+      try {
+        state.browsers.get(state.browserKey)?.webview.loadURL(meta.home)?.catch?.(() => {})
+      } catch {
+        /* 忽略 */
+      }
+    })
+    $('#browser-address').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return
+      let text = $('#browser-address').value.trim()
+      if (!text) return
+      if (!/^https?:\/\//i.test(text)) text = `https://${text}`
+      try {
+        state.browsers.get(state.browserKey)?.webview.loadURL(text)?.catch?.(() => {})
+      } catch {
+        /* 忽略 */
+      }
+    })
+    $('#browser-auto').addEventListener('change', (event) => {
+      state.browserAutoParse = event.target.checked
+      localStorage.setItem('csp.browserAuto', event.target.checked ? '1' : '0')
+      toast(event.target.checked ? '已开启：点开剧集自动解析' : '已关闭自动解析')
+    })
+    $('#browser-copy').addEventListener('click', async () => {
+      const url = currentBrowserUrl()
+      if (!detectVideoPlatform(url)) {
+        toast('请先点开具体某一集，再复制链接', 'warn')
+        return
+      }
+      await window.desktop.copyText(url)
+      toast('已复制本集链接', 'ok')
+    })
+    $('#browser-parse').addEventListener('click', () => {
+      const url = currentBrowserUrl()
+      if (!url) {
+        toast('页面还没加载出来', 'warn')
+        return
+      }
+      const title = currentBrowserTitle()
+      hideBrowser({ mute: true })
+      startParse({ url, title, episode: episodeOf(title) })
+    })
+    $('#browser-external').addEventListener('click', () => {
+      const url = currentBrowserUrl()
+      if (url) window.desktop.openExternal(url)
+    })
+    $('#browser-close').addEventListener('click', () => hideBrowser())
 
     // 舞台工具
     $('#btn-reload').addEventListener('click', () => {
@@ -1051,6 +1503,27 @@
 
     // 工具栏快捷键 & 主进程菜单事件
     document.addEventListener('keydown', (event) => {
+      if (state.browserOpen) {
+        if (event.altKey && event.key === 'ArrowLeft') {
+          event.preventDefault()
+          $('#browser-back').click()
+          return
+        }
+        if (event.altKey && event.key === 'ArrowRight') {
+          event.preventDefault()
+          $('#browser-forward').click()
+          return
+        }
+        if (event.key === 'F5') {
+          event.preventDefault()
+          $('#browser-reload').click()
+          return
+        }
+        if (event.key === 'Escape') {
+          hideBrowser()
+          return
+        }
+      }
       if (event.key !== 'Escape') return
       if (!$('#search-modal').hidden) {
         closeSearchModal()
@@ -1080,13 +1553,23 @@
     window.desktop.onNextLine(() => nextLine())
     window.desktop.onReload(() => $('#btn-reload').click())
     window.desktop.onOpenExternal(() => $('#btn-open-web').click())
+    window.desktop.onOpenBrowser?.((payload = {}) => {
+      if (!payload || !payload.key) return
+      openBrowser(payload.key, { query: payload.query || '', url: payload.url || '' })
+    })
+
     window.desktop.onExternalParse((payload = {}) => {
       if (!payload.url) return
       $('#url-input').value = payload.url
       updateBadge()
       if (payload.auto !== false) {
         if (payload.focus === false) toast('平台窗口自动送来本集，正在解析…', 'ok')
-        startParse({ lineId: state.currentLineId, url: payload.url })
+        startParse({
+          lineId: state.currentLineId,
+          url: payload.url,
+          title: payload.title || '',
+          episode: payload.episode || '',
+        })
       } else {
         toast('链接已填入，点击「解析播放」开始')
       }
@@ -1167,11 +1650,14 @@
       $('#version-text').textContent = `v${state.info.version}`
       $('#set-version').textContent = `v${state.info.version}`
       state.currentLineId = state.config.defaultLineId
+      $('#browser-auto').checked = localStorage.getItem('csp.browserAuto') !== '0'
+      state.browserAutoParse = $('#browser-auto').checked
       bindEvents()
       bindWebviewEvents()
       renderLineSelect()
       renderLineList()
       renderHistory()
+      backfillHistoryTitles()
       renderUpdateState(await window.desktop.getUpdateState())
       if (state.config.lastUrl) {
         $('#url-input').value = state.config.lastUrl
@@ -1184,6 +1670,9 @@
       window.__app = {
         detectPlatform,
         platformInfo,
+        detectVideoPlatform,
+        openBrowser,
+        hideBrowser,
         getState: () => state,
         startParse,
         toggleFullscreen,

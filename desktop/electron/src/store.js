@@ -44,6 +44,10 @@ function normalizeHistory(raw) {
       platform: cleanText(item.platform, 20),
       lineId: cleanText(item.lineId, 80),
       lineName: cleanText(item.lineName, 40),
+      title: cleanText(item.title, 120),
+      episode: cleanText(item.episode, 30),
+      progress: Math.max(0, Number(item.progress) || 0),
+      duration: Math.max(0, Number(item.duration) || 0),
       at: Number(item.at) || Date.now(),
     }))
 }
@@ -153,15 +157,45 @@ class Store {
   addHistory(entry) {
     const url = cleanText(entry?.url, 2000)
     if (!/^https?:\/\//i.test(url)) return this.snapshot().history
+    const previous = this.data.history.find((old) => old.url === url)
+    const title = cleanText(entry.title, 120)
+    const episode = cleanText(entry.episode, 30)
     const item = {
       url,
-      platform: cleanText(entry.platform, 20),
-      lineId: cleanText(entry.lineId, 80),
-      lineName: cleanText(entry.lineName, 40),
+      platform: cleanText(entry.platform, 20) || previous?.platform || '',
+      lineId: cleanText(entry.lineId, 80) || previous?.lineId || '',
+      lineName: cleanText(entry.lineName, 40) || previous?.lineName || '',
+      // 不要把已经记下来的好标题覆盖成空/站点名
+      title: title || previous?.title || '',
+      episode: episode || previous?.episode || '',
+      progress: Math.max(0, Number(entry.progress) || previous?.progress || 0),
+      duration: Math.max(0, Number(entry.duration) || previous?.duration || 0),
       at: Date.now(),
     }
     this.data.history = [item, ...this.data.history.filter((old) => old.url !== url)].slice(0, MAX_HISTORY)
     this.data.lastUrl = url
+    this._write()
+    return this.snapshot().history
+  }
+
+  updateHistory(entry = {}) {
+    const url = cleanText(entry.url, 2000)
+    if (!url) return this.snapshot().history
+    const item = this.data.history.find((old) => old.url === url)
+    if (!item) return this.snapshot().history
+    const title = cleanText(entry.title, 120)
+    const episode = cleanText(entry.episode, 30)
+    if (title) item.title = title
+    if (episode) item.episode = episode
+    if (Number.isFinite(Number(entry.progress))) item.progress = Math.max(0, Number(entry.progress))
+    if (Number.isFinite(Number(entry.duration))) item.duration = Math.max(0, Number(entry.duration))
+    this._write()
+    return this.snapshot().history
+  }
+
+  removeHistory(rawUrl) {
+    const url = cleanText(rawUrl, 2000)
+    this.data.history = this.data.history.filter((item) => item.url !== url)
     this._write()
     return this.snapshot().history
   }

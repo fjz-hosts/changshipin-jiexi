@@ -15,7 +15,10 @@ contextBridge.exposeInMainWorld('desktop', {
   resetLines: () => ipcRenderer.invoke('lines:reset'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   addHistory: (entry) => ipcRenderer.invoke('history:add', entry),
+  updateHistory: (entry) => ipcRenderer.invoke('history:update', entry),
+  removeHistory: (url) => ipcRenderer.invoke('history:remove', url),
   clearHistory: () => ipcRenderer.invoke('history:clear'),
+  pageTitle: (url) => ipcRenderer.invoke('page:title', url),
   readClipboard: () => ipcRenderer.invoke('clipboard:read'),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   parse: (payload) => ipcRenderer.invoke('parse:run', payload),
@@ -44,6 +47,7 @@ contextBridge.exposeInMainWorld('desktop', {
   onReload: (callback) => on('app:reload', callback),
   onOpenExternal: (callback) => on('app:open-external', callback),
   onExternalParse: (callback) => on('app:external-parse', callback),
+  onOpenBrowser: (callback) => on('app:open-browser', callback),
   onFullscreen: (callback) => on('window:fullscreen', callback),
   onFullscreenToggle: (callback) => on('app:fullscreen-toggle', callback),
 })

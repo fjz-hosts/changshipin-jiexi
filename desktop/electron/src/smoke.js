@@ -135,7 +135,7 @@ async function runSmoke({ app, window, proxy, store }) {
       const segmentResponse = await net.fetch(segmentUrl)
       const segmentBody = await segmentResponse.text()
       check('代理分片可播放', segmentResponse.status === 200 && segmentBody.startsWith('SEGMENT-'), segmentBody)
-      check('分片 Referer 透传', received.referer === upstreamPlaylist, received.referer)
+      check('分片 Referer 透传（沿用原始页面）', received.referer === 'https://www.iqiyi.com/', received.referer)
       check('分片 Cookie 透传', received.cookie === 'sid=cookie-test', received.cookie)
     }
 
@@ -153,6 +153,22 @@ async function runSmoke({ app, window, proxy, store }) {
   const config = store.snapshot()
   check('配置含内置线路', Array.isArray(config.lines) && config.lines.length >= 5, `${config.lines.length} 条`)
   check('平台数配置一致', config.lines.filter((line) => line.enabled).length >= 1)
+
+  // ---- 3.1 观看历史（标题 / 集数 / 进度 / 删除） ----
+  const historyCheck = await window.webContents.executeJavaScript(`(async () => {
+    const url = 'https://www.iqiyi.com/v_smoke_history.html'
+    await window.desktop.addHistory({ url, lineId: 'builtin-789', lineName: '789解析', title: '烟雾测试剧 第2集', episode: '第2集' })
+    const withProgress = await window.desktop.updateHistory({ url, progress: 120, duration: 300 })
+    const item = withProgress.find((entry) => entry.url === url) || {}
+    const removed = await window.desktop.removeHistory(url)
+    return JSON.stringify({ title: item.title, episode: item.episode, progress: item.progress, duration: item.duration, removedCount: removed.length })
+  })()`)
+  const historyItem = JSON.parse(historyCheck)
+  check(
+    '观看历史记录标题/集数/进度',
+    historyItem.title === '烟雾测试剧 第2集' && historyItem.episode === '第2集' && historyItem.progress === 120 && historyItem.duration === 300,
+    historyCheck,
+  )
 
   // ---- 3.5 在线解析链路（可选，需要外网）----
   if (process.env.CHANGSPIN_SMOKE_ONLINE === '1') {

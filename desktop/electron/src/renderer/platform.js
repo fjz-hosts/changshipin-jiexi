@@ -83,39 +83,51 @@
     }
   }
 
-  function isVideoPage(rawUrl) {
-    if (!rawUrl) return false
+  const PLATFORM_NAMES = { iqiyi: '爱奇艺', qq: '腾讯视频', youku: '优酷', mgtv: '芒果TV' }
+
+  // 在当前窗口里可能已经跳到别的平台了，所以按链接本身识别剧集页
+  function videoPlatformOf(rawUrl) {
+    if (!rawUrl) return null
     let parsed
     try {
       parsed = new URL(rawUrl)
     } catch {
-      return false
+      return null
     }
     const host = parsed.hostname.toLowerCase()
     const pathname = parsed.pathname
-    if (key === 'iqiyi') {
-      if (!(host === 'iqiyi.com' || host.endsWith('.iqiyi.com'))) return false
-      return /^\/v_[A-Za-z0-9]+\.html$/.test(pathname) || /^\/a_[A-Za-z0-9]+\.html$/.test(pathname)
+    if ((host === 'iqiyi.com' || host.endsWith('.iqiyi.com')) &&
+      (/^\/v_[A-Za-z0-9]+\.html$/.test(pathname) || /^\/a_[A-Za-z0-9]+\.html$/.test(pathname))) {
+      return 'iqiyi'
     }
-    if (key === 'qq') {
-      if (!(host === 'v.qq.com' || host.endsWith('.v.qq.com'))) return false
+    if (host === 'v.qq.com' || host.endsWith('.v.qq.com')) {
       const parts = pathname.split('/').filter(Boolean)
-      if (parts[0] !== 'x' || !parts[parts.length - 1]?.endsWith('.html')) return false
-      if (parts[1] === 'cover') return parts.length >= 4
-      if (parts[1] === 'page') return parts.length >= 3
-      return false
+      const last = parts[parts.length - 1] || ''
+      if (parts[0] === 'x' && /\.html$/.test(last)) {
+        if (parts[1] === 'cover' && parts.length >= 4) return 'qq'
+        if (parts[1] === 'page' && parts.length >= 3) return 'qq'
+      }
     }
-    if (key === 'youku') {
-      if (!(host === 'youku.com' || host.endsWith('.youku.com'))) return false
-      return /^\/v_show\/id_[A-Za-z0-9=]+\.html$/.test(pathname)
+    if ((host === 'youku.com' || host.endsWith('.youku.com')) && /^\/v_show\/id_[A-Za-z0-9=]+\.html$/.test(pathname)) {
+      return 'youku'
     }
-    if (key === 'mgtv') {
-      if (!(host === 'mgtv.com' || host.endsWith('.mgtv.com'))) return false
-      return /^\/b\/\d+\/\d+\.html$/.test(pathname)
+    if ((host === 'mgtv.com' || host.endsWith('.mgtv.com')) && /^\/b\/\d+\/\d+\.html$/.test(pathname)) {
+      return 'mgtv'
     }
-    return false
+    return null
   }
 
+  function isVideoPage(rawUrl) {
+    return Boolean(videoPlatformOf(rawUrl))
+  }
+
+  function pageTitle() {
+    try {
+      return webview.getTitle() || ''
+    } catch {
+      return ''
+    }
+  }
   function sendAutoParse(url) {
     if (!autoParse.checked) return
     if (!isVideoPage(url)) return
@@ -123,7 +135,7 @@
     lastAutoUrl = url
     clearTimeout(autoTimer)
     autoTimer = setTimeout(() => {
-      window.platformApi.sendToParse(url, true, false).then((result) => {
+      window.platformApi.sendToParse(url, true, false, pageTitle()).then((result) => {
         if (result?.ok) {
           bump(`已自动解析本集，在「长视频解析」主界面播放`)
         }
@@ -135,7 +147,10 @@
     const url = currentUrl()
     if (url && document.activeElement !== address) address.value = url
     const video = isVideoPage(url)
-    badge.textContent = video ? '视频页 · 可解析' : '浏览中'
+    const videoPlatform = videoPlatformOf(url)
+    badge.textContent = video
+      ? `视频页 · ${PLATFORM_NAMES[videoPlatform] || ''} · 可解析`
+      : '浏览中'
     badge.classList.toggle('video', video)
     try {
       $('#btn-back').disabled = !webview.canGoBack()
@@ -282,7 +297,7 @@
     if (!isVideoPage(url)) {
       bump('当前不是具体剧集页，仍会尝试解析…')
     }
-    const result = await window.platformApi.sendToParse(url, true, true)
+    const result = await window.platformApi.sendToParse(url, true, true, pageTitle())
     if (result?.ok) bump('已发送到主界面，开始解析播放')
     else bump(result?.error || '发送失败')
   })

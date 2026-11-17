@@ -10,8 +10,8 @@ function on(channel, callback) {
 
 contextBridge.exposeInMainWorld('platformApi', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
-  sendToParse: (url, auto = true, focus = false) =>
-    ipcRenderer.invoke('platform:send-to-parse', { url, auto, focus }),
+  sendToParse: (url, auto = true, focus = false, title = '') =>
+    ipcRenderer.invoke('platform:send-to-parse', { url, auto, focus, title }),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   focusMain: () => ipcRenderer.invoke('app:focus-main'),
   onSearch: (callback) => on('platform:search', callback),

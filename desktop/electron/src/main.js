@@ -364,6 +364,37 @@ app.on('web-contents-created', (_event, contents) => {
       const parentWindow = BrowserWindow.fromWebContents(host)
       if (!parentWindow || parentWindow.isDestroyed()) return { action: 'deny' }
       const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
+      // 主窗口里的内置浏览器：登录弹窗单独开，其余链接留在当前 webview 内
+      const webviewPlatform = PLATFORMS.find(
+        (item) => session.fromPartition(item.partition) === contents.session,
+      )
+      if (parentWindow === mainWindow && webviewPlatform && /^https?:\/\//i.test(url)) {
+        if (isAuthUrl(url)) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 1020,
+              height: 780,
+              autoHideMenuBar: true,
+              title: '登录',
+              icon: iconPath(),
+              backgroundColor: '#070b12',
+              webPreferences: {
+                partition: webviewPlatform.partition,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+              },
+            },
+          }
+        }
+        try {
+          contents.loadURL(url)
+        } catch {
+          /* 忽略 */
+        }
+        return { action: 'deny' }
+      }
       if (entry && /^https?:\/\//i.test(url)) {
         // 登录 / 授权 / 支付弹窗照旧独立打开
         if (isAuthUrl(url)) {
@@ -385,34 +416,13 @@ app.on('web-contents-created', (_event, contents) => {
             },
           }
         }
-        // 平台内部的「新窗口打开播放页」直接在当前内置浏览器里打开，
-        // 这样地址栏、复制链接、自动解析都能跟着走，不会停留在首页。
-        if (isPlatformUrl(url, entry.key) && looksLikeVideoUrl(url, entry.key)) {
-          try {
-            contents.loadURL(url)
-          } catch {
-            /* 忽略 */
-          }
-          return { action: 'deny' }
+        // 其余一律在当前内置浏览器窗口里打开（同一平台剧集、外站链接都一样），
+        // 不再另开窗口，用户可以后退回到刚才的首页/搜索页。
+        try {
+          contents.loadURL(url)
+        } catch {
+          /* 忽略 */
         }
-        // 同平台的其它页面（首页、列表、搜索等）也留在当前窗口
-        if (isPlatformUrl(url, entry.key)) {
-          try {
-            contents.loadURL(url)
-          } catch {
-            /* 忽略 */
-          }
-          return { action: 'deny' }
-        }
-        // 搜索结果里的「外站播放」：如果是其它平台的剧集页，切到那个平台的内置窗口
-        const targetPlatform = detectPlatformByUrl(url)
-        if (targetPlatform && looksLikeVideoUrl(url, targetPlatform.key)) {
-          createPlatformWindow(targetPlatform.key, { url })
-          return { action: 'deny' }
-        }
-        // 其它站点（比如平台广告里的音乐站、资讯站）同样用带工具栏的内置浏览器打开，
-        // 保证每个窗口上方都有「自动解析 / 复制 / 解析本集 / 浏览器」这一排按钮。
-        createPlatformWindow('browser', { url })
         return { action: 'deny' }
       }
       if (/^https?:\/\//i.test(url)) log(`[解析页弹窗已拦截] ${url}`)
@@ -610,6 +620,93 @@ function showAbout() {
 // IPC
 // ---------------------------------------------------------------------------
 
+const titleCache = new Map()
+
+function cleanPageTitle(raw, platformName = '') {
+  let text = String(raw || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^【[^】]*】\s*/, '')
+    .trim()
+  if (!text) return ''
+  // 去掉平台后缀，例如「嫁金钗 第1集 - 芒果TV-天生青春」
+  text = text
+    .replace(/\s*[-_|]\s*(爱奇艺|腾讯视频|优酷|芒果TV|芒果tv|在线观看|高清完整正版视频在线观看).*$/i, '')
+    .replace(/\s*[-_|]\s*芒果TV.*$/i, '')
+    .trim()
+  if (!text || text.length < 2) return ''
+  if (/在线视频网站|海量正版|高清完整正版|天生青春|腾讯视频$|爱奇艺$|^优酷$|^芒果TV$|^爱奇艺-在线视频/i.test(text)) return ''
+  if (platformName && text === platformName) return ''
+  return text.slice(0, 100)
+}
+
+async function resolvePageTitle(rawUrl) {
+  if (!isHttpUrl(rawUrl)) return ''
+  const cached = titleCache.get(rawUrl)
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.title
+  const platform = detectPlatformByUrl(rawUrl)
+  let cleaned = ''
+  try {
+    const response = await net.fetch(rawUrl, {
+      redirect: 'follow',
+      headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6' },
+    })
+    const text = await response.text()
+    const og = (text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || [])[1]
+    const title = (text.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''
+    cleaned = cleanPageTitle(og || title, platform?.name)
+  } catch {
+    /* 继续尝试隐藏窗口 */
+  }
+  if (!cleaned && platform) {
+    cleaned = await new Promise((resolve) => {
+      let win = null
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        let title = ''
+        try {
+          title = win && !win.isDestroyed() ? win.getTitle() : ''
+        } catch {
+          /* 忽略 */
+        }
+        try {
+          win?.destroy()
+        } catch {
+          /* 忽略 */
+        }
+        resolve(cleanPageTitle(title, platform.name))
+      }
+      const timer = setTimeout(finish, 12000)
+      try {
+        win = new BrowserWindow({
+          show: false,
+          skipTaskbar: true,
+          width: 900,
+          height: 700,
+          webPreferences: {
+            partition: platform.partition,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        })
+        win.webContents.on('page-title-updated', (_event, title) => {
+          if (cleanPageTitle(title, platform.name)) setTimeout(finish, 900)
+        })
+        win.webContents.on('did-finish-load', () => setTimeout(finish, 2200))
+        win.webContents.on('did-fail-load', finish)
+        win.loadURL(rawUrl).catch(finish)
+      } catch {
+        finish()
+      }
+    })
+  }
+  if (cleaned) titleCache.set(rawUrl, { title: cleaned, at: Date.now() })
+  return cleaned
+}
+
 function registerIpc() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -644,6 +741,12 @@ function registerIpc() {
   })
 
   ipcMain.handle('history:clear', () => store.clearHistory())
+
+  ipcMain.handle('history:update', (_event, entry = {}) => store.updateHistory(entry))
+
+  ipcMain.handle('history:remove', (_event, url) => store.removeHistory(url))
+
+  ipcMain.handle('page:title', async (_event, url) => resolvePageTitle(normalizeUrlText(url)))
 
   ipcMain.handle('clipboard:read', () => clipboard.readText())
 
@@ -736,7 +839,7 @@ function registerIpc() {
   })
 
   ipcMain.handle('platform:open', (_event, key) => {
-    createPlatformWindow(String(key))
+    sendCommand('app:open-browser', { key: String(key) })
     return true
   })
 
@@ -749,7 +852,7 @@ function registerIpc() {
     const key = String(payload.key || '')
     const query = String(payload.query || '').trim().slice(0, 80)
     if (!platformByKey(key) || !query) return false
-    createPlatformWindow(key, { search: query })
+    sendCommand('app:open-browser', { key, query })
     return true
   })
 
@@ -803,7 +906,13 @@ function registerIpc() {
         /* 忽略 */
       }
     }
-    sendCommand('app:external-parse', { url, auto: Boolean(payload.auto), focus })
+    sendCommand('app:external-parse', {
+      url,
+      auto: Boolean(payload.auto),
+      focus,
+      title: String(payload.title || ''),
+      episode: String(payload.episode || ''),
+    })
     return { ok: true }
   })
 }

@@ -100,6 +100,36 @@
         </div>
       </section>
 
+      <section class="browser-panel" id="browser-panel" hidden>
+        <div class="browser-bar">
+          <div class="browser-nav">
+            <button id="browser-back" class="nav-btn" title="后退 (Alt+←)">←</button>
+            <button id="browser-forward" class="nav-btn" title="前进 (Alt+→)">→</button>
+            <button id="browser-reload" class="nav-btn" title="刷新 (F5)">⟳</button>
+            <button id="browser-home" class="nav-btn" title="回到平台首页">⌂</button>
+          </div>
+          <div class="browser-brand">
+            <img id="browser-icon" src="assets/platform-iqiyi.png" alt="" />
+            <span id="browser-name">爱奇艺</span>
+          </div>
+          <div class="browser-address">
+            <input id="browser-address" type="text" spellcheck="false" placeholder="输入网址，回车打开" />
+            <span class="browser-badge" id="browser-badge">浏览中</span>
+          </div>
+          <label class="browser-auto" title="点开某一集时自动送到主界面解析">
+            <input type="checkbox" id="browser-auto" checked />
+            <span>自动解析</span>
+          </label>
+          <div class="browser-actions">
+            <button id="browser-copy" class="tool-btn">复制本集</button>
+            <button id="browser-parse" class="primary-sm">解析本集</button>
+            <button id="browser-external" class="tool-btn">浏览器</button>
+            <button id="browser-close" class="tool-btn">返回首页</button>
+          </div>
+        </div>
+        <div class="browser-viewport" id="browser-viewport"></div>
+      </section>
+
       <main class="workspace">
         <section class="stage" id="stage">
           <div class="stage-head">
@@ -178,7 +208,7 @@
 
           <section class="panel history-panel">
             <header>
-              <h3>最近解析</h3>
+              <h3>观看历史</h3>
               <button class="mini-btn" id="btn-clear-history">清空</button>
             </header>
             <ul class="history-list" id="history-list"></ul>
