@@ -43,6 +43,22 @@
     browserKey: '',
     browserOpen: false,
     browserAutoParse: true,
+    series: null,
+    seriesOrder: 'asc',
+    seriesCollapsed: false,
+    seriesLoading: false,
+    seriesPending: new Map(),
+    autoNext: false,
+    historySort: 'recent',
+    historyQuery: '',
+    historyCollapsed: new Set(),
+    lineHealth: {},
+    hideDeadLines: false,
+    lineHealthRunning: false,
+    downloadId: '',
+    downloadRunning: false,
+    downloadPercent: 0,
+    finishedDownloads: new Map(),
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -215,7 +231,7 @@
     webview.style.display = 'none'
     $('#browser-viewport').appendChild(webview)
 
-    const record = { key, webview, lastAuto: '', timer: null }
+    const record = { key, webview, lastAuto: '', timer: null, scrollY: 0 }
     state.browsers.set(key, record)
 
     webview.addEventListener('did-start-loading', () => {
@@ -232,7 +248,108 @@
       if (state.browserKey !== key) return
       toast(`${meta.name} 页面加载失败：${event.errorDescription || event.errorCode}`, 'error')
     })
+    renderBrowserTabs()
     return record
+  }
+
+  // ---------------------------------------------------------------------------
+  // 内置浏览器：标签栏 / 滚动位置 / 按平台记忆自动解析
+  // ---------------------------------------------------------------------------
+
+  function loadAutoMap() {
+    try {
+      const raw = JSON.parse(localStorage.getItem('csp.browserAutoByPlatform') || '{}')
+      return raw && typeof raw === 'object' ? raw : {}
+    } catch {
+      return {}
+    }
+  }
+
+  function autoParseEnabled(key) {
+    return loadAutoMap()[key] !== false
+  }
+
+  function setAutoParseEnabled(key, value) {
+    if (!key) return
+    const map = loadAutoMap()
+    map[key] = Boolean(value)
+    try {
+      localStorage.setItem('csp.browserAutoByPlatform', JSON.stringify(map))
+    } catch {
+      /* 忽略 */
+    }
+    state.browserAutoParse = Boolean(value)
+  }
+
+  function renderBrowserTabs() {
+    const box = $('#browser-tabs')
+    if (!box) return
+    box.innerHTML = ''
+    for (const [key, record] of state.browsers) {
+      const meta = browserMeta(key)
+      if (!meta) continue
+      const tab = document.createElement('div')
+      tab.className = 'browser-tab'
+      if (state.browserKey === key && state.browserOpen) tab.classList.add('active')
+      tab.title = (() => {
+        try {
+          return record.webview.getURL() || meta.home
+        } catch {
+          return meta.home
+        }
+      })()
+      tab.innerHTML = `<img src="${meta.icon}" alt="" /><span>${escapeHtml(meta.name)}</span><button class="tab-close" title="关闭这个标签页">×</button>`
+      tab.addEventListener('click', () => openBrowser(key))
+      tab.querySelector('.tab-close').addEventListener('click', (event) => {
+        event.stopPropagation()
+        closeBrowserTab(key)
+      })
+      box.appendChild(tab)
+    }
+  }
+
+  function closeBrowserTab(key) {
+    const record = state.browsers.get(key)
+    if (!record) return
+    try {
+      record.webview.remove()
+    } catch {
+      /* 忽略 */
+    }
+    state.browsers.delete(key)
+    if (state.browserKey === key) {
+      const next = [...state.browsers.keys()][0]
+      if (next) openBrowser(next)
+      else hideBrowser({ mute: false })
+    }
+    renderBrowserTabs()
+    toast(`已关闭 ${browserMeta(key)?.name || '标签页'}`)
+  }
+
+  function saveBrowserScroll(record) {
+    if (!record) return
+    try {
+      record.webview
+        .executeJavaScript('window.scrollY || document.documentElement.scrollTop || 0')
+        .then((value) => {
+          record.scrollY = Number(value) || 0
+        })
+        .catch(() => {})
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  function restoreBrowserScroll(record) {
+    if (!record || !record.scrollY) return
+    const target = record.scrollY
+    setTimeout(() => {
+      try {
+        record.webview.executeJavaScript(`window.scrollTo(0, ${Number(target) || 0})`).catch(() => {})
+      } catch {
+        /* 忽略 */
+      }
+    }, 320)
   }
 
   function refreshBrowser(key) {
@@ -259,11 +376,13 @@
     const badge = $('#browser-badge')
     badge.classList.toggle('video', Boolean(videoPlatform))
     badge.textContent = videoPlatform ? `视频页 · ${browserMeta(videoPlatform)?.name || ''} · 可解析` : '浏览中'
-    if (videoPlatform && $('#browser-auto').checked) scheduleBrowserParse(record, url)
+    if (videoPlatform && autoParseEnabled(key)) scheduleBrowserParse(record, url)
+    renderBrowserTabs()
   }
 
   function scheduleBrowserParse(record, url) {
     if (!url || record.lastAuto === url) return
+    if (!autoParseEnabled(record.key)) return
     record.lastAuto = url
     clearTimeout(record.timer)
     record.timer = setTimeout(() => {
@@ -279,7 +398,8 @@
       const title = webviewTitle(record.webview)
       hideBrowser({ mute: true })
       startParse({ url: current, title, episode: episodeOf(title) })
-      toast('已自动解析本集；点平台卡片可以回来继续选集', 'ok', 5000)
+      toast('已自动解析本集；播放器下方可以直接切换选集', 'ok', 5000)
+      collectSeriesHint(record).then((hint) => requestSeries(current, { title, hint }))
     }, 1000)
   }
 
@@ -296,8 +416,12 @@
       }
     }
     if (background) return
+    if (state.browserOpen && state.browserKey && state.browserKey !== key) {
+      saveBrowserScroll(state.browsers.get(state.browserKey))
+    }
     state.browserKey = key
     state.browserOpen = true
+    updateLayoutMode()
     for (const [itemKey, item] of state.browsers) {
       item.webview.style.display = itemKey === key ? 'flex' : 'none'
       if (itemKey !== key) {
@@ -329,16 +453,23 @@
       }
     }
     setStatus(`正在浏览 ${meta.name}`)
+    $('#browser-auto').checked = autoParseEnabled(key)
+    state.browserAutoParse = $('#browser-auto').checked
+    renderBrowserTabs()
+    restoreBrowserScroll(record)
     refreshBrowser(key)
   }
 
   function hideBrowser({ mute = true } = {}) {
     if (!state.browserOpen) return
+    saveBrowserScroll(state.browsers.get(state.browserKey))
     state.browserOpen = false
+    updateLayoutMode()
     $('#browser-panel').hidden = true
     document.querySelector('.parse-row').hidden = false
     document.querySelector('.workspace').hidden = false
     $$('.platform-card').forEach((card) => card.classList.remove('active'))
+    renderBrowserTabs()
     for (const record of state.browsers.values()) {
       if (!mute) continue
       try {
@@ -364,13 +495,285 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 选集（播放器下方）
+  // ---------------------------------------------------------------------------
+
+  const SERIES_STORE_KEY = 'csp.series.v1'
+  const SERIES_STORE_MAX = 12
+  const SERIES_MAX_EPISODES = 400
+
+  function sameVideoUrl(a, b) {
+    try {
+      const left = new URL(String(a || ''))
+      const right = new URL(String(b || ''))
+      // 同一集的链接可能带不同的跟踪参数，按 host + pathname 判断
+      return left.hostname.toLowerCase() === right.hostname.toLowerCase() && left.pathname === right.pathname
+    } catch {
+      return false
+    }
+  }
+
+  function loadSeriesStore() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SERIES_STORE_KEY) || '{}')
+      return raw && typeof raw === 'object' ? raw : {}
+    } catch {
+      return {}
+    }
+  }
+
+  function writeSeriesStore(store) {
+    try {
+      localStorage.setItem(SERIES_STORE_KEY, JSON.stringify(store))
+    } catch {
+      /* 存储满/禁用时忽略 */
+    }
+  }
+
+  function findSavedSeries(url) {
+    if (!url) return null
+    const store = loadSeriesStore()
+    for (const series of Object.values(store)) {
+      if (!series || !Array.isArray(series.episodes)) continue
+      if (series.episodes.some((episode) => sameVideoUrl(episode.url, url))) return series
+    }
+    return null
+  }
+
+  function saveSeries(series) {
+    if (!series || !Array.isArray(series.episodes) || !series.episodes.length) return
+    const key = series.seriesKey || `${series.platform}:${series.title || series.url || Date.now()}`
+    const store = loadSeriesStore()
+    store[key] = {
+      seriesKey: key,
+      platform: series.platform || '',
+      title: series.title || '',
+      url: series.url || '',
+      source: series.source || '',
+      at: Date.now(),
+      episodes: series.episodes.slice(0, SERIES_MAX_EPISODES),
+    }
+    const entries = Object.entries(store).sort((left, right) => Number(right[1]?.at || 0) - Number(left[1]?.at || 0))
+    writeSeriesStore(Object.fromEntries(entries.slice(0, SERIES_STORE_MAX)))
+  }
+
+  function seriesCurrentIndex(series, url) {
+    if (!series || !Array.isArray(series.episodes)) return -1
+    return series.episodes.findIndex((episode) => sameVideoUrl(episode.url, url))
+  }
+
+  function updateEpisodeBarShell() {
+    const bar = $('#episode-bar')
+    const series = state.series
+    if (!series && !state.seriesLoading) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    bar.classList.toggle('collapsed', state.seriesCollapsed)
+    $('#episode-toggle').textContent = state.seriesCollapsed ? '展开' : '收起'
+    $('#episode-order').textContent = state.seriesOrder === 'asc' ? '倒序' : '正序'
+    $('#episode-auto-next').checked = state.autoNext
+    if (!series) {
+      $('#episode-series-name').textContent = '正在获取选集…'
+      $('#episode-count').textContent = ''
+      $('#episode-tip').textContent = ''
+      $('#episode-list').innerHTML = '<span class="episode-loading">正在向平台获取分集列表…</span>'
+      return
+    }
+    const platform = platformInfo(series.platform)
+    $('#episode-series-name').textContent = series.title || `${platform?.name || ''} 选集`
+    $('#episode-count').textContent = `${series.episodes.length} 集`
+    $('#episode-tip').textContent =
+      seriesCurrentIndex(series, state.currentVideoUrl) >= 0
+        ? '点任意一集直接切换，不用回平台页'
+        : '点任意一集开始播放'
+  }
+
+  function renderEpisodeBar() {
+    updateEpisodeBarShell()
+    const series = state.series
+    const list = $('#episode-list')
+    if (!series) return
+    const currentIndex = seriesCurrentIndex(series, state.currentVideoUrl)
+    const ordered = state.seriesOrder === 'asc' ? series.episodes : [...series.episodes].reverse()
+    list.innerHTML = ''
+    for (const episode of ordered) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'episode-item'
+      if (episode.vip) button.classList.add('vip')
+      if (sameVideoUrl(episode.url, state.currentVideoUrl)) button.classList.add('active')
+      const label = episode.label || `第${episode.index || ''}集`
+      button.title = [episode.title || label, episode.subtitle].filter(Boolean).join(' · ') + (episode.vip ? '（VIP）' : '')
+      button.innerHTML = `<span>${escapeHtml(label)}</span>${episode.vip ? '<i class="episode-vip">VIP</i>' : ''}`
+      button.addEventListener('click', () => switchEpisode(episode))
+      list.appendChild(button)
+    }
+    const active = list.querySelector('.episode-item.active')
+    if (active) {
+      // 横向列表居中当前集，不滚动整个页面
+      list.scrollLeft = Math.max(0, active.offsetLeft - list.clientWidth / 2 + active.clientWidth / 2)
+    } else if (currentIndex < 0) {
+      list.scrollLeft = 0
+    }
+  }
+
+  function setSeries(series, { render = true } = {}) {
+    state.series = series && Array.isArray(series.episodes) && series.episodes.length ? series : null
+    // 平台页标题有时要等页面渲染完才有；拿到选集后顺手把「剧名 + 集数」补进舞台标题和历史
+    if (state.series && state.currentVideoUrl) {
+      const index = seriesCurrentIndex(state.series, state.currentVideoUrl)
+      const episode = index >= 0 ? state.series.episodes[index] : null
+      if (episode) {
+        const base =
+          state.currentTitle && !episodeOf(state.currentTitle)
+            ? state.currentTitle
+            : state.currentTitle || state.series.title || ''
+        const title = episodeOf(base) ? base : `${base} ${episode.label || ''}`.trim()
+        if (!state.currentEpisode) state.currentEpisode = episode.label || ''
+        if (title && title !== state.currentTitle) {
+          state.currentTitle = title
+          const lineName = currentLine()?.name || ''
+          $('#stage-title-text').textContent = lineName ? `${title} · ${lineName}` : title
+          window.desktop
+            .updateHistory({ url: state.currentVideoUrl, title, episode: episode.label || '' })
+            .then((history) => {
+              state.config.history = history
+              renderHistory()
+            })
+            .catch(() => {})
+        }
+      }
+    }
+    if (render) renderEpisodeBar()
+  }
+
+  function clearSeries() {
+    state.series = null
+    state.seriesLoading = false
+    renderEpisodeBar()
+  }
+
+  function switchEpisode(episode) {
+    if (!episode || !episode.url) return
+    if (sameVideoUrl(episode.url, state.currentVideoUrl) && state.lastResult) {
+      toast('已经是这一集了')
+      return
+    }
+    const series = state.series
+    const label = episode.label || `第${episode.index || ''}集`
+    const title = series?.title ? `${series.title} ${label}` : episode.title || label
+    $('#url-input').value = episode.url
+    updateBadge()
+    toast(`切换到 ${label}`)
+    startParse({
+      url: episode.url,
+      lineId: state.currentLineId,
+      title,
+      episode: label,
+      series,
+    })
+  }
+
+  function seriesNav(delta) {
+    const series = state.series
+    if (!series || !series.episodes.length) {
+      toast('还没有获取到选集列表', 'warn')
+      return
+    }
+    const index = seriesCurrentIndex(series, state.currentVideoUrl)
+    const target = index < 0 ? series.episodes[delta > 0 ? 0 : series.episodes.length - 1] : series.episodes[index + delta]
+    if (!target) {
+      toast(delta > 0 ? '已经是最后一集了' : '已经是第一集了', 'warn')
+      return
+    }
+    switchEpisode(target)
+  }
+
+  async function collectSeriesHint(record) {
+    const hint = {}
+    if (!record) return hint
+    try {
+      const title = webviewTitle(record.webview)
+      if (title) hint.title = title
+    } catch {
+      /* 忽略 */
+    }
+    if (record.key === 'iqiyi') {
+      try {
+        hint.tvid = await record.webview.executeJavaScript(
+          `(() => {
+            const status = window.playbackPageStageStatus || {}
+            if (status._tvid) return String(status._tvid)
+            if (status.playInfo && status.playInfo.tvid) return String(status.playInfo.tvid)
+            const m = document.documentElement.innerHTML.match(/"tvid"\\s*:\\s*"?(\\d{6,})/)
+            return m ? m[1] : ''
+          })()`,
+          true,
+        )
+      } catch {
+        /* 页面里拿不到就交给主进程开隐藏页兜底 */
+      }
+    }
+    return hint
+  }
+
+  async function requestSeries(url, { title = '', hint = {}, silent = false, force = false } = {}) {
+    if (!url || !isHttpUrl(url)) return null
+    const saved = force ? null : findSavedSeries(url)
+    if (saved) {
+      if (state.currentVideoUrl === url && (!state.series || state.series.seriesKey !== saved.seriesKey)) {
+        setSeries(saved)
+      }
+      return saved
+    }
+    if (state.seriesPending.has(url)) return state.seriesPending.get(url)
+    const task = (async () => {
+      state.seriesLoading = true
+      updateEpisodeBarShell()
+      try {
+        const result = await window.desktop.resolveSeries({ url, hint: { ...hint, title: hint.title || title } })
+        if (!result?.ok) {
+          if (!silent) toast(`获取选集失败：${result?.error || '未知原因'}`, 'warn', 5200)
+          return null
+        }
+        saveSeries(result)
+        if (state.currentVideoUrl === url) setSeries(result)
+        return result
+      } catch (error) {
+        if (!silent) toast(`获取选集失败：${String(error?.message || error)}`, 'warn', 5200)
+        return null
+      } finally {
+        state.seriesLoading = false
+        state.seriesPending.delete(url)
+        updateEpisodeBarShell()
+      }
+    })()
+    state.seriesPending.set(url, task)
+    return task
+  }
+
+
+  // ---------------------------------------------------------------------------
   // 播放区
   // ---------------------------------------------------------------------------
+
+  function updateLayoutMode() {
+    // 播放时让整个页面滚动：顶部的平台入口 / 链接栏会跟着滚走，
+    // 不再固定占着高度把视频挡住。
+    const playing = !$('#view-video').hidden || !$('#view-webview').hidden
+    const enabled = playing && !state.browserOpen && !state.fullscreen
+    document.body.classList.toggle('page-scroll', enabled)
+  }
 
   function setView(name) {
     for (const id of ['empty', 'loading', 'error', 'video', 'webview']) {
       $(`#view-${id}`).hidden = id !== name
     }
+    // 只有真正在播放时才给播放区留大高度；空/错/加载态不需要撑高
+    $('#stage').classList.toggle('stage-playing', name === 'video' || name === 'webview')
+    updateLayoutMode()
   }
 
   // ---------------------------------------------------------------------------
@@ -380,6 +783,7 @@
   function applyCinema(on) {
     state.fullscreen = Boolean(on)
     document.body.classList.toggle('cinema', state.fullscreen)
+    updateLayoutMode()
     $('#btn-fullscreen').textContent = state.fullscreen ? '退出全屏' : '全屏'
     $('#btn-fullscreen').title = state.fullscreen ? '退出全屏（Esc / F11）' : '全屏（F11）'
   }
@@ -434,6 +838,8 @@
     $('#error-detail').textContent = detail
     $('#live-dot').classList.remove('playing')
     setStatus(`解析失败：${title}`)
+    setDownloadButton()
+    updateNativeButton()
   }
 
   function loadWebview(url) {
@@ -549,7 +955,130 @@
     video.onerror = () => {
       showError('视频播放失败', '视频流无法被浏览器内核播放，点击「换线路」试试其它解析接口。')
     }
+    video.onended = () => {
+      if (!state.autoNext) return
+      if (state.series && seriesCurrentIndex(state.series, state.currentVideoUrl) < state.series.episodes.length - 1) {
+        toast('本集播完，自动播放下一集', 'ok')
+        seriesNav(1)
+      }
+    }
     applyResumeAndProgress(video)
+  }
+
+  // ---------------------------------------------------------------------------
+  // 下载（离线观看）
+  // ---------------------------------------------------------------------------
+
+  function setDownloadButton() {
+    const button = $('#btn-download')
+    if (!button) return
+    if (state.downloadRunning) {
+      button.disabled = false
+      button.textContent = `下载 ${state.downloadPercent || 0}%`
+      button.title = '点击取消下载'
+      return
+    }
+    const streamReady = state.lastResult?.kind === 'stream'
+    button.textContent = '下载'
+    button.disabled = !streamReady
+    button.title = streamReady ? '下载本集（HLS 会合并成一个文件）' : '当前是网页解析线路，拿不到真实流地址，无法下载'
+  }
+
+  async function toggleDownload() {
+    if (state.downloadRunning && state.downloadId) {
+      await window.desktop.cancelDownload(state.downloadId)
+      return
+    }
+    if (state.lastResult?.kind !== 'stream') {
+      toast('当前是网页解析线路（第三方解析页），拿不到真实流地址，无法下载；可换到接口/芒果原生线路再试', 'warn', 5200)
+      return
+    }
+    const title =
+      state.currentTitle ||
+      (state.series?.title ? `${state.series.title} ${state.currentEpisode || ''}`.trim() : '') ||
+      ''
+    const result = await window.desktop.downloadCurrent({ title })
+    if (!result?.ok) {
+      toast(`下载失败：${result?.error || '未知原因'}`, 'error', 5200)
+      return
+    }
+    if (state.finishedDownloads.has(result.id)) {
+      // 任务可能在 IPC 返回之前就已经失败/完成（例如目录没权限）
+      setDownloadButton()
+      return
+    }
+    state.downloadId = result.id
+    state.downloadRunning = true
+    state.downloadPercent = 0
+    setDownloadButton()
+    toast('开始下载，进度会显示在「下载」按钮上，点击按钮可取消', 'ok', 4200)
+  }
+
+  function onDownloadState(update) {
+    if (!update || (state.downloadId && update.id !== state.downloadId && update.status === 'running')) return
+    if (update.id && !state.downloadId && update.status === 'running') state.downloadId = update.id
+    if (update.id !== state.downloadId) return
+    if (update.status === 'running') {
+      state.downloadRunning = true
+      state.downloadPercent = Number(update.percent) || 0
+      setDownloadButton()
+      return
+    }
+    state.downloadRunning = false
+    state.downloadPercent = 0
+    state.finishedDownloads.set(update.id, update.status)
+    if (state.finishedDownloads.size > 30) {
+      const first = state.finishedDownloads.keys().next().value
+      state.finishedDownloads.delete(first)
+    }
+    setDownloadButton()
+    if (update.status === 'done') {
+      toast(`已下载：${update.savedPath}`, 'ok', 9000)
+    } else if (update.status === 'cancelled') {
+      toast('已取消下载')
+    } else if (update.status === 'failed') {
+      toast(`下载失败：${update.error || '未知原因'}`, 'error', 6000)
+    }
+    state.downloadId = ''
+  }
+
+  // ---------------------------------------------------------------------------
+  // 平台原生取流（实验）
+  // ---------------------------------------------------------------------------
+
+  function nativeLineFor(url) {
+    const platform = detectPlatform(url)
+    if (!platform) return null
+    const natives = (state.config?.lines || []).filter((line) => line.kind === 'native')
+    return natives.find((line) => line.platform === platform) || null
+  }
+
+  function updateNativeButton() {
+    const button = $('#btn-native')
+    if (!button) return
+    const line = nativeLineFor(state.currentVideoUrl)
+    // 实验功能：只有在「线路管理」里启用了原生取流线路才显示按钮，避免普通用户误点
+    button.hidden = !line || line.enabled === false
+    button.disabled = !line || state.running
+    button.title = line
+      ? `用「${line.name}」打开平台原片页，抓它自己的播放流；免费内容可用，会员 DRM 内容会自动失败`
+      : ''
+  }
+
+  async function tryNative() {
+    const line = nativeLineFor(state.currentVideoUrl)
+    if (!line) {
+      toast('这个平台还没有原生取流线路', 'warn')
+      return
+    }
+    toast('正在平台原片页里抓真实播放流，通常需要 5–15 秒…', 'ok', 4200)
+    startParse({
+      url: state.currentVideoUrl,
+      lineId: line.id,
+      chain: false,
+      title: state.currentTitle,
+      series: state.series,
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -572,10 +1101,13 @@
     const platformKey = detectPlatform(videoUrl)
     const fitting = platformKey ? all.filter((line) => !line.platform || line.platform === platformKey) : all
     const enabled = fitting.length ? fitting : all
-    const matching = platformKey ? enabled.filter((line) => line.platform === platformKey) : []
-    // 平台专属线路（例如芒果TV 原生解析）优先，避免通用线路“页面能打开但视频是空的”也算成功
-    const primary = matching[0] || enabled.find((line) => line.id === primaryId) || enabled[0]
-    const chain = [primary, ...enabled.filter((line) => line.id !== primary.id)]
+    const isDead = (line) => state.lineHealth[line.id]?.ok === false
+    // 体检失效的线路不删除，只排到最后：接口可能只是临时抽风，真到那一步还会再试。
+    const ordered = [...enabled.filter((line) => !isDead(line)), ...enabled.filter(isDead)]
+    const matching = platformKey ? ordered.filter((line) => line.platform === platformKey) : []
+    // 平台专属线路（例如芒果TV 原生解析）优先，但尽量别从已失效的那条开始
+    const primary = matching[0] || ordered.find((line) => line.id === primaryId) || ordered[0]
+    const chain = [primary, ...ordered.filter((line) => line.id !== primary.id)]
     return state.config?.autoFallback === false ? [primary] : chain
   }
 
@@ -585,7 +1117,7 @@
     $('#btn-parse').classList.remove('busy')
   }
 
-  async function startParse({ lineId, url, chain = true, resume = 0, title = '', episode = '' } = {}) {
+  async function startParse({ lineId, url, chain = true, resume = 0, title = '', episode = '', series } = {}) {
     if (state.browserOpen) hideBrowser({ mute: true })
     if (state.running) {
       state.runToken += 1
@@ -600,6 +1132,9 @@
       $('#url-input').focus()
       return
     }
+    // 切集时把已知选集带过来；手动换链接则用缓存里对应的那一份。
+    state.series = series || findSavedSeries(videoUrl) || null
+    renderEpisodeBar()
     const platform = platformInfo(detectPlatform(videoUrl))
     if (!platform) toast('未识别的平台，仍会尝试用线路解析', 'warn')
 
@@ -612,6 +1147,9 @@
     const token = ++state.runToken
     state.running = true
     stopPlayback()
+    state.lastResult = null
+    setDownloadButton()
+    updateNativeButton()
     state.currentVideoUrl = videoUrl
     $('#source-url').textContent = videoUrl
     $('#source-url').title = videoUrl
@@ -703,6 +1241,8 @@
     state.currentEpisode = episode
     $('#stage-title-text').textContent = title ? `${title} · ${line.name}` : `${platformName} · 正在播放`
     setStatus(`解析成功：${line.name}`)
+    setDownloadButton()
+    updateNativeButton()
     state.lineStatus[line.id] = { ok: true, ms: null, note: '上次解析成功' }
     renderLineList()
     clearRunWatchdog()
@@ -745,6 +1285,16 @@
     if (state.config.defaultLineId !== line.id) {
       state.config.defaultLineId = line.id
       window.desktop.saveLines(state.config.lines, line.id).catch(() => {})
+    }
+    // 选集条：已有同一部剧的列表就直接高亮当前集；没有就在后台向平台要一份。
+    if (state.series && state.series.episodes.some((item) => sameVideoUrl(item.url, state.currentVideoUrl))) {
+      renderEpisodeBar()
+    } else if (state.series) {
+      state.series = null
+      renderEpisodeBar()
+    }
+    if (!state.series) {
+      requestSeries(state.currentVideoUrl, { title, silent: true })
     }
   }
 
@@ -797,22 +1347,31 @@
 
   function renderLineList() {
     const list = $('#line-list')
+    const scrollTop = list.scrollTop
     const lines = state.config?.lines || []
     list.innerHTML = ''
     if (!lines.length) {
       list.innerHTML = '<li class="empty-row">还没有线路，点击「线路管理」添加。</li>'
       return
     }
+    $('#btn-toggle-dead')?.classList.toggle('active', state.hideDeadLines)
+    let hidden = 0
     for (const line of lines) {
       const status = state.lineStatus[line.id]
+      const dead = Boolean(status && status.ok === false)
+      if (state.hideDeadLines && dead && line.id !== state.currentLineId) {
+        hidden += 1
+        continue
+      }
       const item = document.createElement('li')
       item.className = 'line-item'
       if (line.id === state.currentLineId) item.classList.add('active')
       if (!line.enabled) item.classList.add('disabled')
+      if (dead) item.classList.add('dead')
       item.dataset.id = line.id
       item.innerHTML = `
         <span class="line-state ${status ? (status.ok ? 'ok' : 'fail') : ''}"></span>
-        <span class="line-name" title="${escapeHtml(line.url || '')}">${escapeHtml(line.name)}</span>
+        <span class="line-name" title="${escapeHtml(`${line.url || ''}${status?.note ? `\n${status.note}` : ''}`)}">${escapeHtml(line.name)}</span>
         <span class="line-ms">${status ? (status.ok ? `${status.ms || ''} ms` : '失效') : ''}</span>
         <button class="line-play ${line.enabled ? '' : 'enable'}" title="${line.enabled ? '用这条线路解析' : '启用这条线路'}">${
           line.enabled ? icons.play : '启用'
@@ -843,64 +1402,215 @@
       })
       list.appendChild(item)
     }
+    if (hidden) {
+      const note = document.createElement('li')
+      note.className = 'empty-row'
+      note.textContent = `已隐藏 ${hidden} 条体检失效的线路（点「隐藏失效」可恢复显示）`
+      list.appendChild(note)
+    }
+    list.scrollTop = scrollTop
+  }
+
+  async function runLineHealthCheck({ silent = true } = {}) {
+    if (state.lineHealthRunning) return
+    state.lineHealthRunning = true
+    const button = $('#btn-test-all')
+    if (!silent) {
+      button.disabled = true
+      button.textContent = '测速中'
+      setStatus('正在体检线路…')
+    }
+    try {
+      const result = await window.desktop.testLines({
+        url: state.currentVideoUrl || '',
+        platformSamples: true,
+        ids: (state.config.lines || []).filter((line) => line.enabled).map((line) => line.id),
+      })
+      const now = Date.now()
+      const merged = { ...state.lineHealth }
+      let okCount = 0
+      let failCount = 0
+      for (const [id, status] of Object.entries(result || {})) {
+        if (!status) continue
+        if (/仅用于/.test(String(status.note || ''))) continue
+        merged[id] = {
+          ok: Boolean(status.ok),
+          ms: Number(status.ms) || 0,
+          note: String(status.note || '').slice(0, 120),
+          at: now,
+        }
+        if (status.ok) okCount += 1
+        else failCount += 1
+      }
+      state.lineHealth = merged
+      for (const [id, health] of Object.entries(merged)) {
+        state.lineStatus[id] = { ok: health.ok, ms: health.ms, note: health.note, at: health.at }
+      }
+      renderLineList()
+      state.config = await window.desktop.saveSettings({ lineHealth: merged })
+      setStatus(`线路体检完成：${okCount} 条可用${failCount ? `，${failCount} 条失效` : ''}`)
+      if (!silent) {
+        toast(`测速完成：${okCount} 条可用${failCount ? `，${failCount} 条失效` : ''}`, failCount ? 'warn' : 'ok')
+      }
+    } catch (error) {
+      if (!silent) toast(`测速失败：${String(error?.message || error)}`, 'error')
+    } finally {
+      state.lineHealthRunning = false
+      if (!silent) {
+        button.disabled = false
+        button.textContent = '测速'
+      }
+    }
+  }
+
+  function historySeriesName(item, title, platform) {
+    const base = title
+      .replace(/\s*(第\s*\d+\s*[集期话回]|EP?\s*\d+|S\d+E\d+).*$/i, '')
+      .replace(/\s*[-_|]\s*$/, '')
+      .trim()
+    return base || `${platform?.name || '视频'} · 未命名视频`
+  }
+
+  function historyEpisodeOrder(item) {
+    const text = `${item.episode || ''} ${item.title || ''}`
+    const match = text.match(/第\s*(\d{1,4})\s*[集期话回]/) || text.match(/(?:^|[^\d])(\d{1,4})\s*(?:集|期|话)/) || text.match(/EP?\s*(\d{1,4})/i)
+    return match ? Number(match[1]) : 0
+  }
+
+  function createHistoryItem(item) {
+    const platform = platformInfo(detectPlatform(item.url))
+    const title = cleanTitle(item.title) || ''
+    const episode = item.episode || episodeOf(title)
+    const percent =
+      item.duration > 5 ? Math.max(0, Math.min(100, Math.round((item.progress / item.duration) * 100))) : 0
+    const resumable = percent >= 1 && percent < 96
+    const li = document.createElement('li')
+    li.className = 'history-item'
+    if (resumable) li.classList.add('resumable')
+    li.innerHTML = `
+      <div class="history-top">
+        <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
+          title || `${platform?.name || '视频'} · 未命名视频`,
+        )}</span>
+        <span class="history-time">${timeAgo(item.at)}</span>
+      </div>
+      <div class="history-meta">
+        ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(item.platform || platform.name)}</span>` : ''}
+        ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
+        <span class="history-line">${escapeHtml(item.lineName || '')}</span>
+        ${resumable ? '<span class="history-resume">继续</span>' : ''}
+        ${percent ? `<span class="history-percent">已看 ${percent}%</span>` : ''}
+      </div>
+      ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
+      ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
+      <button class="history-del" title="删除这条记录">×</button>
+    `
+    li.addEventListener('click', () => {
+      $('#url-input').value = item.url
+      updateBadge()
+      state.currentLineId = item.lineId || state.currentLineId
+      startParse({
+        url: item.url,
+        lineId: item.lineId,
+        resume: item.progress || 0,
+        title,
+        episode,
+        series: findSavedSeries(item.url),
+      })
+    })
+    li.querySelector('.history-del').addEventListener('click', async (event) => {
+      event.stopPropagation()
+      try {
+        state.config.history = await window.desktop.removeHistory(item.url)
+        renderHistory()
+      } catch {
+        /* 忽略 */
+      }
+    })
+    return li
   }
 
   function renderHistory() {
     const list = $('#history-list')
+    if (!list) return
+    const scrollTop = list.scrollTop
     const history = state.config?.history || []
+    const mode = state.historySort || 'recent'
+    const query = String(state.historyQuery || '').trim().toLowerCase()
+    const filtered = history.filter((item) => {
+      if (!query) return true
+      const platform = platformInfo(detectPlatform(item.url))
+      const haystack = [item.title, item.episode, item.platform, platform?.name, item.lineName, item.url]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(query)
+    })
     list.innerHTML = ''
+    const legend = $('#history-legend')
+    if (legend) legend.textContent = history.length ? `${filtered.length}/${history.length} 条` : ''
+    if ($('#history-sort')) $('#history-sort').value = mode
     if (!history.length) {
-      list.innerHTML = '<li class="empty-row">还没有观看记录。解析成功后会自动记在这里，像视频平台一样保留剧名、集数和观看进度。</li>'
+      list.innerHTML =
+        '<li class="empty-row">还没有观看记录。解析成功后会自动记在这里，像视频平台一样保留剧名、集数和观看进度。</li>'
       return
     }
-    for (const item of history) {
-      const platform = platformInfo(detectPlatform(item.url))
-      const title = cleanTitle(item.title) || ''
-      const episode = item.episode || episodeOf(title)
-      const percent =
-        item.duration > 5 ? Math.max(0, Math.min(100, Math.round((item.progress / item.duration) * 100))) : 0
-      const li = document.createElement('li')
-      li.className = 'history-item'
-      li.innerHTML = `
-        <div class="history-top">
-          <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
-            title || `${platform?.name || '视频'} · 未命名视频`,
-          )}</span>
-          <span class="history-time">${timeAgo(item.at)}</span>
-        </div>
-        <div class="history-meta">
-          ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(item.platform || platform.name)}</span>` : ''}
-          ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
-          <span class="history-line">${escapeHtml(item.lineName || '')}</span>
-          ${percent ? `<span class="history-percent">已看 ${percent}%</span>` : ''}
-        </div>
-        ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
-        ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
-        <button class="history-del" title="删除这条记录">×</button>
-      `
-      li.addEventListener('click', () => {
-        $('#url-input').value = item.url
-        updateBadge()
-        state.currentLineId = item.lineId || state.currentLineId
-        startParse({
-          url: item.url,
-          lineId: item.lineId,
-          resume: item.progress || 0,
-          title,
-          episode,
-        })
-      })
-      li.querySelector('.history-del').addEventListener('click', async (event) => {
-        event.stopPropagation()
-        try {
-          state.config.history = await window.desktop.removeHistory(item.url)
-          renderHistory()
-        } catch {
-          /* 忽略 */
-        }
-      })
-      list.appendChild(li)
+    if (!filtered.length) {
+      list.innerHTML = '<li class="empty-row">没有匹配的历史记录，换个关键词试试。</li>'
+      return
     }
+
+    if (mode === 'grouped') {
+      const groups = new Map()
+      for (const item of filtered) {
+        const title = cleanTitle(item.title) || ''
+        const platform = platformInfo(detectPlatform(item.url))
+        const name = historySeriesName(item, title, platform)
+        const key = `${platform?.key || 'other'}:${name}`
+        if (!groups.has(key)) groups.set(key, { key, name, platform, items: [] })
+        groups.get(key).items.push(item)
+      }
+      const ordered = [...groups.values()].sort(
+        (left, right) => Math.max(...right.items.map((item) => item.at || 0)) - Math.max(...left.items.map((item) => item.at || 0)),
+      )
+      for (const group of ordered) {
+        const li = document.createElement('li')
+        li.className = 'history-group'
+        if (state.historyCollapsed.has(group.key)) li.classList.add('collapsed')
+        group.items.sort((left, right) => historyEpisodeOrder(left) - historyEpisodeOrder(right) || (right.at || 0) - (left.at || 0))
+        const head = document.createElement('div')
+        head.className = 'history-group-head'
+        head.innerHTML = `<b title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</b><span>${group.items.length} 条</span>`
+        head.addEventListener('click', () => {
+          if (state.historyCollapsed.has(group.key)) state.historyCollapsed.delete(group.key)
+          else state.historyCollapsed.add(group.key)
+          localStorage.setItem('csp.historyCollapsed', JSON.stringify([...state.historyCollapsed]))
+          renderHistory()
+        })
+        const box = document.createElement('div')
+        box.className = 'history-group-items'
+        for (const item of group.items) box.appendChild(createHistoryItem(item))
+        li.appendChild(head)
+        li.appendChild(box)
+        list.appendChild(li)
+      }
+    } else {
+      const items = [...filtered]
+      if (mode === 'continue') {
+        const isResumable = (item) => {
+          const percent = item.duration > 5 ? (item.progress / item.duration) * 100 : 0
+          return percent >= 1 && percent < 96
+        }
+        items.sort((left, right) => {
+          const leftResume = isResumable(left) ? 1 : 0
+          const rightResume = isResumable(right) ? 1 : 0
+          if (leftResume !== rightResume) return rightResume - leftResume
+          return (right.at || 0) - (left.at || 0)
+        })
+      }
+      for (const item of items) list.appendChild(createHistoryItem(item))
+    }
+    list.scrollTop = scrollTop
   }
 
   // 旧版本只存了网址；启动后在后台补一次标题，最多 4 条，避免拖慢启动
@@ -980,6 +1690,7 @@
     if (tab === 'play') {
       $('#set-auto-fallback').checked = state.config.autoFallback !== false
       $('#set-close-tray').checked = state.config.closeToTray === true
+      $('#set-auto-line-test').checked = state.config.autoLineTest !== false
     }
     if (tab === 'about') {
       $('#about-version').textContent = state.info?.version || '-'
@@ -990,6 +1701,7 @@
     { value: 'page', label: '网页' },
     { value: 'api', label: '接口' },
     { value: 'mgtv', label: '芒果内置' },
+    { value: 'native', label: '原生取流' },
     { value: 'direct', label: '直连' },
   ]
 
@@ -1011,7 +1723,7 @@
         <select class="line-kind">
           ${LINE_KINDS.map((kind) => `<option value="${kind.value}" ${line.kind === kind.value ? 'selected' : ''}>${kind.label}</option>`).join('')}
         </select>
-        <input type="text" class="line-url" value="${escapeHtml(line.url || '')}" placeholder="https://jx.example.com/?url={url}" spellcheck="false" ${line.kind === 'direct' || line.kind === 'mgtv' ? 'disabled' : ''} />
+        <input type="text" class="line-url" value="${escapeHtml(line.url || '')}" placeholder="https://jx.example.com/?url={url}" spellcheck="false" ${['direct', 'mgtv', 'native'].includes(line.kind) ? 'disabled' : ''} />
         <button class="row-btn line-test" title="用示例链接测一下">测试</button>
         <button class="row-btn line-del" title="删除">删除</button>
         <div class="row-note">${escapeHtml(line.note || '')}</div>
@@ -1019,12 +1731,12 @@
       row.querySelector('.line-kind').addEventListener('change', (event) => {
         const kind = event.target.value
         const urlInput = row.querySelector('.line-url')
-        if (kind === 'direct' || kind === 'mgtv') {
-          urlInput.value = kind === 'direct' ? 'direct://video' : 'mgtv://auto'
+        if (['direct', 'mgtv', 'native'].includes(kind)) {
+          urlInput.value = kind === 'direct' ? 'direct://video' : kind === 'mgtv' ? 'mgtv://auto' : 'native://auto'
           urlInput.disabled = true
         } else {
           urlInput.disabled = false
-          if (urlInput.value === 'direct://video' || urlInput.value === 'mgtv://auto') urlInput.value = ''
+          if (['direct://video', 'mgtv://auto', 'native://auto'].includes(urlInput.value)) urlInput.value = ''
         }
       })
       row.querySelector('.line-del').addEventListener('click', () => {
@@ -1068,6 +1780,18 @@
     line.url = row.querySelector('.line-url').value.trim()
     if (line.kind === 'direct' && !line.url) line.url = 'direct://video'
     if (line.kind === 'mgtv' && !line.url) line.url = 'mgtv://auto'
+    if (line.kind === 'native' && !line.url) line.url = 'native://auto'
+    if (line.kind === 'native' && !line.platform) {
+      const name = `${line.name || ''} ${line.note || ''}`
+      const pairs = [
+        ['爱奇艺', 'iqiyi'],
+        ['腾讯|qq', 'qq'],
+        ['优酷|youku', 'youku'],
+        ['芒果|mgtv', 'mgtv'],
+      ]
+      const hit = pairs.find(([pattern]) => new RegExp(pattern, 'i').test(name))
+      line.platform = hit ? hit[1] : ''
+    }
     return line
   }
 
@@ -1119,6 +1843,195 @@
     $('#search-modal').hidden = true
   }
 
+  const SEARCH_LINK_PATTERNS = {
+    iqiyi: /^https?:\/\/(www\.)?iqiyi\.com\/(v_|a_)[A-Za-z0-9]+\.html/i,
+    qq: /^https?:\/\/v\.qq\.com\/x\/(cover|page)\//i,
+    youku: /^https?:\/\/v\.youku\.com\/v_show\/id_[A-Za-z0-9=]+\.html/i,
+    mgtv: /^https?:\/\/(www\.)?mgtv\.com\/b\/\d+\//i,
+  }
+
+  const SEARCH_PAGE_MATCH = {
+    iqiyi: /iqiyi\.com\/(so\/|search)/i,
+    qq: /v\.qq\.com\/x\/search/i,
+    youku: /(so\.youku\.com\/search|search\.youku\.com)/i,
+    mgtv: /so\.mgtv\.com\/so/i,
+  }
+
+  function searchScrapeScript(key) {
+    return `(() => {
+      const pattern = ${SEARCH_LINK_PATTERNS[key] || '/a^/'}
+      const out = []
+      const seen = new Set()
+      const normalize = (href) => {
+        try {
+          const url = new URL(href, location.href)
+          if (/redirect\\.html/i.test(url.pathname)) {
+            const inner = url.searchParams.get('url')
+            if (inner) return new URL(inner).href
+          }
+          return url.href
+        } catch (error) {
+          return ''
+        }
+      }
+      const pickTitle = (anchor) => {
+        const card = anchor.closest('li,[class*=item],[class*=card],[class*=result],[class*=Item]') || anchor
+        const titleNode = card.querySelector('h1,h2,h3,[class*=title],[class*=Title],[class*=name],[class*=Name]')
+        let text = (titleNode && titleNode.innerText || anchor.innerText || anchor.getAttribute('title') || '').replace(/\\s+/g, ' ').trim()
+        if (!text) {
+          const lines = String(card.innerText || '').split('\\n').map((line) => line.trim()).filter(Boolean)
+          text = lines.find((line) => line.length >= 2 && line.length <= 40 && !/^(\\d{4}|\\d+集全|更新至|VIP|会员|预告|花絮|详细|立即播放)/.test(line)) || lines[0] || ''
+        }
+        return text.replace(/^(更新至|全|共)\\s*\\d+\\s*(集|期|话)?\\s*/, '').trim().slice(0, 60)
+      }
+      for (const anchor of document.querySelectorAll('a[href]')) {
+        const href = normalize(anchor.href)
+        if (!href || !pattern.test(href)) continue
+        const clean = href.split('#')[0]
+        const base = clean.split('?')[0]
+        if (seen.has(base)) continue
+        seen.add(base)
+        const title = pickTitle(anchor)
+        if (!title) continue
+        out.push({ url: clean, title, base })
+        if (out.length >= 12) break
+      }
+      return { results: out, title: document.title, text: String(document.body ? document.body.innerText : '').slice(0, 200) }
+    })()`
+  }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  async function scrapeSearchPlatform(key, query) {
+    const record = ensureBrowser(key)
+    const meta = browserMeta(key)
+    if (!record) return { key, results: [], error: '无法初始化平台页面' }
+    const target = SEARCH_URLS[key]?.(query) || ''
+    if (!target) return { key, results: [], error: '这个平台暂不支持搜索' }
+    let previous = ''
+    try {
+      previous = record.webview.getURL() || ''
+    } catch {
+      /* 忽略 */
+    }
+    let value = null
+    try {
+      record.webview.src = target
+      // 等真正跳到搜索页（平台可能先加载首页并重定向），再给渲染留一点时间
+      const matcher = SEARCH_PAGE_MATCH[key]
+      const started = Date.now()
+      while (Date.now() - started < 12000) {
+        let current = ''
+        try {
+          current = record.webview.getURL() || ''
+        } catch {
+          /* 忽略 */
+        }
+        if (current && matcher && matcher.test(current)) break
+        await sleep(300)
+      }
+      await sleep(5000)
+      try {
+        value = await record.webview.executeJavaScript(searchScrapeScript(key), true)
+      } catch {
+        value = null
+      }
+    } catch {
+      /* 忽略 */
+    }
+    // 抓完结果后把平台页面还原，避免用户下次点卡片时莫名其妙停在搜索页
+    const active = state.browserOpen && state.browserKey === key
+    if (!active && previous && !/^about:blank/i.test(previous)) {
+      try {
+        record.webview.src = previous
+      } catch {
+        /* 忽略 */
+      }
+    }
+    let results = Array.isArray(value?.results) ? value.results : []
+    let error = ''
+    const normalizedQuery = String(query || '').replace(/\s+/g, '')
+    if (normalizedQuery && results.length) {
+      const relevant = results.filter((item) => {
+        const title = String(item.title || '').replace(/\s+/g, '')
+        if (!title) return false
+        return title.includes(normalizedQuery) || normalizedQuery.includes(title.slice(0, Math.min(4, title.length)))
+      })
+      if (relevant.length) results = relevant
+      else {
+        results = []
+        error = `没有找到与「${query}」相关的${meta?.name || ''}条目`
+      }
+    }
+    if (!results.length && !error) {
+      const text = `${value?.title || ''} ${value?.text || ''}`
+      if (/验证|安全验证|captcha|滑动|机器人/i.test(text)) error = '平台要求人机验证，请点「打开平台页」手动搜索'
+      else if (/登录|登录后查看/i.test(text)) error = '平台要求登录，请先在平台页登录'
+      else error = '没有抓到结果，可能页面结构变了'
+    }
+    return { key, name: meta?.name || key, queries: { query, pageUrl: target }, results, error }
+  }
+
+  function renderSearchResults(groups, query) {
+    const box = $('#search-results')
+    box.hidden = false
+    box.innerHTML = ''
+    for (const group of groups) {
+      const wrap = document.createElement('div')
+      wrap.className = 'search-group'
+      const head = document.createElement('div')
+      head.className = 'search-group-head'
+      const meta = browserMeta(group.key)
+      head.innerHTML = `<img src="${meta?.icon || 'assets/app-icon.png'}" alt="" /><b>${escapeHtml(group.name)}</b><span>${
+        group.error ? '未获取到' : `${group.results.length} 条`
+      }</span>`
+      const openButton = document.createElement('button')
+      openButton.className = 'search-open-page'
+      openButton.textContent = '打开平台页'
+      openButton.addEventListener('click', () => {
+        closeSearchModal()
+        openBrowser(group.key, { url: group.queries.pageUrl })
+      })
+      head.appendChild(openButton)
+      wrap.appendChild(head)
+      const items = document.createElement('div')
+      items.className = 'search-group-items'
+      if (group.error) {
+        const error = document.createElement('div')
+        error.className = 'search-error'
+        error.textContent = group.error
+        items.appendChild(error)
+      }
+      for (const result of group.results) {
+        const button = document.createElement('button')
+        button.className = 'search-result'
+        button.title = result.url
+        const isEpisode = Boolean(detectVideoPlatform(result.url))
+        button.innerHTML = `${escapeHtml(result.title)}<small>${isEpisode ? '单集 · 点击直接解析' : '剧集页 · 点击打开选集'}</small>`
+        button.addEventListener('click', () => {
+          closeSearchModal()
+          if (isEpisode) {
+            $('#url-input').value = result.url
+            updateBadge()
+            startParse({ url: result.url, title: result.title, episode: episodeOf(result.title) })
+            toast(`正在解析「${result.title}」`, 'ok')
+          } else {
+            openBrowser(group.key, { url: result.url })
+            toast('已打开剧集页，点「选集」里的任意一集即可播放', 'ok', 5000)
+          }
+        })
+        items.appendChild(button)
+      }
+      wrap.appendChild(items)
+      box.appendChild(wrap)
+    }
+    $('#search-status').hidden = false
+    const total = groups.reduce((sum, group) => sum + group.results.length, 0)
+    $('#search-status').textContent = total
+      ? `共找到 ${total} 条结果 · 点击结果直接播放或打开剧集页`
+      : '没有聚合结果，可以点各平台标题右侧的「打开平台页」手动搜索'
+  }
+
   async function submitSearch() {
     const query = $('#search-input').value.trim()
     if (!query) {
@@ -1135,20 +2048,33 @@
     }
     const button = $('#search-submit')
     button.disabled = true
-    button.textContent = '打开中…'
+    button.textContent = '搜索中…'
+    $('#search-results').hidden = true
+    $('#search-results').innerHTML = ''
+    $('#search-status').hidden = false
+    $('#search-status').textContent = `正在 ${picked.map((key) => browserMeta(key)?.name || key).join('、')} 搜索「${query}」…`
     try {
-      for (const key of picked) {
-        openBrowser(key, { query, background: true })
+      const groups = []
+      const queue = picked.slice()
+      const worker = async () => {
+        while (queue.length) {
+          const key = queue.shift()
+          if (!key) return
+          try {
+            groups.push(await scrapeSearchPlatform(key, query))
+          } catch (error) {
+            groups.push({ key, name: browserMeta(key)?.name || key, results: [], error: String(error?.message || error) })
+          }
+        }
       }
-      openBrowser(picked[0], { query })
-      closeSearchModal()
-      toast(`已在 ${picked.length} 个平台打开「${query}」的搜索结果`, 'ok')
-      setStatus('在当前窗口点开任意剧集或某一集，会自动解析到主界面播放')
+      await Promise.all([worker(), worker()])
+      groups.sort((left, right) => picked.indexOf(left.key) - picked.indexOf(right.key))
+      renderSearchResults(groups, query)
     } catch (error) {
-      toast(`搜索失败：${String(error?.message || error)}`, 'error')
+      toast(`聚合搜索失败：${String(error?.message || error)}`, 'error')
     } finally {
       button.disabled = false
-      button.textContent = '开始搜索'
+      button.textContent = '聚合搜索'
     }
   }
 
@@ -1268,9 +2194,11 @@
       }
     })
     $('#browser-auto').addEventListener('change', (event) => {
-      state.browserAutoParse = event.target.checked
-      localStorage.setItem('csp.browserAuto', event.target.checked ? '1' : '0')
-      toast(event.target.checked ? '已开启：点开剧集自动解析' : '已关闭自动解析')
+      const value = event.target.checked
+      setAutoParseEnabled(state.browserKey, value)
+      toast(
+        `${browserMeta(state.browserKey)?.name || '当前平台'}：${value ? '已开启点集自动解析' : '已关闭自动解析'}`,
+      )
     })
     $('#browser-copy').addEventListener('click', async () => {
       const url = currentBrowserUrl()
@@ -1288,8 +2216,10 @@
         return
       }
       const title = currentBrowserTitle()
+      const record = state.browsers.get(state.browserKey)
       hideBrowser({ mute: true })
       startParse({ url, title, episode: episodeOf(title) })
+      collectSeriesHint(record).then((hint) => requestSeries(url, { title, hint }))
     })
     $('#browser-external').addEventListener('click', () => {
       const url = currentBrowserUrl()
@@ -1311,12 +2241,34 @@
     })
 
     $('#btn-next-line').addEventListener('click', () => nextLine())
+    $('#btn-native').addEventListener('click', () => tryNative())
+    $('#btn-download').addEventListener('click', () => toggleDownload())
+    $('#btn-open-downloads').addEventListener('click', () => window.desktop.openDownloadFolder())
     $('#btn-open-web').addEventListener('click', () => {
       const target = state.currentVideoUrl || $('#url-input').value
       if (isHttpUrl(target)) window.desktop.openExternal(target)
       else toast('还没有可打开的链接', 'warn')
     })
     $('#btn-fullscreen').addEventListener('click', () => toggleFullscreen())
+
+    // 选集条
+    $('#episode-prev').addEventListener('click', () => seriesNav(-1))
+    $('#episode-next').addEventListener('click', () => seriesNav(1))
+    $('#episode-order').addEventListener('click', () => {
+      state.seriesOrder = state.seriesOrder === 'asc' ? 'desc' : 'asc'
+      localStorage.setItem('csp.episodeOrder', state.seriesOrder)
+      renderEpisodeBar()
+    })
+    $('#episode-toggle').addEventListener('click', () => {
+      state.seriesCollapsed = !state.seriesCollapsed
+      localStorage.setItem('csp.episodeCollapsed', state.seriesCollapsed ? '1' : '0')
+      renderEpisodeBar()
+    })
+    $('#episode-auto-next').addEventListener('change', (event) => {
+      state.autoNext = event.target.checked
+      localStorage.setItem('csp.autoNext', state.autoNext ? '1' : '0')
+      toast(state.autoNext ? '已开启：本集播完自动下一集' : '已关闭自动连播')
+    })
 
     // 找剧：跨平台搜索
     $('#btn-search').addEventListener('click', openSearchModal)
@@ -1357,30 +2309,35 @@
     $('#btn-error-lines').addEventListener('click', () => openModal('lines'))
 
     // 侧栏
-    $('#btn-test-all').addEventListener('click', async () => {
-      const button = $('#btn-test-all')
-      button.disabled = true
-      button.textContent = '测速中'
-      setStatus('正在测试所有线路…')
-      try {
-        const result = await window.desktop.testLines({ url: state.currentVideoUrl || '' })
-        state.lineStatus = result
-        renderLineList()
-        const okCount = Object.values(result).filter((item) => item.ok).length
-        toast(`测速完成：${okCount} / ${Object.keys(result).length} 条线路可访问`, okCount ? 'ok' : 'warn')
-        setStatus('测速完成')
-      } catch (error) {
-        toast(`测速失败：${String(error?.message || error)}`, 'error')
-      } finally {
-        button.disabled = false
-        button.textContent = '测速'
-      }
+    $('#btn-test-all').addEventListener('click', () => runLineHealthCheck({ silent: false }))
+    $('#btn-toggle-dead').addEventListener('click', () => {
+      state.hideDeadLines = !state.hideDeadLines
+      localStorage.setItem('csp.hideDeadLines', state.hideDeadLines ? '1' : '0')
+      renderLineList()
+      toast(state.hideDeadLines ? '已隐藏体检失效的线路' : '已显示全部线路')
     })
 
     $('#btn-clear-history').addEventListener('click', async () => {
       state.config.history = await window.desktop.clearHistory()
       renderHistory()
       toast('已清空解析记录')
+    })
+
+    $('#history-sort').addEventListener('change', (event) => {
+      state.historySort = ['recent', 'continue', 'grouped'].includes(event.target.value) ? event.target.value : 'recent'
+      localStorage.setItem('csp.historySort', state.historySort)
+      renderHistory()
+    })
+    $('#history-search-input').addEventListener('input', (event) => {
+      state.historyQuery = event.target.value
+      $('#history-search-clear').hidden = !event.target.value
+      renderHistory()
+    })
+    $('#history-search-clear').addEventListener('click', () => {
+      state.historyQuery = ''
+      $('#history-search-input').value = ''
+      $('#history-search-clear').hidden = true
+      renderHistory()
     })
 
     // 弹窗
@@ -1457,6 +2414,32 @@
       }
     })
 
+    // 清理体检失效的线路
+    $('#btn-clean-lines').addEventListener('click', async () => {
+      const dead = (state.config.lines || []).filter((line) => state.lineHealth[line.id]?.ok === false)
+      if (!dead.length) {
+        toast('还没有体检失效的线路，先点侧栏「测速」或等启动体检完成', 'warn')
+        return
+      }
+      const names = dead.map((line) => line.name).join('、')
+      if (!window.confirm(`确定删除 ${dead.length} 条体检失效的线路吗？\n\n${names}\n\n删错了可以点「恢复内置线路」，自己添加的线路需要重新添加。`)) return
+      const keep = (state.config.lines || []).filter((line) => state.lineHealth[line.id]?.ok !== false)
+      if (!keep.length) {
+        toast('全部线路都被标记失效了，已保留最后一条，请先测速确认', 'warn')
+        return
+      }
+      try {
+        state.config = await window.desktop.saveLines(keep, keep.some((line) => line.id === state.currentLineId) ? state.currentLineId : keep[0].id)
+        state.draftLines = state.config.lines.map((line) => ({ ...line }))
+        renderLineSelect()
+        renderLineList()
+        renderLineEditor()
+        toast(`已清理 ${dead.length} 条失效线路`, 'ok')
+      } catch (error) {
+        toast(`清理失败：${String(error?.message || error)}`, 'error')
+      }
+    })
+
     // 播放设置
     $('#set-auto-fallback').addEventListener('change', async (event) => {
       state.config = await window.desktop.saveSettings({ autoFallback: event.target.checked })
@@ -1465,6 +2448,11 @@
     $('#set-close-tray').addEventListener('change', async (event) => {
       state.config = await window.desktop.saveSettings({ closeToTray: event.target.checked })
       toast(event.target.checked ? '关闭窗口将最小化到托盘' : '关闭窗口将退出程序')
+    })
+    $('#set-auto-line-test').addEventListener('change', async (event) => {
+      state.config = await window.desktop.saveSettings({ autoLineTest: event.target.checked })
+      toast(event.target.checked ? '已开启启动时线路体检' : '已关闭启动时线路体检')
+      if (event.target.checked) runLineHealthCheck({ silent: true })
     })
     $('#set-auto-update').addEventListener('change', async (event) => {
       state.config = await window.desktop.saveSettings({ autoUpdate: event.target.checked })
@@ -1536,6 +2524,19 @@
       if (state.fullscreen) toggleFullscreen()
     })
 
+    // 选集快捷键：Ctrl+← / Ctrl+→ 切上一集/下一集，[ ] 同样可用
+    document.addEventListener('keydown', (event) => {
+      if (!state.series || state.browserOpen) return
+      if (!$('#modal').hidden || !$('#search-modal').hidden) return
+      const target = event.target
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
+      const next = (event.ctrlKey && event.key === 'ArrowRight') || (!event.ctrlKey && event.key === ']')
+      const prev = (event.ctrlKey && event.key === 'ArrowLeft') || (!event.ctrlKey && event.key === '[')
+      if (!next && !prev) return
+      event.preventDefault()
+      seriesNav(next ? 1 : -1)
+    })
+
     window.desktop.onPasteParse(async () => {
       try {
         const url = normalizeUrlText(await window.desktop.readClipboard())
@@ -1551,7 +2552,22 @@
       }
     })
     window.desktop.onNextLine(() => nextLine())
-    window.desktop.onReload(() => $('#btn-reload').click())
+    window.desktop.onReload(() => {
+      if (state.browserOpen) {
+        try {
+          state.browsers.get(state.browserKey)?.webview.reload()
+        } catch {
+          /* 忽略 */
+        }
+        return
+      }
+      $('#btn-reload').click()
+    })
+    window.desktop.onCloseBrowser?.(() => hideBrowser())
+    window.desktop.onCloseBrowserTab?.((payload = {}) => {
+      const key = payload.key || state.browserKey
+      if (key && state.browsers.has(key)) closeBrowserTab(key)
+    })
     window.desktop.onOpenExternal(() => $('#btn-open-web').click())
     window.desktop.onOpenBrowser?.((payload = {}) => {
       if (!payload || !payload.key) return
@@ -1584,6 +2600,7 @@
       renderUpdateState(update)
       if (update.status === 'downloaded') toast(`新版本 v${update.version || ''} 已下载，重启后生效`, 'ok', 6000)
     })
+    window.desktop.onDownloadState?.(onDownloadState)
 
     // 拖拽链接
     const urlBox = $('#url-box')
@@ -1652,11 +2669,36 @@
       state.currentLineId = state.config.defaultLineId
       $('#browser-auto').checked = localStorage.getItem('csp.browserAuto') !== '0'
       state.browserAutoParse = $('#browser-auto').checked
+      state.seriesOrder = localStorage.getItem('csp.episodeOrder') === 'desc' ? 'desc' : 'asc'
+      state.seriesCollapsed = localStorage.getItem('csp.episodeCollapsed') === '1'
+      state.autoNext = localStorage.getItem('csp.autoNext') === '1'
+      $('#episode-auto-next').checked = state.autoNext
+      state.historySort = ['recent', 'continue', 'grouped'].includes(localStorage.getItem('csp.historySort'))
+        ? localStorage.getItem('csp.historySort')
+        : 'recent'
+      try {
+        const collapsed = JSON.parse(localStorage.getItem('csp.historyCollapsed') || '[]')
+        state.historyCollapsed = new Set(Array.isArray(collapsed) ? collapsed.slice(0, 50) : [])
+      } catch {
+        state.historyCollapsed = new Set()
+      }
+      state.lineHealth = state.config.lineHealth && typeof state.config.lineHealth === 'object' ? state.config.lineHealth : {}
+      for (const [id, health] of Object.entries(state.lineHealth)) {
+        if (health && typeof health === 'object') {
+          state.lineStatus[id] = { ok: Boolean(health.ok), ms: Number(health.ms) || 0, note: health.note || '', at: health.at || 0 }
+        }
+      }
+      state.hideDeadLines = localStorage.getItem('csp.hideDeadLines') === '1'
+      if (state.config.autoLineTest !== false) {
+        setTimeout(() => runLineHealthCheck({ silent: true }), 8000)
+      }
       bindEvents()
       bindWebviewEvents()
       renderLineSelect()
       renderLineList()
       renderHistory()
+      setDownloadButton()
+      updateNativeButton()
       backfillHistoryTitles()
       renderUpdateState(await window.desktop.getUpdateState())
       if (state.config.lastUrl) {
@@ -1676,6 +2718,16 @@
         getState: () => state,
         startParse,
         toggleFullscreen,
+        showSeries: (series) => {
+          if (series) saveSeries(series)
+          setSeries(series)
+        },
+        getSeries: () => state.series,
+        seriesNav,
+        switchEpisode,
+        requestSeries,
+        setDownloadButton,
+        updateNativeButton,
       }
     } catch (error) {
       console.error(error)

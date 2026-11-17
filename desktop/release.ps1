@@ -22,6 +22,7 @@ param(
     [string]$Version = "",
     [switch]$SkipBuild,
     [switch]$SkipPublish,
+    [switch]$SkipChecks,
     [switch]$NoPush,
     [string]$Repo = "fjz-hosts/changshipin-jiexi"
 )
@@ -58,6 +59,16 @@ $pkg = [System.IO.File]::ReadAllText($pkgPath, [System.Text.Encoding]::UTF8) | C
 $pkgVersion = $pkg.version
 Write-Host "当前版本：v$pkgVersion"
 
+# ---- 1.5 发版前自检 ----
+if (-not $SkipChecks) {
+    Write-Host ""
+    Write-Host ">>> 发版前自检（无头 smoke）..."
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $root "desktop\verify.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "自检未通过，已停止发版。" }
+}
+else {
+    Write-Host "跳过自检（-SkipChecks）。"
+}
 # ---- 2. 打包 ----
 if (-not $SkipBuild) {
     Write-Host ""

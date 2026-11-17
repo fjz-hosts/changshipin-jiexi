@@ -170,6 +170,105 @@ async function runSmoke({ app, window, proxy, store }) {
     historyCheck,
   )
 
+  // ---- 3.2 选集 / 下载的纯逻辑 ----
+  const series = require('./series')
+  const { parsePlaylist, sanitizeFileName } = require('./download')
+  const objectText = 'window.__X__ = {"a":{"b":"}{"},"c":[1,2],"d":"x\\"y"} ;tail'
+  const parsedObject = JSON.parse(series.sliceJsonObject(objectText, objectText.indexOf('{')))
+  check(
+    '选集：内嵌 JSON 截取（花括号/转义）',
+    parsedObject.a.b === '}{' && parsedObject.d === 'x"y' && parsedObject.c.length === 2,
+    JSON.stringify(parsedObject),
+  )
+  const fakeYouku = {
+    pageMap: { extra: { videoId: 'v1' } },
+    moduleList: [
+      {
+        title: '选集',
+        type: 10013,
+        itemList: [
+          { title: '测试剧 第1集', stage: 1, action: { value: 'v1', extra: { showId: 's1' } } },
+          { title: '测试剧 第2集', stage: 2, action: { value: 'v2', extra: { showId: 's1' } } },
+          { title: '相关推荐剧', stage: 9, action: { value: 'v9', extra: { showId: 's2' } } },
+        ],
+      },
+    ],
+  }
+  const youku = series.youkuEpisodesFromData(fakeYouku)
+  check('选集：优酷过滤相关推荐', youku.episodes.length === 2 && youku.showId === 's1', JSON.stringify(youku))
+  const playlist = parsePlaylist(
+    '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k.bin",IV=0x000102030405060708090a0b0c0d0e0f\n#EXTINF:2,\na.ts\n#EXTINF:2,\nb.ts\n#EXT-X-ENDLIST',
+    'https://example.test/a.m3u8',
+  )
+  check(
+    '下载：HLS 播放列表解析',
+    playlist.segments.length === 2 && playlist.key?.uri === 'https://example.test/k.bin' && !playlist.encryptedUnsupported,
+    JSON.stringify({ segments: playlist.segments, key: playlist.key }),
+  )
+  const badName = sanitizeFileName('剧 第1集 <a>:b?.ts')
+  check('下载：文件名清洗', !/[<>:"/\\|?*]/.test(badName), badName)
+  const unsupported = await series.resolveSeries({ url: 'https://example.com/not-video' })
+  check('选集：不支持的平台返回明确错误', unsupported.ok === false && /平台/.test(unsupported.error || ''), JSON.stringify(unsupported))
+
+  // 渲染层：选集条渲染 / 高亮
+  const seriesBar = await window.webContents.executeJavaScript(`(() => {
+    const fake = {
+      platform: 'mgtv',
+      title: '烟雾测试剧',
+      seriesKey: 'smoke:series',
+      episodes: [1, 2, 3].map((n) => ({ label: '第' + n + '集', title: '烟雾测试剧 第' + n + '集', url: 'https://www.mgtv.com/b/1/' + n + '.html', index: n })),
+    }
+    window.__app.getState().currentVideoUrl = 'https://www.mgtv.com/b/1/2.html'
+    window.__app.showSeries(fake)
+    const bar = document.querySelector('#episode-bar')
+    const active = document.querySelector('#episode-list .episode-item.active')
+    const result = {
+      hidden: bar.hidden,
+      count: document.querySelectorAll('#episode-list .episode-item').length,
+      active: active ? active.textContent : '',
+      name: document.querySelector('#episode-series-name').textContent,
+    }
+    window.__app.showSeries(null)
+    window.__app.getState().currentVideoUrl = ''
+    return JSON.stringify(result)
+  })()`)
+  const barState = JSON.parse(seriesBar)
+  check(
+    '选集条：渲染并高亮当前集',
+    barState.hidden === false && barState.count === 3 && barState.active.includes('第2集') && barState.name === '烟雾测试剧',
+    seriesBar,
+  )
+
+  // 渲染层：历史分组 / 搜索
+  const groupedHistory = await window.webContents.executeJavaScript(`(async () => {
+    const base = 'https://www.iqiyi.com/v_smoke_group_'
+    await window.desktop.addHistory({ url: base + '1.html', title: '分组测试剧 第1集', episode: '第1集' })
+    const list = await window.desktop.addHistory({ url: base + '2.html', title: '分组测试剧 第2集', episode: '第2集' })
+    window.__app.getState().config.history = list
+    const sort = document.querySelector('#history-sort')
+    sort.value = 'grouped'
+    sort.dispatchEvent(new Event('change'))
+    const groups = document.querySelectorAll('#history-list .history-group').length
+    const items = document.querySelectorAll('#history-list .history-item').length
+    const input = document.querySelector('#history-search-input')
+    input.value = 'zzz-not-exist'
+    input.dispatchEvent(new Event('input'))
+    const empty = document.querySelector('#history-list .empty-row')?.textContent || ''
+    input.value = ''
+    input.dispatchEvent(new Event('input'))
+    sort.value = 'recent'
+    sort.dispatchEvent(new Event('change'))
+    await window.desktop.removeHistory(base + '1.html')
+    await window.desktop.removeHistory(base + '2.html')
+    return JSON.stringify({ groups, items, empty })
+  })()`)
+  const grouped = JSON.parse(groupedHistory)
+  check(
+    '观看历史：按剧集分组 + 搜索无结果提示',
+    grouped.groups >= 1 && grouped.items >= 2 && grouped.empty.includes('没有匹配'),
+    groupedHistory,
+  )
+
   // ---- 3.5 在线解析链路（可选，需要外网）----
   if (process.env.CHANGSPIN_SMOKE_ONLINE === '1') {
     const sample = 'https://www.iqiyi.com/v_b13ju3xx7s.html?lt=2'

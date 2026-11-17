@@ -17,7 +17,7 @@ function cleanText(value, max = 300) {
 
 function normalizeLine(raw, index) {
   if (!raw || typeof raw !== 'object') return null
-  const kind = ['page', 'api', 'mgtv', 'direct'].includes(raw.kind) ? raw.kind : 'page'
+  const kind = ['page', 'api', 'mgtv', 'direct', 'native'].includes(raw.kind) ? raw.kind : 'page'
   const url = cleanText(raw.url, 600)
   if (!url) return null
   const id = cleanText(raw.id, 80) || `line-${Date.now()}-${index}`
@@ -32,6 +32,21 @@ function normalizeLine(raw, index) {
     platform: cleanText(raw.platform, 20),
     createdAt: Number(raw.createdAt) || Date.now(),
   }
+}
+
+function normalizeHealth(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out = {}
+  for (const [id, value] of Object.entries(raw).slice(0, 300)) {
+    if (!id || !value || typeof value !== 'object') continue
+    out[String(id).slice(0, 80)] = {
+      ok: Boolean(value.ok),
+      ms: Math.max(0, Number(value.ms) || 0),
+      note: cleanText(value.note, 120),
+      at: Number(value.at) || Date.now(),
+    }
+  }
+  return out
 }
 
 function normalizeHistory(raw) {
@@ -65,6 +80,8 @@ class Store {
       lines: DEFAULT_LINES.map((line, index) => normalizeLine(line, index)),
       defaultLineId: DEFAULT_LINES[0]?.id || '',
       history: [],
+      lineHealth: {},
+      autoLineTest: true,
       autoUpdate: true,
       autoFallback: true,
       closeToTray: false,
@@ -100,6 +117,8 @@ class Store {
         version: CONFIG_VERSION,
         lines: lines.length ? lines : defaults.lines,
         history: normalizeHistory(data.history),
+        lineHealth: normalizeHealth(data.lineHealth),
+        autoLineTest: data.autoLineTest !== false,
         autoUpdate: data.autoUpdate !== false,
         autoFallback: data.autoFallback !== false,
         closeToTray: data.closeToTray === true,
@@ -149,6 +168,10 @@ class Store {
     if (typeof patch.autoUpdate === 'boolean') this.data.autoUpdate = patch.autoUpdate
     if (typeof patch.autoFallback === 'boolean') this.data.autoFallback = patch.autoFallback
     if (typeof patch.closeToTray === 'boolean') this.data.closeToTray = patch.closeToTray
+    if (typeof patch.autoLineTest === 'boolean') this.data.autoLineTest = patch.autoLineTest
+    if (patch.lineHealth && typeof patch.lineHealth === 'object') {
+      this.data.lineHealth = normalizeHealth(patch.lineHealth)
+    }
     if (typeof patch.lastUrl === 'string') this.data.lastUrl = cleanText(patch.lastUrl, 2000)
     this._write()
     return this.snapshot()

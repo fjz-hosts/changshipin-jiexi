@@ -16,6 +16,7 @@ const {
   ipcMain,
   clipboard,
   nativeImage,
+  net,
   screen,
   session,
   shell,
@@ -36,6 +37,8 @@ const {
   isHttpUrl,
   SAMPLE_URL,
 } = require('./lines')
+const { resolveSeries } = require('./series')
+const { DownloadManager } = require('./download')
 const { PLATFORMS, detectPlatformByUrl, platformByKey } = require('./platforms')
 
 const APP_ID = 'com.fjzhosts.changshipin'
@@ -93,11 +96,11 @@ let tray = null
 let store = null
 let proxy = null
 let updater = null
+let downloader = null
+let lastStream = null
 let quitting = false
 let trayNoticeShown = false
 let isSmoke = IS_SMOKE
-
-const platformWindows = new Map()
 
 function iconPath() {
   const packaged = path.join(process.resourcesPath, 'icon.ico')
@@ -229,64 +232,6 @@ function createMainWindow() {
   mainWindow.on('leave-full-screen', () => sendCommand('window:fullscreen', false))
 }
 
-function createPlatformWindow(key, options = {}) {
-  const platform = platformByKey(key)
-  if (!platform) return null
-  const existing = [...platformWindows.values()].find((item) => item.key === key && item.win && !item.win.isDestroyed())
-  if (existing) {
-    if (options.search && !existing.win.isDestroyed()) {
-      existing.win.webContents.send('platform:search', options.search)
-    }
-    if (options.url && !existing.win.isDestroyed()) {
-      existing.win.webContents.send('platform:load', options.url)
-    }
-    existing.win.show()
-    existing.win.focus()
-    return existing.win
-  }
-  const win = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 940,
-    minHeight: 620,
-    show: false,
-    title: `${platform.name} · 内置浏览器`,
-    backgroundColor: '#070b12',
-    icon: iconPath(),
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'platform-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: true,
-      spellcheck: false,
-    },
-  })
-  win.setMenuBarVisibility(false)
-  win.loadFile(path.join(__dirname, 'renderer', 'platform.html'), {
-    query: { key, q: options.search || '', u: options.url || '' },
-  })
-  // 必须在 closed 之前把 id 存下来：closed 触发时 webContents 已经销毁，
-  // 再去读 win.webContents.id 就会抛 "Object has been destroyed"。
-  const winId = win.webContents.id
-  platformWindows.set(winId, { win, key })
-  win.on('closed', () => {
-    platformWindows.delete(winId)
-  })
-  win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    delete webPreferences.preload
-    webPreferences.nodeIntegration = false
-    webPreferences.contextIsolation = true
-    webPreferences.sandbox = true
-    if (!/^https?:\/\//i.test(params.src || '')) event.preventDefault()
-  })
-  win.once('ready-to-show', () => {
-    if (!win.isDestroyed()) win.show()
-  })
-  return win
-}
-
 function sendCommand(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload)
@@ -363,7 +308,6 @@ app.on('web-contents-created', (_event, contents) => {
       if (!host || host.isDestroyed()) return { action: 'deny' }
       const parentWindow = BrowserWindow.fromWebContents(host)
       if (!parentWindow || parentWindow.isDestroyed()) return { action: 'deny' }
-      const entry = [...platformWindows.values()].find((item) => item.win === parentWindow)
       // 主窗口里的内置浏览器：登录弹窗单独开，其余链接留在当前 webview 内
       const webviewPlatform = PLATFORMS.find(
         (item) => session.fromPartition(item.partition) === contents.session,
@@ -395,36 +339,6 @@ app.on('web-contents-created', (_event, contents) => {
         }
         return { action: 'deny' }
       }
-      if (entry && /^https?:\/\//i.test(url)) {
-        // 登录 / 授权 / 支付弹窗照旧独立打开
-        if (isAuthUrl(url)) {
-          return {
-            action: 'allow',
-            overrideBrowserWindowOptions: {
-              width: 1020,
-              height: 780,
-              autoHideMenuBar: true,
-              title: '登录',
-              icon: iconPath(),
-              backgroundColor: '#070b12',
-              webPreferences: {
-                partition: `persist:platform-${entry.key}`,
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true,
-              },
-            },
-          }
-        }
-        // 其余一律在当前内置浏览器窗口里打开（同一平台剧集、外站链接都一样），
-        // 不再另开窗口，用户可以后退回到刚才的首页/搜索页。
-        try {
-          contents.loadURL(url)
-        } catch {
-          /* 忽略 */
-        }
-        return { action: 'deny' }
-      }
       if (/^https?:\/\//i.test(url)) log(`[解析页弹窗已拦截] ${url}`)
       return { action: 'deny' }
     } catch (error) {
@@ -432,6 +346,43 @@ app.on('web-contents-created', (_event, contents) => {
       return { action: 'deny' }
     }
   })
+  // 平台 webview 里也有键盘：Alt+←/→ 后退/前进、Esc 返回主界面、Ctrl+W 关闭当前标签页。
+  // 主窗口的 document keydown 拿不到 webview 内的按键，所以必须在主进程拦截。
+  const platformForContents = PLATFORMS.find((item) => session.fromPartition(item.partition) === contents.session)
+  if (platformForContents) {
+    contents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      const key = String(input.key || '')
+      if (input.alt && key === 'ArrowLeft') {
+        event.preventDefault()
+        try {
+          if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
+        } catch {
+          /* 忽略 */
+        }
+        return
+      }
+      if (input.alt && key === 'ArrowRight') {
+        event.preventDefault()
+        try {
+          if (contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward()
+        } catch {
+          /* 忽略 */
+        }
+        return
+      }
+      if (key === 'Escape') {
+        event.preventDefault()
+        sendCommand('app:close-browser')
+        return
+      }
+      if (input.control && key.toLowerCase() === 'w') {
+        event.preventDefault()
+        sendCommand('app:close-browser-tab', { key: platformForContents.key })
+      }
+    })
+  }
+
   contents.on('will-navigate', (event, url) => {
     if (!/^https?:\/\//i.test(url)) event.preventDefault()
   })
@@ -578,8 +529,31 @@ function quitApp() {
   app.quit()
 }
 
-function createDesktopShortcut() {
-  if (!app.isPackaged) {
+// 默认放「下载\长视频解析」。部分机器开了 Defender 受控文件夹访问，
+// 直接往 Downloads 写会 EPERM，这里逐个候选目录做一次可写测试。
+function pickDownloadDir() {
+  const candidates = [
+    path.join(app.getPath('downloads'), APP_NAME),
+    path.join(app.getPath('videos'), APP_NAME),
+    path.join(app.getPath('documents'), APP_NAME),
+    path.join(userDataDir, 'downloads'),
+  ]
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      const probe = path.join(dir, `.write-test-${process.pid}`)
+      fs.writeFileSync(probe, '1')
+      fs.unlinkSync(probe)
+      log(`下载目录：${dir}`)
+      return dir
+    } catch {
+      /* 尝试下一个 */
+    }
+  }
+  return path.join(userDataDir, 'downloads')
+}
+
+function createDesktopShortcut() {  if (!app.isPackaged) {
     return { ok: false, error: '开发模式下不创建快捷方式' }
   }
   try {
@@ -748,6 +722,19 @@ function registerIpc() {
 
   ipcMain.handle('page:title', async (_event, url) => resolvePageTitle(normalizeUrlText(url)))
 
+  // 选集：按平台从页面 / 官方接口取分集列表（QQ、芒果、优酷不需要打开页面，爱奇艺会开一个隐藏页读 tvid）
+  ipcMain.handle('series:resolve', async (_event, payload = {}) => {
+    const url = normalizeUrlText(payload.url)
+    try {
+      const result = await resolveSeries({ url, hint: payload.hint || {} })
+      log(`[选集] ${url} → ${result.ok ? `${result.episodes.length} 集（${result.source}）` : result.error}`)
+      return result
+    } catch (error) {
+      log(`[选集] 解析失败 ${url}：${error?.stack || error}`)
+      return { ok: false, error: String(error?.message || error).slice(0, 160) }
+    }
+  })
+
   ipcMain.handle('clipboard:read', () => clipboard.readText())
 
   ipcMain.handle('clipboard:write', (_event, text) => {
@@ -783,6 +770,15 @@ function registerIpc() {
         const platform = detectPlatformByUrl(url)
         const referer = result.referer || platform?.home || url
         const playUrl = proxy.resourceUrl(result.streamUrl, referer, cookieHeader)
+        lastStream = {
+          url: result.streamUrl,
+          referer,
+          cookie: cookieHeader,
+          title: result.title || '',
+          platform: platform?.name || '',
+          lineName: line.name,
+          videoUrl: url,
+        }
         log(`解析 ${line.name} → 流地址 ${result.streamUrl}`)
         return {
           ok: true,
@@ -804,13 +800,44 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('download:start', (_event, payload = {}) => {
+    if (!downloader) return { ok: false, error: '下载器还没准备好' }
+    if (!lastStream) return { ok: false, error: '当前不是内置播放器，无法下载（网页解析线路不支持下载）' }
+    const title = String(payload.title || lastStream.title || '').trim() || lastStream.platform || '视频'
+    const result = downloader.start({
+      url: lastStream.url,
+      referer: lastStream.referer,
+      cookie: lastStream.cookie,
+      title,
+      platform: lastStream.platform,
+      lineName: lastStream.lineName,
+    })
+    if (result.ok) log(`[下载] 开始 ${title}（${lastStream.lineName}）`)
+    return result
+  })
+
+  ipcMain.handle('download:cancel', (_event, id) => downloader?.cancel(String(id || '')) || false)
+  ipcMain.handle('download:folder', () => {
+    const folder = downloader?.folder || ''
+    if (!folder) return false
+    return shell.openPath(folder)
+  })
+  ipcMain.handle('download:reveal', () => {
+    const file = downloader?.lastSavedPath || ''
+    if (file && fs.existsSync(file)) {
+      shell.showItemInFolder(file)
+      return true
+    }
+    return false
+  })
+
   ipcMain.handle('lines:test', async (_event, payload = {}) => {
     const sample = isHttpUrl(payload.url) ? normalizeUrlText(payload.url) : SAMPLE_URL
     if (payload.draft && typeof payload.draft === 'object') {
       const draft = {
         id: 'draft',
         name: String(payload.draft.name || '临时线路'),
-        kind: ['page', 'api', 'mgtv', 'direct'].includes(payload.draft.kind) ? payload.draft.kind : 'page',
+        kind: ['page', 'api', 'mgtv', 'direct', 'native'].includes(payload.draft.kind) ? payload.draft.kind : 'page',
         url: String(payload.draft.url || ''),
         platform: String(payload.draft.platform || ''),
         enabled: true,
@@ -940,6 +967,7 @@ app.on('before-quit', () => {
   quitting = true
   updater?.dispose()
   proxy?.stop()
+  downloader?.cancelAll()
 })
 
 app.on('activate', () => {
@@ -957,6 +985,14 @@ app.whenReady().then(async () => {
   }
   proxy = await new StreamProxy().start()
   log(`本地取流代理已启动：${proxy.base}`)
+
+  downloader = new DownloadManager({
+    log,
+    dir: pickDownloadDir(),
+    onState: (state) => sendCommand('download:state', state),
+    // 分片改走本地代理（Chromium 网络栈），能带上防盗链需要的头，和播放走同一条路
+    proxify: (url, job) => proxy.resourceUrl(url, job.referer || '', job.cookie || ''),
+  })
 
   updater = new UpdateManager({
     log,

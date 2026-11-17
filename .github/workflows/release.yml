@@ -1,0 +1,76 @@
+name: release-windows
+
+# 手动触发：在 Actions 页面点 "Run workflow"。
+# 用于本地网络推不动 GitHub 时，直接由 CI 构建并上传安装包到 Releases（同名覆盖）。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（例如 1.0.10，留空则用 package.json 里的）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: desktop/electron
+        run: npm install --no-audit --no-fund
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content desktop/electron/package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $version = "${{ inputs.version }}"
+          if (-not $version) { $version = $pkg.version }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set version
+        if: inputs.version != ''
+        working-directory: desktop/electron
+        shell: pwsh
+        run: |
+          $path = 'package.json'
+          $text = [System.IO.File]::ReadAllText($path)
+          $text = [regex]::Replace($text, '("version"\s*:\s*")[^"]*(")', ('${1}${{ inputs.version }}${2}'), 1)
+          [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+
+      - name: Build installer (NSIS x64)
+        working-directory: desktop/electron
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Publish / update GitHub Release
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          $tag = "v$version"
+          $files = @(
+            "release/changshipin-Setup-$version.exe",
+            "release/changshipin-Setup-$version.exe.blockmap",
+            "release/latest.yml"
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) { throw "缺少产物：$file" }
+          }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "长视频解析 v$version" --generate-notes --target "${{ github.sha }}"
+          }
+          gh release upload $tag $files --clobber
+          Write-Host "已发布：$tag"

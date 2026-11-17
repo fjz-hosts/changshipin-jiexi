@@ -8,6 +8,13 @@ const UA =
 
 const SAMPLE_URL = 'https://www.iqiyi.com/v_b13ju3xx7s.html?lt=2'
 
+const SAMPLE_URLS = {
+  iqiyi: SAMPLE_URL,
+  qq: 'https://v.qq.com/x/cover/mzc002001w361jz/x4102olnagg.html',
+  youku: 'https://v.youku.com/v_show/id_XNjU3MzkyOTA0NA==.html',
+  mgtv: 'https://www.mgtv.com/b/817372/24773914.html',
+}
+
 // 内置线路：全部来自互联网上公开的第三方解析服务。
 // 这类服务变动非常频繁，所以程序支持「线路管理 / 在线更新线路」，
 // 失效时请换一条线路，或在设置里填入你自己可用的接口。
@@ -111,6 +118,36 @@ const DEFAULT_LINES = [
     builtin: true,
     platform: 'mgtv',
     note: '内置芒果TV 接口，需国内网络；在芒果内置窗口登录会员后可解 VIP',
+  },
+  {
+    id: 'builtin-iqiyi-native',
+    name: '爱奇艺 原生取流（实验）',
+    kind: 'native',
+    url: 'native://auto',
+    enabled: false,
+    builtin: true,
+    platform: 'iqiyi',
+    note: '隐藏窗口里让爱奇艺页面自己播放，抓真实 m3u8/mp4；免费内容可用，DRM/会员内容失败会自动换线',
+  },
+  {
+    id: 'builtin-qq-native',
+    name: '腾讯视频 原生取流（实验）',
+    kind: 'native',
+    url: 'native://auto',
+    enabled: false,
+    builtin: true,
+    platform: 'qq',
+    note: '隐藏窗口嗅探腾讯视频自己的播放流；免费内容可用，会员/DRM 内容失败会自动换线',
+  },
+  {
+    id: 'builtin-youku-native',
+    name: '优酷 原生取流（实验）',
+    kind: 'native',
+    url: 'native://auto',
+    enabled: false,
+    builtin: true,
+    platform: 'youku',
+    note: '隐藏窗口嗅探优酷自己的播放流；免费内容可用，会员/DRM 内容失败会自动换线',
   },
   {
     id: 'builtin-direct',
@@ -400,6 +437,10 @@ async function parseWithLine({ videoUrl, line, cookieHeader = '' }) {
   if (!line) throw new Error('没有可用的解析线路')
   if (line.kind === 'direct') return { kind: 'page', url: videoUrl, note: '官网页面模式' }
   if (line.kind === 'mgtv') return await extractMango(videoUrl, cookieHeader)
+  if (line.kind === 'native') {
+    const { sniffNative } = require('./native')
+    return await sniffNative({ url: videoUrl, platform: line.platform })
+  }
   const target = buildLineUrl(line.url, videoUrl)
   if (line.kind === 'page') return { kind: 'page', url: target }
   if (line.kind === 'api') {
@@ -417,8 +458,12 @@ async function parseWithLine({ videoUrl, line, cookieHeader = '' }) {
 async function testLine(line, sampleUrl = SAMPLE_URL) {
   if (!line) return { ok: false, ms: 0, note: '线路不存在' }
   if (line.kind === 'direct') return { ok: true, ms: 0, note: '本地模式，无需网络' }
+  // 平台专属线路用自己的平台样例测，否则“不适用于当前链接”会被误判成失效
+  if (line.platform && SAMPLE_URLS[line.platform] && !new RegExp(`${line.platform}\\.com`, 'i').test(sampleUrl)) {
+    sampleUrl = SAMPLE_URLS[line.platform]
+  }
   if (line.platform && !new RegExp(`${line.platform}\\.com`, 'i').test(sampleUrl)) {
-    return { ok: false, ms: 0, note: '仅用于芒果TV（当前测速链接不是芒果TV）' }
+    return { ok: false, ms: 0, note: `仅用于${line.platform}（当前测速链接不是该平台）` }
   }
   const started = Date.now()
   try {
@@ -433,6 +478,12 @@ async function testLine(line, sampleUrl = SAMPLE_URL) {
       const ms = Date.now() - started
       if (result.kind === 'stream') return { ok: true, ms, note: '已解析出播放地址' }
       return { ok: false, ms, note: result.error || '没有解析结果' }
+    }
+    if (line.kind === 'native') {
+      const result = await parseWithLine({ videoUrl: sampleUrl, line })
+      const ms = Date.now() - started
+      if (result.kind === 'stream') return { ok: true, ms, note: `原生流可用（${result.note || '已嗅探'}）` }
+      return { ok: false, ms, note: result.error || '原生取流失败' }
     }
     const target = buildLineUrl(line.url, sampleUrl)
     const response = await fetchText(target, 12000)
@@ -478,6 +529,7 @@ async function fetchOnlineLines() {
 module.exports = {
   UA,
   SAMPLE_URL,
+  SAMPLE_URLS,
   DEFAULT_LINES,
   isHttpUrl,
   normalizeUrlText,

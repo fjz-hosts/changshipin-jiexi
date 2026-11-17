@@ -1,5 +1,5 @@
 {
-    "version":  5,
+    "version":  6,
     "updatedAt":  "2026-11-17",
     "note":  "在线线路清单：程序「设置 → 解析线路 → 在线更新线路」会拉取本文件；id 保持不变可沿用本地的启用/停用状态。",
     "lines":  [
@@ -35,6 +35,33 @@
                       "enabled":  true,
                       "note":  "内置芒果TV 接口，需国内网络；在芒果内置窗口登录会员后可解 VIP",
                       "platform":  "mgtv"
+                  },
+                  {
+                      "id":  "builtin-iqiyi-native",
+                      "name":  "爱奇艺 原生取流（实验）",
+                      "kind":  "native",
+                      "url":  "native://auto",
+                      "enabled":  false,
+                      "note":  "隐藏窗口嗅探爱奇艺页面自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "platform":  "iqiyi"
+                  },
+                  {
+                      "id":  "builtin-qq-native",
+                      "name":  "腾讯视频 原生取流（实验）",
+                      "kind":  "native",
+                      "url":  "native://auto",
+                      "enabled":  false,
+                      "note":  "隐藏窗口嗅探腾讯视频自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "platform":  "qq"
+                  },
+                  {
+                      "id":  "builtin-youku-native",
+                      "name":  "优酷 原生取流（实验）",
+                      "kind":  "native",
+                      "url":  "native://auto",
+                      "enabled":  false,
+                      "note":  "隐藏窗口嗅探优酷自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "platform":  "youku"
                   },
                   {
                       "id":  "builtin-ck",
