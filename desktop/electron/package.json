@@ -1,0 +1,87 @@
+{
+  "name": "changshipin-jiexi",
+  "productName": "长视频解析",
+  "version": "1.0.0",
+  "description": "长视频解析 · 爱奇艺 / 腾讯视频 / 优酷 / 芒果TV 链接解析播放（Windows 桌面端）",
+  "author": {
+    "name": "fjz-hosts"
+  },
+  "license": "MIT",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir --publish never",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.fjzhosts.changshipin",
+    "productName": "长视频解析",
+    "copyright": "Copyright © 2026 fjz-hosts",
+    "asar": true,
+    "directories": {
+      "output": "../../release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../使用说明.txt",
+        "to": "使用说明.txt"
+      },
+      {
+        "from": "../../README.md",
+        "to": "README.md"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "changshipin-Setup-${version}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "长视频解析",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "language": "2052",
+      "artifactName": "changshipin-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/"
+      }
+    ]
+  }
+}

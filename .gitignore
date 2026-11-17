@@ -1,0 +1,24 @@
+# 依赖与构建产物
+node_modules/
+release/
+dist/
+.tmp/
+
+# 本地开发工具产物
+tools/*.png
+tools/*.mp4
+tools/_audiovisual/
+tools/webview-probe/shots/
+tools/webview-probe/probe-result.json
+
+# 日志与系统文件
+*.log
+*.exe
+!release/*.exe
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 编辑器
+.vscode/
+.idea/

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src http: https: blob:; connect-src http: https:; worker-src blob:; child-src blob:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>长视频解析 · 四平台链接解析播放</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M11 8.5v15l13-7.5-13-7.5Z" fill="currentColor" />
+            </svg>
+          </div>
+          <div class="brand-text">
+            <strong>长视频解析</strong>
+            <span>爱奇艺 · 腾讯视频 · 优酷 · 芒果TV</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="pill-btn" id="update-pill" title="点击检查更新">
+            <span class="status-dot" id="update-dot"></span>
+            <span id="update-text">v1.0.0</span>
+          </button>
+          <button class="ghost-btn" id="btn-lines">线路管理</button>
+          <button class="ghost-btn" id="btn-settings">设置</button>
+        </div>
+      </header>
+
+      <section class="quick-row" aria-label="平台快捷入口">
+        <div class="quick-head">
+          <span>快捷入口</span>
+          <small>点击进入平台官网（内置窗口，可登录会员）；把视频页链接粘回上方即可解析</small>
+        </div>
+        <div class="platform-grid">
+          <div class="platform-card" data-platform="iqiyi" style="--brand: #00d95f; --brand-soft: rgba(0, 217, 95, 0.16)">
+            <button class="card-main" data-action="open">
+              <span class="logo">爱</span>
+              <span class="platform-meta"><b>爱奇艺</b><small>www.iqiyi.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="qq" style="--brand: #2b8cff; --brand-soft: rgba(43, 140, 255, 0.16)">
+            <button class="card-main" data-action="open">
+              <span class="logo">腾</span>
+              <span class="platform-meta"><b>腾讯视频</b><small>v.qq.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="youku" style="--brand: #35a6ff; --brand-soft: rgba(53, 166, 255, 0.16)">
+            <button class="card-main" data-action="open">
+              <span class="logo">优</span>
+              <span class="platform-meta"><b>优酷</b><small>www.youku.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="mgtv" style="--brand: #ff8a1f; --brand-soft: rgba(255, 138, 31, 0.16)">
+            <button class="card-main" data-action="open">
+              <span class="logo">芒</span>
+              <span class="platform-meta"><b>芒果TV</b><small>www.mgtv.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="parse-row">
+        <div class="url-box" id="url-box">
+          <span class="platform-badge" id="platform-badge">未识别</span>
+          <input
+            id="url-input"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="粘贴视频链接，例如 https://www.iqiyi.com/v_xxx.html  或  https://v.qq.com/x/cover/xxx/xxx.html"
+          />
+          <button class="mini-btn" id="btn-paste" title="从剪贴板粘贴">粘贴</button>
+          <button class="icon-btn" id="btn-clear" title="清空">✕</button>
+        </div>
+        <div class="line-box">
+          <select class="select" id="line-select" aria-label="选择解析线路"></select>
+          <button class="parse-btn" id="btn-parse">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor" /></svg>
+            <span>解析播放</span>
+          </button>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <section class="stage" id="stage">
+          <div class="stage-head">
+            <div class="stage-title">
+              <span class="live-dot" id="live-dot"></span>
+              <span id="stage-title-text">等待解析</span>
+              <span class="chip" id="stage-line">未选择线路</span>
+            </div>
+            <div class="stage-tools">
+              <button class="tool-btn" id="btn-reload" title="重新加载当前画面">刷新</button>
+              <button class="tool-btn" id="btn-next-line" title="换一条解析线路">换线路</button>
+              <button class="tool-btn" id="btn-open-web" title="用系统浏览器打开当前链接">浏览器打开</button>
+              <button class="tool-btn" id="btn-fullscreen" title="全屏（F11）">全屏</button>
+            </div>
+          </div>
+
+          <div class="stage-body" id="stage-body">
+            <div class="stage-view empty" id="view-empty">
+              <div class="empty-art" aria-hidden="true">
+                <div class="empty-ring"></div>
+                <svg viewBox="0 0 64 64"><path d="M26 18v28l24-14-24-14Z" fill="currentColor" /></svg>
+              </div>
+              <h2>把链接粘进来，直接开播</h2>
+              <p>四平台通用 · 自动识别 · 线路可切换 · 失败自动换线</p>
+              <ol class="steps">
+                <li><b>1</b><span>复制平台视频页链接</span></li>
+                <li><b>2</b><span>粘贴到上方输入框</span></li>
+                <li><b>3</b><span>点「解析播放」，或按 Enter</span></li>
+              </ol>
+              <p class="empty-note">解析线路来自公开第三方接口，失效时请「换线路」或在「线路管理」里添加自己的接口。</p>
+            </div>
+
+            <div class="stage-view loading" id="view-loading" hidden>
+              <div class="spinner" aria-hidden="true"></div>
+              <h2 id="loading-title">正在连接解析线路…</h2>
+              <p id="loading-detail">首次加载可能稍慢，长时间无画面请点击「换线路」。</p>
+            </div>
+
+            <div class="stage-view error" id="view-error" hidden>
+              <div class="error-mark" aria-hidden="true">!</div>
+              <h2 id="error-title">解析失败</h2>
+              <p id="error-detail"></p>
+              <div class="error-actions">
+                <button class="primary-sm" id="btn-error-retry">重试</button>
+                <button class="ghost-sm" id="btn-error-next">换线路</button>
+                <button class="ghost-sm" id="btn-error-lines">线路管理</button>
+              </div>
+            </div>
+
+            <div class="stage-view video-view" id="view-video" hidden>
+              <video id="video" controls playsinline preload="metadata"></video>
+            </div>
+
+            <div class="stage-view webview-view" id="view-webview" hidden>
+              <webview id="parse-view" partition="persist:parse" webpreferences="contextIsolation=yes, nodeIntegration=no"></webview>
+            </div>
+          </div>
+
+          <div class="stage-foot">
+            <span class="source-url" id="source-url" title="当前解析的链接">尚未解析</span>
+            <div class="foot-actions">
+              <button class="tool-btn" id="btn-copy-source">复制链接</button>
+              <button class="tool-btn" id="btn-reparse">重新解析</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side">
+          <section class="panel">
+            <header>
+              <h3>解析线路</h3>
+              <button class="mini-btn" id="btn-test-all">测速</button>
+            </header>
+            <ul class="line-list" id="line-list"></ul>
+          </section>
+
+          <section class="panel history-panel">
+            <header>
+              <h3>最近解析</h3>
+              <button class="mini-btn" id="btn-clear-history">清空</button>
+            </header>
+            <ul class="history-list" id="history-list"></ul>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="statusbar">
+        <span class="status-main" id="status-text">就绪</span>
+        <span class="status-meta"><span id="version-text">v1.0.0</span> · 快捷键 Enter 解析 / F11 全屏</span>
+      </footer>
+    </div>
+
+    <div class="modal-mask" id="modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-head">
+          <h2 id="modal-title">设置</h2>
+          <button class="icon-btn" id="modal-close" title="关闭">✕</button>
+        </header>
+        <nav class="tabs" id="modal-tabs">
+          <button data-tab="lines" class="active">解析线路</button>
+          <button data-tab="play">播放</button>
+          <button data-tab="update">更新</button>
+          <button data-tab="about">关于</button>
+        </nav>
+        <div class="tab-panes">
+          <section class="tab-pane" data-pane="lines">
+            <p class="hint">
+              线路顺序即自动切换顺序。网页线路需要「地址 + ?url=」，接口线路返回 JSON 或 HTML 时程序会自动提取
+              m3u8 / mp4 地址。失效线路请删除或在线更新。
+            </p>
+            <div class="line-editor" id="line-editor"></div>
+            <div class="row-btns">
+              <button class="ghost-sm" id="btn-add-line">+ 新增线路</button>
+              <button class="ghost-sm" id="btn-online-lines">在线更新线路</button>
+              <button class="ghost-sm danger" id="btn-reset-lines">恢复内置线路</button>
+              <span class="spacer"></span>
+              <button class="primary-sm" id="btn-save-lines">保存线路</button>
+            </div>
+          </section>
+
+          <section class="tab-pane" data-pane="play" hidden>
+            <label class="switch-row">
+              <input type="checkbox" id="set-auto-fallback" />
+              <span>解析失败自动切换下一条线路</span>
+            </label>
+            <label class="switch-row">
+              <input type="checkbox" id="set-close-tray" />
+              <span>关闭窗口时最小化到托盘（后台继续播放）</span>
+            </label>
+            <p class="hint">
+              内置浏览器窗口的登录状态会保留。已登录会员可以选用「官网页面（会员登录）」线路直接播放原片，
+              不经过第三方解析。
+            </p>
+          </section>
+
+          <section class="tab-pane" data-pane="update" hidden>
+            <div class="kv"><span>当前版本</span><b id="set-version">-</b></div>
+            <label class="switch-row">
+              <input type="checkbox" id="set-auto-update" />
+              <span>启动时自动检查更新（GitHub Releases）</span>
+            </label>
+            <div class="update-status" id="update-status">等待检查</div>
+            <div class="row-btns">
+              <button class="primary-sm" id="btn-check-update">立即检查更新</button>
+              <button class="ghost-sm" id="btn-install-update" hidden>重启安装</button>
+            </div>
+            <details class="feeds">
+              <summary>更新源（多镜像自动切换）</summary>
+              <ul id="feed-list"></ul>
+            </details>
+          </section>
+
+          <section class="tab-pane" data-pane="about" hidden>
+            <div class="about-block">
+              <h3>长视频解析</h3>
+              <p>桌面端的四平台链接解析播放工具：粘贴链接，选择线路，直接观看。</p>
+              <p class="muted">
+                本程序不存储、不转码、不分发任何视频内容。解析能力来自互联网公开的第三方接口，接口随时可能失效或变更；
+                请在遵守平台服务条款与当地法律的前提下，用于个人学习与合法观看。
+              </p>
+              <div class="row-btns">
+                <button class="ghost-sm" id="btn-open-repo">GitHub 项目主页</button>
+                <button class="ghost-sm" id="btn-open-userdata">打开配置目录</button>
+                <button class="ghost-sm" id="btn-open-logs">打开日志目录</button>
+              </div>
+              <p class="muted small">版本 <span id="about-version">-</span> · MIT License</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+    <script src="vendor/hls.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

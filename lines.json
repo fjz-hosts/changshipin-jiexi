@@ -1,0 +1,95 @@
+{
+  "version": 4,
+  "updatedAt": "2026-11-17",
+  "note": "在线线路清单：程序「设置 → 解析线路 → 在线更新线路」会拉取本文件；id 保持不变可沿用本地的启用/停用状态。",
+  "lines": [
+    {
+      "id": "builtin-789",
+      "name": "789解析",
+      "kind": "page",
+      "url": "https://jiexi.789jiexi.icu:4433/?url={url}",
+      "enabled": true,
+      "note": "实测可出画面，四平台通用"
+    },
+    {
+      "id": "builtin-playm3u8",
+      "name": "PlayM3U8",
+      "kind": "page",
+      "url": "https://www.playm3u8.cn/jiexi.php?url={url}",
+      "enabled": true,
+      "note": "实测可出画面"
+    },
+    {
+      "id": "builtin-pangu",
+      "name": "盘古解析",
+      "kind": "page",
+      "url": "https://www.pangujiexi.com/jiexi/?url={url}",
+      "enabled": true,
+      "note": "实测可出画面"
+    },
+    {
+      "id": "builtin-ck",
+      "name": "CK解析",
+      "kind": "page",
+      "url": "https://www.ckplayer.vip/jiexi/?url={url}",
+      "enabled": false,
+      "note": "时好时坏，备用"
+    },
+    {
+      "id": "builtin-77flv",
+      "name": "七七云解析",
+      "kind": "page",
+      "url": "https://jx.77flv.cc/?url={url}",
+      "enabled": false,
+      "note": "部分视频只返回占位画面"
+    },
+    {
+      "id": "builtin-xmflv",
+      "name": "虾米解析",
+      "kind": "page",
+      "url": "https://jx.xmflv.com/?url={url}",
+      "enabled": false,
+      "note": "稳定性一般，默认关闭"
+    },
+    {
+      "id": "builtin-2s0",
+      "name": "极速解析",
+      "kind": "page",
+      "url": "https://jx.2s0.cn/player/?url={url}",
+      "enabled": false,
+      "note": "备用"
+    },
+    {
+      "id": "builtin-playerjy",
+      "name": "PlayerJY",
+      "kind": "page",
+      "url": "https://jx.playerjy.com/?url={url}",
+      "enabled": false,
+      "note": "部分地区无法访问"
+    },
+    {
+      "id": "builtin-m1907",
+      "name": "M1907",
+      "kind": "page",
+      "url": "https://im1907.top/?jx={url}",
+      "enabled": false,
+      "note": "演示接口，多数视频无法解析"
+    },
+    {
+      "id": "builtin-yemu",
+      "name": "夜幕",
+      "kind": "page",
+      "url": "https://www.yemu.xyz/?url={url}",
+      "enabled": false,
+      "note": "站点已改版，仅作备用"
+    },
+    {
+      "id": "builtin-direct",
+      "name": "官网页面（会员登录）",
+      "kind": "direct",
+      "url": "direct://video",
+      "enabled": false,
+      "note": "不做解析，直接打开原片页面；适合已登录的会员"
+    }
+  ]
+}

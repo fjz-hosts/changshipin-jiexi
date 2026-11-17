@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src http: https: blob:; connect-src http: https:;"
+    />
+    <title>平台官网</title>
+    <link rel="stylesheet" href="platform.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="nav">
+        <button id="btn-back" class="nav-btn" title="后退 (Alt+←)">←</button>
+        <button id="btn-forward" class="nav-btn" title="前进 (Alt+→)">→</button>
+        <button id="btn-reload" class="nav-btn" title="刷新 (F5)">⟳</button>
+        <button id="btn-home" class="nav-btn" title="回到首页">⌂</button>
+      </div>
+      <div class="brand" id="brand">
+        <span class="logo" id="brand-logo">爱</span>
+        <span id="brand-name">爱奇艺</span>
+      </div>
+      <div class="address">
+        <input id="address" type="text" spellcheck="false" placeholder="输入网址，回车打开" />
+        <span class="page-badge" id="page-badge">首页</span>
+      </div>
+      <div class="actions">
+        <button id="btn-copy" class="act" title="复制当前页面链接">复制链接</button>
+        <button id="btn-parse" class="act primary" title="把当前页面链接发到主界面解析">填入解析</button>
+        <button id="btn-external" class="act" title="用系统浏览器打开">浏览器</button>
+      </div>
+    </header>
+    <div class="progress" id="progress" hidden></div>
+    <div class="browser" id="browser">
+      <div class="hint" id="hint">
+        <p>正在打开官网…</p>
+      </div>
+    </div>
+    <script src="platform.js"></script>
+  </body>
+</html>
