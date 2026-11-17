@@ -254,8 +254,8 @@
         video.play().catch(() => {})
         $('#live-dot').classList.add('playing')
       })
-      hls.loadSource(result.playUrl)
       hls.attachMedia(video)
+      hls.loadSource(result.playUrl)
     } else {
       video.src = result.playUrl
       video.play().catch(() => {})
