@@ -5,6 +5,7 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 程序本身不提供、不存储、不分发任何视频内容；解析能力来自互联网上公开的第三方解析接口，线路失效时可自行更换或添加。
 
 > 开发/维护/交接说明：见 [项目开发交接文档.md](项目开发交接文档.md)（架构、数据、构建发版、测试、已知限制、下一步）。
+> 项目规则见 [AGENTS.md](AGENTS.md)：**发版统一走 GitHub Actions 的 `release-windows` 工作流**，不要在本机跑 NSIS 打包。
 
 ![主界面](docs/screenshot-main.png)
 
@@ -75,11 +76,12 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 ## 自动更新与发版
 
 ```
-本地 release.ps1
-   ├─ 改版本号（desktop/electron/package.json）
+改版本号（desktop/electron/package.json）→ git push main
+        │
+        ▼
+GitHub Actions · release-windows（干净 windows-latest）
    ├─ electron-builder 打包 NSIS 安装包 + latest.yml + blockmap
-   ├─ gh release create/upload → GitHub Releases
-   └─ git commit / tag vX.Y.Z / push
+   └─ gh release create/upload → GitHub Releases
                 │
                 ▼
 GitHub Releases（安装包 + latest.yml）
@@ -91,11 +93,19 @@ GitHub Releases（安装包 + latest.yml）
 - 更新配置在 `desktop/electron/package.json` 的 `build.publish`（generic provider，指向 `gh.monlor.com` 镜像）。
 - 客户端 `src/updater.js` 内置 5 个更新源，按顺序回退；镜像不可用时自动换下一个。
 - 安装包与 `latest.yml` 同名同级，`latest.yml` 里的下载地址是相对路径，因此换哪个镜像都能下载。
-- 发布新版本：`powershell -ExecutionPolicy Bypass -File desktop\release.ps1 -Version 1.0.4`
-  - 只打包：`-SkipPublish`；只上传：`-SkipBuild`；不推 git：`-NoPush`。
-  - 只打安装包：`desktop\build.ps1`；只上传：`desktop\publish.ps1`。
+- **标准发版（推荐）**：
 
-GitHub Actions（`.github/workflows/build.yml`）会在推送 `v*` tag 时做一次干净环境构建，产物上传为 workflow artifact，便于验证「别人 clone 下来能不能构建」。
+  ```powershell
+  git add -A
+  git commit -m "feat: v1.0.11 <说明>"
+  git -c http.proxy= -c https.proxy= push origin main
+  gh workflow run release-windows --ref main -f version=1.0.11
+  gh run watch <run-id> --exit-status
+  ```
+
+- 本机 `desktop\release.ps1` / `build.ps1` 仅作离线备用：本机 NSIS 生成卸载器时会被安全软件 / SmartScreen / 临时目录挡住（`NSIS Error: Error writing temporary file`），不要再作为发版流程；详见 [AGENTS.md](AGENTS.md)。
+- 本机安装器被 SmartScreen 挡住时，可以用 `release\win-unpacked` 直接覆盖安装目录（robocopy），功能和自动更新都正常。
+- `.github/workflows/build.yml` 仍然只在推送 `v*` tag 时构建 artifact；`release.yml` 是手动触发的“构建 + 发布”工作流，两者不冲突。
 
 ## 目录结构
 
