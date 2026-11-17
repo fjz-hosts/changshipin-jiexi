@@ -109,17 +109,19 @@ if (-not $NoPush) {
     Write-Host ""
     Write-Host ">>> 提交版本号并打 tag..."
     try {
-        & git -C $root add "desktop/electron/package.json"
-        $dirty = & git -C $root status --porcelain -- "desktop/electron/package.json"
+        # 有的机器全局配了失效的 127.0.0.1 代理，这里显式绕过，直连 github
+        function Invoke-Git { & git -C $root -c http.proxy= -c https.proxy= @args }
+        Invoke-Git add "desktop/electron/package.json"
+        $dirty = Invoke-Git status --porcelain -- "desktop/electron/package.json"
         if ($dirty) {
-            & git -C $root commit -m "chore: release v$pkgVersion" | Out-Null
+            Invoke-Git commit -m "chore: release v$pkgVersion" | Out-Null
         }
-        & git -C $root rev-parse -q --verify "refs/tags/v$pkgVersion" *> $null
+        Invoke-Git rev-parse -q --verify "refs/tags/v$pkgVersion" *> $null
         if ($LASTEXITCODE -ne 0) {
-            & git -C $root tag "v$pkgVersion"
+            Invoke-Git tag "v$pkgVersion"
         }
-        & git -C $root push origin HEAD
-        & git -C $root push origin "v$pkgVersion"
+        Invoke-Git push origin HEAD
+        Invoke-Git push origin "v$pkgVersion"
         Write-Host "已推送 tag v$pkgVersion"
     }
     catch {
