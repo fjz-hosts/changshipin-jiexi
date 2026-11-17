@@ -1,4 +1,4 @@
-﻿<#
+<#
 长视频解析 · 一键发版（本地打包 → 发布 GitHub Releases → 校验国内加速源）
 
 设计思路（和「新师慧成」一致）：
@@ -121,7 +121,9 @@ if (-not $NoPush) {
             Invoke-Git tag "v$pkgVersion"
         }
         Invoke-Git push origin HEAD
+        if ($LASTEXITCODE -ne 0) { throw "git push main 失败（可稍后手动推送）" }
         Invoke-Git push origin "v$pkgVersion"
+        if ($LASTEXITCODE -ne 0) { throw "git push tag 失败（可稍后手动推送）" }
         Write-Host "已推送 tag v$pkgVersion"
     }
     catch {
