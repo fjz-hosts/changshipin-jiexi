@@ -343,7 +343,20 @@
       if (token !== state.runToken) return
 
       if (!result || !result.ok) {
-        failures.push(`${line.name}：${result?.error || '未知错误'}`)
+        const errorText = String(result?.error || '未知错误')
+        failures.push(`${line.name}：${errorText}`)
+        // 芒果TV 原生线路的失败通常是地区限制 / 未登录会员，继续换第三方线路
+        // 只会得到一个空播放器，不如直接把真实原因告诉用户。
+        if (line.platform === 'mgtv' && /地区限制|版权限制|会员|登录|地域/i.test(errorText)) {
+          state.running = false
+          $('#btn-parse').disabled = false
+          showError(
+            '芒果TV 无法解析',
+            `${errorText}\n\n芒果TV 当前把本机网络判定为境外/地区受限。请使用中国大陆网络，或先切换到国内线路后再试；` +
+              'VIP 内容请先在芒果TV 内置窗口登录会员，再回到主界面解析。',
+          )
+          return
+        }
         continue
       }
 

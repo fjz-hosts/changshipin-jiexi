@@ -691,6 +691,9 @@ function registerIpc() {
           platform: platform?.name || '未知',
         }
       }
+      if (result.kind === 'none') {
+        log(`解析失败 ${line.name}：${result.error || '没有返回可播放地址'}`)
+      }
       return { ok: false, error: result.error || '线路没有返回可播放的地址' }
     } catch (error) {
       log(`解析失败 ${line.name}：${error?.message || error}`)
