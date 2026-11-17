@@ -79,7 +79,7 @@ class UpdateManager {
         percent: 0,
         message: `发现新版本 v${version}，正在后台下载…`,
       })
-      this.deps.log(`[更新] 发现新版本 v${version}`)
+      this.deps.log(`[更新] 发现新版本 v${version}，后台静默下载`)
       this._progress(0)
     })
 
@@ -215,9 +215,10 @@ class UpdateManager {
     } catch {
       /* 清理失败也继续安装 */
     }
-    // isSilent=false：显示安装向导，保留原安装目录和快捷方式；
-    // isForceRunAfter=true：安装完成后自动启动新版本。
-    setImmediate(() => autoUpdater.quitAndInstall(false, true))
+    // isSilent=true：静默覆盖安装，不再弹出安装向导的下一步/目录选择；
+    // NSIS 会沿用原安装目录，配置在 %APPDATA% 不受影响，安装脚本会重建快捷方式。
+    // isForceRunAfter=true：装完自动拉起新版本。
+    setImmediate(() => autoUpdater.quitAndInstall(true, true))
   }
 
   dispose() {
@@ -240,7 +241,7 @@ class UpdateManager {
       type: 'info',
       title: '发现新版本',
       message: `长视频解析 v${version} 已下载完成`,
-      detail: '重启后会打开安装向导，选择原来的安装目录即可覆盖升级，配置和桌面快捷方式都会保留。选择「稍后」则下次启动再提示。',
+      detail: '点击「立即重启安装」后会在后台静默覆盖安装，不会弹出安装向导；配置、登录状态和桌面快捷方式都会保留，装完自动打开新版本。',
       buttons: ['立即重启安装', '稍后'],
       defaultId: 0,
       cancelId: 1,
