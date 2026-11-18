@@ -154,20 +154,73 @@ async function runSmoke({ app, window, proxy, store }) {
   check('配置含内置线路', Array.isArray(config.lines) && config.lines.length >= 5, `${config.lines.length} 条`)
   check('平台数配置一致', config.lines.filter((line) => line.enabled).length >= 1)
 
-  // ---- 3.1 观看历史（标题 / 集数 / 进度 / 删除） ----
+  // ---- 3.1 观看历史（一部剧一条：最近集数 + 进度） ----
   const historyCheck = await window.webContents.executeJavaScript(`(async () => {
-    const url = 'https://www.iqiyi.com/v_smoke_history.html'
-    await window.desktop.addHistory({ url, lineId: 'builtin-789', lineName: '789解析', title: '烟雾测试剧 第2集', episode: '第2集' })
-    const withProgress = await window.desktop.updateHistory({ url, progress: 120, duration: 300 })
-    const item = withProgress.find((entry) => entry.url === url) || {}
-    const removed = await window.desktop.removeHistory(url)
-    return JSON.stringify({ title: item.title, episode: item.episode, progress: item.progress, duration: item.duration, removedCount: removed.length })
+    const first = 'https://www.iqiyi.com/v_smoke_history.html'
+    const second = 'https://www.iqiyi.com/v_smoke_history2.html'
+    await window.desktop.addHistory({ url: first, lineId: 'builtin-789', lineName: '789解析', title: '烟雾测试剧 第2集', episode: '第2集' })
+    await window.desktop.updateHistory({ url: first, progress: 120, duration: 300 })
+    const list = await window.desktop.addHistory({ url: second, title: '烟雾测试剧 第3集', episode: '第3集' })
+    const merged = list.find((entry) => entry.title === '烟雾测试剧') || {}
+    const withProgress = await window.desktop.updateHistory({ url: second, progress: 60, duration: 300 })
+    const item = withProgress.find((entry) => entry.url === second) || {}
+    const seriesCount = withProgress.filter((entry) => entry.title === '烟雾测试剧').length
+    const removed = await window.desktop.removeHistory(second)
+    const afterRemove = removed.filter((entry) => entry.title === '烟雾测试剧').length
+    return JSON.stringify({
+      mergedEpisode: merged.episode,
+      seriesCount,
+      title: item.title,
+      episode: item.episode,
+      progress: item.progress,
+      duration: item.duration,
+      afterRemove,
+    })
   })()`)
   const historyItem = JSON.parse(historyCheck)
   check(
-    '观看历史记录标题/集数/进度',
-    historyItem.title === '烟雾测试剧 第2集' && historyItem.episode === '第2集' && historyItem.progress === 120 && historyItem.duration === 300,
+    '观看历史：同一部剧只保留一条（最近集数 + 进度）',
+    historyItem.mergedEpisode === '第3集' &&
+      historyItem.seriesCount === 1 &&
+      historyItem.title === '烟雾测试剧' &&
+      historyItem.episode === '第3集' &&
+      historyItem.progress === 60 &&
+      historyItem.duration === 300 &&
+      historyItem.afterRemove === 0,
     historyCheck,
+  )
+
+  // 旧版本一集一条，升级后应该自动合并成一部剧一条
+  const { Store } = require('./store')
+  const tempDir = path.join(app.getPath('userData'), `smoke-store-${process.pid}`)
+  let migrationCheck = {}
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+    fs.mkdirSync(tempDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(tempDir, 'config.json'),
+      JSON.stringify({
+        history: [
+          { url: 'https://www.iqiyi.com/v_old_1.html', title: '旧版测试剧 第1集', episode: '第1集', progress: 100, duration: 300, at: 1000 },
+          { url: 'https://www.iqiyi.com/v_old_2.html', title: '旧版测试剧 第2集', episode: '第2集', progress: 50, duration: 300, at: 2000 },
+        ],
+      }),
+      'utf8',
+    )
+    const history = new Store(tempDir).snapshot().history
+    migrationCheck = {
+      count: history.length,
+      title: history[0] && history[0].title,
+      episode: history[0] && history[0].episode,
+      progress: history[0] && history[0].progress,
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+  check(
+    '观看历史：旧配置按集记录自动合并',
+    migrationCheck.count === 1 && migrationCheck.title === '旧版测试剧' && migrationCheck.episode === '第2集' && migrationCheck.progress === 50,
+    JSON.stringify(migrationCheck),
   )
 
   // ---- 3.2 选集 / 下载的纯逻辑 ----
@@ -239,11 +292,11 @@ async function runSmoke({ app, window, proxy, store }) {
     seriesBar,
   )
 
-  // 渲染层：历史分组 / 搜索
+  // 渲染层：历史按平台分组 / 搜索
   const groupedHistory = await window.webContents.executeJavaScript(`(async () => {
     const base = 'https://www.iqiyi.com/v_smoke_group_'
-    await window.desktop.addHistory({ url: base + '1.html', title: '分组测试剧 第1集', episode: '第1集' })
-    const list = await window.desktop.addHistory({ url: base + '2.html', title: '分组测试剧 第2集', episode: '第2集' })
+    await window.desktop.addHistory({ url: base + '1.html', title: '分组测试剧A 第1集', episode: '第1集' })
+    const list = await window.desktop.addHistory({ url: base + '2.html', title: '分组测试剧B 第1集', episode: '第1集' })
     window.__app.getState().config.history = list
     const sort = document.querySelector('#history-sort')
     sort.value = 'grouped'
@@ -264,9 +317,30 @@ async function runSmoke({ app, window, proxy, store }) {
   })()`)
   const grouped = JSON.parse(groupedHistory)
   check(
-    '观看历史：按剧集分组 + 搜索无结果提示',
-    grouped.groups >= 1 && grouped.items >= 2 && grouped.empty.includes('没有匹配'),
+    '观看历史：按平台分组 + 搜索无结果提示',
+    grouped.groups === 1 && grouped.items === 2 && grouped.empty.includes('没有匹配'),
     groupedHistory,
+  )
+
+  // 渲染层：图文教程入口 / 章节 / 图片
+  const guideCheck = await window.webContents.executeJavaScript(`(async () => {
+    document.querySelector('#btn-guide').click()
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    const modal = document.querySelector('#guide-modal')
+    const open = Boolean(modal) && !modal.hidden
+    const sections = document.querySelectorAll('#guide-content .guide-section').length
+    const navs = document.querySelectorAll('#guide-nav button[data-guide]').length
+    const images = Array.from(document.querySelectorAll('#guide-content img'))
+    const loaded = images.filter((img) => img.complete && img.naturalWidth > 0).length
+    const missing = images.filter((img) => img.complete && img.naturalWidth === 0).map((img) => img.getAttribute('src'))
+    document.querySelector('#guide-close').click()
+    return JSON.stringify({ open, sections, navs, images: images.length, loaded, missing })
+  })()`)
+  const guide = JSON.parse(guideCheck)
+  check(
+    '图文教程：入口 / 章节 / 配图加载',
+    guide.open === true && guide.sections >= 9 && guide.navs >= 10 && guide.images >= 9 && guide.loaded === guide.images,
+    guideCheck,
   )
 
   // ---- 3.5 在线解析链路（可选，需要外网）----

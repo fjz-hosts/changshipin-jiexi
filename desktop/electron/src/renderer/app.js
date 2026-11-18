@@ -33,6 +33,7 @@
     webviewPending: null,
     draftLines: null,
     fullscreen: false,
+    fullscreenHinted: false,
     pendingTitle: '',
     pendingEpisode: '',
     currentTitle: '',
@@ -48,7 +49,13 @@
     seriesCollapsed: false,
     seriesLoading: false,
     seriesPending: new Map(),
-    autoNext: false,
+    autoNext: true,
+    autoNextHandledFor: '',
+    playerPollTimer: null,
+    playerPollBusy: false,
+    lastWebviewSave: 0,
+    lastWebviewProgress: 0,
+    guideNavTimer: 0,
     historySort: 'recent',
     historyQuery: '',
     historyCollapsed: new Set(),
@@ -767,12 +774,39 @@
     document.body.classList.toggle('page-scroll', enabled)
   }
 
+  function activePlayerView() {
+    if (!$('#view-video').hidden) return 'video'
+    if (!$('#view-webview').hidden) return 'webview'
+    return ''
+  }
+
+  function isTypingTarget(target) {
+    if (!target) return false
+    const tag = String(target.tagName || '').toUpperCase()
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable === true
+  }
+
+  // 点「全屏」按钮后焦点会留在按钮上：这时按空格会再次触发这个按钮（表现为退出全屏），
+  // 方向键也完全没反应。进全屏后主动把焦点从工具栏移走，交给播放器快捷键处理。
+  function releaseToolbarFocus() {
+    const active = document.activeElement
+    if (!active || isTypingTarget(active)) return
+    if (active === $('#video') || active === $('#parse-view')) return
+    try {
+      active.blur()
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   function setView(name) {
     for (const id of ['empty', 'loading', 'error', 'video', 'webview']) {
       $(`#view-${id}`).hidden = id !== name
     }
     // 只有真正在播放时才给播放区留大高度；空/错/加载态不需要撑高
     $('#stage').classList.toggle('stage-playing', name === 'video' || name === 'webview')
+    if (name === 'webview') startPlayerPolling()
+    else stopPlayerPolling()
     updateLayoutMode()
   }
 
@@ -786,6 +820,16 @@
     updateLayoutMode()
     $('#btn-fullscreen').textContent = state.fullscreen ? '退出全屏' : '全屏'
     $('#btn-fullscreen').title = state.fullscreen ? '退出全屏（Esc / F11）' : '全屏（F11）'
+    if (state.fullscreen) {
+      setTimeout(releaseToolbarFocus, 50)
+      setTimeout(releaseToolbarFocus, 320)
+      if (!state.fullscreenHinted) {
+        state.fullscreenHinted = true
+        toast('空格 暂停/播放 · ← → 快退/快进 10 秒 · ↑ ↓ 音量 · Esc 退出全屏', 'info', 5600)
+      }
+    } else if (document.activeElement && document.activeElement.id === 'btn-fullscreen') {
+      releaseToolbarFocus()
+    }
   }
 
   async function toggleFullscreen() {
@@ -966,6 +1010,138 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 播放快捷键 / 网页解析页的进度与自动连播
+  // ---------------------------------------------------------------------------
+
+  function adjustNativeVideo(action) {
+    const video = $('#video')
+    if (!video) return false
+    try {
+      if (action === 'toggle') {
+        if (video.paused || video.ended) video.play().catch(() => {})
+        else video.pause()
+      } else if (action === 'back') {
+        video.currentTime = Math.max(0, (Number(video.currentTime) || 0) - 10)
+      } else if (action === 'forward') {
+        const duration = Number(video.duration)
+        const target = (Number(video.currentTime) || 0) + 10
+        video.currentTime = Number.isFinite(duration) && duration > 0 ? Math.min(duration - 0.5, target) : target
+      } else if (action === 'volume-up') {
+        video.muted = false
+        video.volume = Math.min(1, (Number(video.volume) || 0) + 0.1)
+        setStatus(`音量 ${Math.round(video.volume * 100)}%`)
+      } else if (action === 'volume-down') {
+        video.muted = false
+        video.volume = Math.max(0, (Number(video.volume) || 1) - 0.1)
+        setStatus(`音量 ${Math.round(video.volume * 100)}%`)
+      } else if (action === 'mute') {
+        video.muted = !video.muted
+        setStatus(video.muted ? '已静音' : '已取消静音')
+      } else {
+        return false
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  function controlWebviewPlayer(action) {
+    return window.desktop.playerCommand({ action }).catch(() => null)
+  }
+
+  // 网页解析线路把播放器放在 webview 里：焦点在页面里时由主进程拦截按键，
+  // 焦点不在页面里时（比如刚点完「全屏」）由这里转发。
+  function onPlayerKeydown(event) {
+    if (event.defaultPrevented) return
+    if (event.ctrlKey || event.altKey || event.metaKey) return
+    if (state.browserOpen) return
+    if (!$('#modal').hidden || !$('#search-modal').hidden) return
+    if (document.querySelector('#guide-modal') && !$('#guide-modal').hidden) return
+    if (isTypingTarget(event.target)) return
+    const key = event.key
+    if (key === 'Escape' || key === 'F11' || key === 'F5' || key === 'Tab') return
+    const view = activePlayerView()
+    if (!view) return
+    let action = ''
+    if (key === ' ' || key === 'Spacebar' || event.code === 'Space') action = 'toggle'
+    else if (key === 'ArrowLeft') action = 'back'
+    else if (key === 'ArrowRight') action = 'forward'
+    else if (key === 'ArrowUp') action = 'volume-up'
+    else if (key === 'ArrowDown') action = 'volume-down'
+    else if (key === 'm' || key === 'M') action = 'mute'
+    else return
+    if (view === 'video') {
+      // 焦点在 <video> 上时 Chromium 原生控件自己会处理这些键，别重复执行
+      if (document.activeElement === $('#video')) return
+      event.preventDefault()
+      adjustNativeVideo(action)
+      return
+    }
+    if (document.activeElement === $('#parse-view')) return
+    event.preventDefault()
+    controlWebviewPlayer(action)
+  }
+
+  function stopPlayerPolling() {
+    if (!state.playerPollTimer) return
+    clearInterval(state.playerPollTimer)
+    state.playerPollTimer = null
+  }
+
+  function startPlayerPolling() {
+    if (state.playerPollTimer) return
+    state.playerPollTimer = setInterval(pollWebviewPlayer, 2500)
+    setTimeout(pollWebviewPlayer, 800)
+  }
+
+  // 网页解析页的进度和「播完自动下一集」都要靠轮询拿：解析页不受我们控制，
+  // 没法直接监听它的 video；主进程会在每一层 iframe 里装一个很小的桥。
+  async function pollWebviewPlayer() {
+    if (state.playerPollBusy) return
+    if (state.browserOpen || $('#view-webview').hidden || !state.currentVideoUrl) return
+    state.playerPollBusy = true
+    let payload = null
+    try {
+      payload = await window.desktop.playerState()
+    } catch {
+      state.playerPollBusy = false
+      return
+    }
+    state.playerPollBusy = false
+    const video = payload?.video
+    if (!video || !(video.d > 5)) return
+    const now = Date.now()
+    if (now - state.lastWebviewSave > 8000 && video.t > 3 && (!video.paused || Math.abs(video.t - state.lastWebviewProgress) > 1)) {
+      state.lastWebviewSave = now
+      state.lastWebviewProgress = video.t
+      window.desktop
+        .updateHistory({ url: state.currentVideoUrl, progress: video.t, duration: video.d })
+        .then((history) => {
+          state.config.history = history
+          renderHistory()
+        })
+        .catch(() => {})
+    }
+    if (!video.ended || !state.autoNext) return
+    if (state.autoNextHandledFor === state.currentVideoUrl) return
+    const series = state.series
+    if (!series || !Array.isArray(series.episodes) || !series.episodes.length) return
+    const index = seriesCurrentIndex(series, state.currentVideoUrl)
+    if (index < 0 || index >= series.episodes.length - 1) return
+    state.autoNextHandledFor = state.currentVideoUrl
+    toast('本集播放完毕，自动播放下一集', 'ok')
+    // 如果解析页自己正处在网页全屏，先退出来再换集，否则新一集会卡在全屏层里
+    try {
+      if (document.fullscreenElement) document.exitFullscreen()?.catch?.(() => {})
+    } catch {
+      /* 忽略 */
+    }
+    controlWebviewPlayer('ack-ended')
+    seriesNav(1)
+  }
+
+  // ---------------------------------------------------------------------------
   // 下载（离线观看）
   // ---------------------------------------------------------------------------
 
@@ -1119,11 +1295,20 @@
 
   async function startParse({ lineId, url, chain = true, resume = 0, title = '', episode = '', series } = {}) {
     if (state.browserOpen) hideBrowser({ mute: true })
+    // 换集 / 换线路前先退出视频自己的网页全屏，避免新画面被全屏层盖住
+    try {
+      if (document.fullscreenElement) document.exitFullscreen()?.catch?.(() => {})
+    } catch {
+      /* 忽略 */
+    }
     if (state.running) {
       state.runToken += 1
       stopPlayback()
     }
     state.resumeAt = Number(resume) || 0
+    state.autoNextHandledFor = ''
+    state.lastWebviewSave = 0
+    state.lastWebviewProgress = 0
     state.currentTitle = cleanTitle(title)
     state.currentEpisode = episode || episodeOf(state.currentTitle)
     const videoUrl = normalizeUrlText(url || $('#url-input').value)
@@ -1463,22 +1648,15 @@
     }
   }
 
-  function historySeriesName(item, title, platform) {
-    const base = title
-      .replace(/\s*(第\s*\d+\s*[集期话回]|EP?\s*\d+|S\d+E\d+).*$/i, '')
-      .replace(/\s*[-_|]\s*$/, '')
-      .trim()
-    return base || `${platform?.name || '视频'} · 未命名视频`
-  }
-
-  function historyEpisodeOrder(item) {
-    const text = `${item.episode || ''} ${item.title || ''}`
-    const match = text.match(/第\s*(\d{1,4})\s*[集期话回]/) || text.match(/(?:^|[^\d])(\d{1,4})\s*(?:集|期|话)/) || text.match(/EP?\s*(\d{1,4})/i)
-    return match ? Number(match[1]) : 0
+  function historyPlatformInfo(item) {
+    const byUrl = platformInfo(detectPlatform(item.url))
+    if (byUrl) return byUrl
+    const key = String(item.platform || '')
+    return PLATFORMS.find((platform) => platform.key === key || platform.name === key) || null
   }
 
   function createHistoryItem(item) {
-    const platform = platformInfo(detectPlatform(item.url))
+    const platform = historyPlatformInfo(item)
     const title = cleanTitle(item.title) || ''
     const episode = item.episode || episodeOf(title)
     const percent =
@@ -1487,15 +1665,16 @@
     const li = document.createElement('li')
     li.className = 'history-item'
     if (resumable) li.classList.add('resumable')
+    const fallbackName = platform?.name || '视频'
     li.innerHTML = `
       <div class="history-top">
         <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
-          title || `${platform?.name || '视频'} · 未命名视频`,
+          title || `${fallbackName} · 未命名视频`,
         )}</span>
         <span class="history-time">${timeAgo(item.at)}</span>
       </div>
       <div class="history-meta">
-        ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(item.platform || platform.name)}</span>` : ''}
+        ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(platform.name)}</span>` : ''}
         ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
         <span class="history-line">${escapeHtml(item.lineName || '')}</span>
         ${resumable ? '<span class="history-resume">继续</span>' : ''}
@@ -1503,7 +1682,7 @@
       </div>
       ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
       ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
-      <button class="history-del" title="删除这条记录">×</button>
+      <button class="history-del" title="删除这部作品的记录">×</button>
     `
     li.addEventListener('click', () => {
       $('#url-input').value = item.url
@@ -1513,7 +1692,7 @@
         url: item.url,
         lineId: item.lineId,
         resume: item.progress || 0,
-        title,
+        title: [title, episode].filter(Boolean).join(' '),
         episode,
         series: findSavedSeries(item.url),
       })
@@ -1548,11 +1727,11 @@
     })
     list.innerHTML = ''
     const legend = $('#history-legend')
-    if (legend) legend.textContent = history.length ? `${filtered.length}/${history.length} 条` : ''
+    if (legend) legend.textContent = history.length ? `${filtered.length}/${history.length} 部` : ''
     if ($('#history-sort')) $('#history-sort').value = mode
     if (!history.length) {
       list.innerHTML =
-        '<li class="empty-row">还没有观看记录。解析成功后会自动记在这里，像视频平台一样保留剧名、集数和观看进度。</li>'
+        '<li class="empty-row">还没有观看记录。每部剧只记一条：最近看到第几集、看到百分之多少，点一下就能接着看。</li>'
       return
     }
     if (!filtered.length) {
@@ -1561,13 +1740,12 @@
     }
 
     if (mode === 'grouped') {
+      // 一部剧只有一条记录，分组按平台更有用
       const groups = new Map()
       for (const item of filtered) {
-        const title = cleanTitle(item.title) || ''
-        const platform = platformInfo(detectPlatform(item.url))
-        const name = historySeriesName(item, title, platform)
-        const key = `${platform?.key || 'other'}:${name}`
-        if (!groups.has(key)) groups.set(key, { key, name, platform, items: [] })
+        const platform = historyPlatformInfo(item)
+        const key = platform?.key || 'other'
+        if (!groups.has(key)) groups.set(key, { key, name: platform?.name || '其它平台', platform, items: [] })
         groups.get(key).items.push(item)
       }
       const ordered = [...groups.values()].sort(
@@ -1577,10 +1755,10 @@
         const li = document.createElement('li')
         li.className = 'history-group'
         if (state.historyCollapsed.has(group.key)) li.classList.add('collapsed')
-        group.items.sort((left, right) => historyEpisodeOrder(left) - historyEpisodeOrder(right) || (right.at || 0) - (left.at || 0))
+        group.items.sort((left, right) => (right.at || 0) - (left.at || 0))
         const head = document.createElement('div')
         head.className = 'history-group-head'
-        head.innerHTML = `<b title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</b><span>${group.items.length} 条</span>`
+        head.innerHTML = `<b title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</b><span>${group.items.length} 部</span>`
         head.addEventListener('click', () => {
           if (state.historyCollapsed.has(group.key)) state.historyCollapsed.delete(group.key)
           else state.historyCollapsed.add(group.key)
@@ -1674,6 +1852,56 @@
 
   function closeModal() {
     $('#modal').hidden = true
+  }
+
+  // ---------------------------------------------------------------------------
+  // 图文教程
+  // ---------------------------------------------------------------------------
+
+  function openGuide(section = 'intro') {
+    const modal = $('#guide-modal')
+    if (!modal) return
+    modal.hidden = false
+    setGuideSection(section)
+    setTimeout(() => setGuideSection(section), 40)
+    try {
+      $('#guide-close').focus()
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  function closeGuide() {
+    const modal = $('#guide-modal')
+    if (!modal) return
+    modal.hidden = true
+  }
+
+  function setGuideSection(id) {
+    const content = $('#guide-content')
+    const target = document.getElementById(`guide-${id}`)
+    if (!content || !target) return
+    const top = target.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
+    content.scrollTo({ top: Math.max(0, top - 4), behavior: 'smooth' })
+    $$('#guide-nav button[data-guide]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.guide === id)
+    })
+  }
+
+  function syncGuideNav() {
+    const content = $('#guide-content')
+    if (!content) return
+    const sections = $$('#guide-content .guide-section')
+    if (!sections.length) return
+    const marker = content.scrollTop + 48
+    let current = sections[0].id.replace(/^guide-/, '')
+    for (const section of sections) {
+      const top = section.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
+      if (top <= marker) current = section.id.replace(/^guide-/, '')
+    }
+    $$('#guide-nav button[data-guide]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.guide === current)
+    })
   }
 
   function switchTab(tab) {
@@ -2269,7 +2497,6 @@
       localStorage.setItem('csp.autoNext', state.autoNext ? '1' : '0')
       toast(state.autoNext ? '已开启：本集播完自动下一集' : '已关闭自动连播')
     })
-
     // 找剧：跨平台搜索
     $('#btn-search').addEventListener('click', openSearchModal)
     $('#search-close').addEventListener('click', closeSearchModal)
@@ -2480,6 +2707,30 @@
     })
 
     // 关于
+    // 关于 / 图文教程
+    $('#btn-guide').addEventListener('click', () => openGuide('intro'))
+    $('#btn-empty-guide').addEventListener('click', () => openGuide('intro'))
+    $('#btn-about-guide').addEventListener('click', () => {
+      closeModal()
+      openGuide('intro')
+    })
+    $('#guide-close').addEventListener('click', closeGuide)
+    $('#guide-modal').addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeGuide()
+    })
+    $('#guide-nav').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-guide]')
+      if (!button) return
+      setGuideSection(button.dataset.guide)
+    })
+    $('#guide-content').addEventListener('scroll', () => {
+      if (state.guideNavTimer) return
+      state.guideNavTimer = requestAnimationFrame(() => {
+        state.guideNavTimer = 0
+        syncGuideNav()
+      })
+    })
+
     $('#btn-open-repo').addEventListener('click', () => window.desktop.openExternal(state.info?.repo || 'https://github.com/fjz-hosts/changshipin-jiexi'))
     $('#btn-open-userdata').addEventListener('click', () => window.desktop.openUserData())
     $('#btn-open-logs').addEventListener('click', () => window.desktop.openLogs())
@@ -2491,6 +2742,24 @@
 
     // 工具栏快捷键 & 主进程菜单事件
     document.addEventListener('keydown', (event) => {
+      // 播放器自己处于网页全屏时，Esc 先退出视频全屏（不直接退出软件影院模式）
+      if (event.key === 'Escape' && document.fullscreenElement) {
+        event.preventDefault()
+        try {
+          document.exitFullscreen()?.catch?.(() => {})
+        } catch {
+          /* 忽略 */
+        }
+        return
+      }
+      if (event.key === 'Escape') {
+        const guide = document.querySelector('#guide-modal')
+        if (guide && !guide.hidden) {
+          event.preventDefault()
+          closeGuide()
+          return
+        }
+      }
       if (state.browserOpen) {
         if (event.altKey && event.key === 'ArrowLeft') {
           event.preventDefault()
@@ -2523,6 +2792,10 @@
       }
       if (state.fullscreen) toggleFullscreen()
     })
+
+    // 播放器快捷键：空格暂停/播放、←/→ 快退快进、↑/↓ 音量、M 静音。
+    // 全屏后焦点常常不在播放器上，这里兜底；网页解析线路会转发给主进程处理。
+    document.addEventListener('keydown', onPlayerKeydown)
 
     // 选集快捷键：Ctrl+← / Ctrl+→ 切上一集/下一集，[ ] 同样可用
     document.addEventListener('keydown', (event) => {
@@ -2671,7 +2944,7 @@
       state.browserAutoParse = $('#browser-auto').checked
       state.seriesOrder = localStorage.getItem('csp.episodeOrder') === 'desc' ? 'desc' : 'asc'
       state.seriesCollapsed = localStorage.getItem('csp.episodeCollapsed') === '1'
-      state.autoNext = localStorage.getItem('csp.autoNext') === '1'
+      state.autoNext = localStorage.getItem('csp.autoNext') !== '0'
       $('#episode-auto-next').checked = state.autoNext
       state.historySort = ['recent', 'continue', 'grouped'].includes(localStorage.getItem('csp.historySort'))
         ? localStorage.getItem('csp.historySort')

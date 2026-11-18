@@ -3,9 +3,14 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { DEFAULT_LINES } = require('./lines')
+const { PLATFORMS, detectPlatformByUrl } = require('./platforms')
 
 const MAX_HISTORY = 40
 const CONFIG_VERSION = 1
+
+// 「第 12 集 / 第12期 / EP12 / S01E02」：历史记录按「一部剧一条」合并，
+// 剧名去掉集数后就是这部剧的名字。
+const EPISODE_TEXT_RE = /(第\s*[0-9一二三四五六七八九十百千零两]+\s*[集期话回]|EP?\s*\d{1,4}|S\d{1,2}\s*E\d{1,3})/i
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
@@ -13,6 +18,39 @@ function clone(value) {
 
 function cleanText(value, max = 300) {
   return String(value == null ? '' : value).replace(/[\r\n\t]/g, ' ').trim().slice(0, max)
+}
+
+function episodeText(raw) {
+  const match = String(raw || '').match(EPISODE_TEXT_RE)
+  return match ? match[0].replace(/\s+/g, '') : ''
+}
+
+// 「今天是太阳雨 第5集」→「今天是太阳雨」
+function seriesBaseTitle(raw) {
+  const text = cleanText(raw, 150)
+  if (!text) return ''
+  const match = text.match(EPISODE_TEXT_RE)
+  if (match && match.index > 0) {
+    return text.slice(0, match.index).replace(/[\s\-_|·:：]+$/, '').trim()
+  }
+  return text.replace(/[\s\-_|]+$/, '').trim()
+}
+
+function normalizePlatformKey(value, url) {
+  const raw = cleanText(value, 20)
+  if (raw) {
+    const byKey = PLATFORMS.find((item) => item.key === raw)
+    if (byKey) return byKey.key
+    const byName = PLATFORMS.find((item) => item.name === raw)
+    if (byName) return byName.key
+  }
+  return detectPlatformByUrl(url)?.key || ''
+}
+
+function historySeriesKey(item) {
+  const base = seriesBaseTitle(item.title)
+  if (!base) return `url::${String(item.url || '')}`
+  return `${normalizePlatformKey(item.platform, item.url)}::${base.toLowerCase()}`
 }
 
 function normalizeLine(raw, index) {
@@ -49,22 +87,54 @@ function normalizeHealth(raw) {
   return out
 }
 
+// 观看历史：同一部剧只保留一条，记录「最近看到第几集 + 这一集的进度」。
+// 旧版本是一集一条，升级时在这里合并掉（按时间排序，较新的记录覆盖集数与进度）。
 function normalizeHistory(raw) {
   if (!Array.isArray(raw)) return []
-  return raw
+  const items = raw
     .filter((item) => item && typeof item === 'object' && /^https?:\/\//i.test(String(item.url || '')))
+    .map((item) => {
+      const title = cleanText(item.title, 150)
+      return {
+        url: String(item.url),
+        platform: normalizePlatformKey(item.platform, item.url),
+        lineId: cleanText(item.lineId, 80),
+        lineName: cleanText(item.lineName, 40),
+        title: seriesBaseTitle(title) || title,
+        episode: cleanText(item.episode, 30) || episodeText(title),
+        progress: Math.max(0, Number(item.progress) || 0),
+        duration: Math.max(0, Number(item.duration) || 0),
+        at: Number(item.at) || Date.now(),
+      }
+    })
+    .sort((left, right) => left.at - right.at)
+
+  const merged = new Map()
+  for (const item of items) {
+    const key = historySeriesKey(item)
+    const previous = merged.get(key)
+    if (!previous) {
+      merged.set(key, item)
+      continue
+    }
+    // 较新的记录代表「最近一次观看」，只保留它的链接、集数和进度
+    merged.set(key, {
+      ...previous,
+      url: item.url,
+      platform: item.platform || previous.platform,
+      lineId: item.lineId || previous.lineId,
+      lineName: item.lineName || previous.lineName,
+      title: item.title || previous.title,
+      episode: item.episode || previous.episode,
+      progress: item.progress,
+      duration: item.duration,
+      at: item.at,
+    })
+  }
+  return [...merged.values()]
+    .sort((left, right) => right.at - left.at)
     .slice(0, MAX_HISTORY)
-    .map((item) => ({
-      url: String(item.url),
-      platform: cleanText(item.platform, 20),
-      lineId: cleanText(item.lineId, 80),
-      lineName: cleanText(item.lineName, 40),
-      title: cleanText(item.title, 120),
-      episode: cleanText(item.episode, 30),
-      progress: Math.max(0, Number(item.progress) || 0),
-      duration: Math.max(0, Number(item.duration) || 0),
-      at: Number(item.at) || Date.now(),
-    }))
+    .map((item) => ({ ...item, seriesKey: historySeriesKey(item) }))
 }
 
 class Store {
@@ -180,22 +250,44 @@ class Store {
   addHistory(entry) {
     const url = cleanText(entry?.url, 2000)
     if (!/^https?:\/\//i.test(url)) return this.snapshot().history
-    const previous = this.data.history.find((old) => old.url === url)
-    const title = cleanText(entry.title, 120)
-    const episode = cleanText(entry.episode, 30)
+    const rawTitle = cleanText(entry.title, 150)
+    const episode = cleanText(entry.episode, 30) || episodeText(rawTitle)
+    const title = seriesBaseTitle(rawTitle) || rawTitle
     const item = {
       url,
-      platform: cleanText(entry.platform, 20) || previous?.platform || '',
-      lineId: cleanText(entry.lineId, 80) || previous?.lineId || '',
-      lineName: cleanText(entry.lineName, 40) || previous?.lineName || '',
-      // 不要把已经记下来的好标题覆盖成空/站点名
-      title: title || previous?.title || '',
-      episode: episode || previous?.episode || '',
-      progress: Math.max(0, Number(entry.progress) || previous?.progress || 0),
-      duration: Math.max(0, Number(entry.duration) || previous?.duration || 0),
+      platform: normalizePlatformKey(entry.platform, url),
+      lineId: cleanText(entry.lineId, 80),
+      lineName: cleanText(entry.lineName, 40),
+      title,
+      episode,
+      progress: Math.max(0, Number(entry.progress) || 0),
+      duration: Math.max(0, Number(entry.duration) || 0),
       at: Date.now(),
     }
-    this.data.history = [item, ...this.data.history.filter((old) => old.url !== url)].slice(0, MAX_HISTORY)
+    item.seriesKey = historySeriesKey(item)
+
+    // 同一部剧的旧记录（包括旧版本按集分开存的）都要合并成一条
+    const previous =
+      this.data.history.find((old) => old.seriesKey === item.seriesKey) ||
+      this.data.history.find((old) => old.url === url) ||
+      null
+    if (previous) {
+      const hadTitle = Boolean(item.title)
+      if (!item.title) item.title = previous.title
+      if (!item.episode) item.episode = previous.episode
+      if (!item.platform) item.platform = previous.platform
+      if (!item.lineId) item.lineId = previous.lineId
+      if (!item.lineName) item.lineName = previous.lineName
+      // 没有标题时沿用旧记录的身份，避免下次又拆成两条
+      if (!hadTitle && previous.seriesKey) item.seriesKey = previous.seriesKey
+      if (previous.url === url) {
+        // 重新解析同一集：别把已经记下的进度清零
+        if (!Number(entry.progress)) item.progress = previous.progress
+        if (!Number(entry.duration)) item.duration = previous.duration
+      }
+    }
+
+    this.data.history = [item, ...this.data.history.filter((old) => old !== previous)].slice(0, MAX_HISTORY)
     this.data.lastUrl = url
     this._write()
     return this.snapshot().history
@@ -203,12 +295,16 @@ class Store {
 
   updateHistory(entry = {}) {
     const url = cleanText(entry.url, 2000)
-    if (!url) return this.snapshot().history
-    const item = this.data.history.find((old) => old.url === url)
+    const seriesKey = cleanText(entry.seriesKey, 200)
+    let item = url ? this.data.history.find((old) => old.url === url) : null
+    if (!item && seriesKey) item = this.data.history.find((old) => old.seriesKey === seriesKey)
     if (!item) return this.snapshot().history
-    const title = cleanText(entry.title, 120)
+    const rawTitle = cleanText(entry.title, 150)
+    if (rawTitle) {
+      item.title = seriesBaseTitle(rawTitle) || rawTitle
+      item.seriesKey = historySeriesKey(item)
+    }
     const episode = cleanText(entry.episode, 30)
-    if (title) item.title = title
     if (episode) item.episode = episode
     if (Number.isFinite(Number(entry.progress))) item.progress = Math.max(0, Number(entry.progress))
     if (Number.isFinite(Number(entry.duration))) item.duration = Math.max(0, Number(entry.duration))

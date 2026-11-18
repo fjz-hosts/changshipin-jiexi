@@ -112,8 +112,8 @@ const historyResult = await ev(
   main,
   `(async () => {
     const base = 'https://www.iqiyi.com/v_cdp9_'
-    await window.desktop.addHistory({ url: base + '1.html', title: '回归历史剧 第1集', episode: '第1集' })
-    const list = await window.desktop.addHistory({ url: base + '2.html', title: '回归历史剧 第2集', episode: '第2集' })
+    await window.desktop.addHistory({ url: base + '1.html', title: '回归历史剧A 第1集', episode: '第1集' })
+    const list = await window.desktop.addHistory({ url: base + '2.html', title: '回归历史剧B 第1集', episode: '第1集' })
     window.__app.getState().config.history = list
     const sort = document.querySelector('#history-sort')
     sort.value = 'grouped'
@@ -134,7 +134,7 @@ const historyResult = await ev(
   })()`,
 )
 const h = JSON.parse(historyResult)
-check('观看历史按剧集分组', h.groups >= 1 && h.items >= 2, historyResult)
+check('观看历史按平台分组', h.groups === 1 && h.items >= 2, historyResult)
 check('观看历史搜索无结果提示', h.empty.includes('没有匹配'), h.empty)
 
 // 5. 下载按钮初始禁用（没有 stream 结果时不能下载）

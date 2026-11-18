@@ -20,6 +20,7 @@ const {
   screen,
   session,
   shell,
+  webContents,
 } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -101,6 +102,8 @@ let lastStream = null
 let quitting = false
 let trayNoticeShown = false
 let isSmoke = IS_SMOKE
+// 网页里的 video 进入 HTML 全屏时，Esc 应该先退出视频全屏，而不是退出软件影院模式
+let htmlFullScreen = false
 
 function iconPath() {
   const packaged = path.join(process.resourcesPath, 'icon.ico')
@@ -124,6 +127,212 @@ function safeOpenExternal(rawUrl) {
 
 function publicLine(line) {
   return { id: line.id, name: line.name, kind: line.kind, url: line.url, note: line.note || '' }
+}
+
+// ---------------------------------------------------------------------------
+// 网页解析线路的播放桥
+//
+// 解析页不是我们写的：有的播放器绑了键盘，有的没绑；有的把播放器放在跨域
+// iframe 里。这里在每个 frame 里注入一个极小的桥，主进程就能统一做
+// 暂停/快进/音量、拿播放进度、判断这一集是不是播完了（自动连播要用）。
+// ---------------------------------------------------------------------------
+
+const PARSE_PARTITION = 'persist:parse'
+const PLAYER_ACTIONS = ['toggle', 'back', 'forward', 'volume-up', 'volume-down', 'mute', 'ack-ended']
+
+const PLAYER_BRIDGE_JS = `(() => {
+  if (window.__cspVideoBridge) { window.__cspVideoBridge.refresh(); return 'ok' }
+  var bridge = {
+    endedAt: 0,
+    pick: function () {
+      var list = Array.prototype.slice.call(document.querySelectorAll('video'));
+      var visible = list.filter(function (v) {
+        try {
+          if (v === document.fullscreenElement) return true;
+          var r = v.getBoundingClientRect();
+          return r.width > 40 && r.height > 40 && (v.readyState > 0 || v.currentSrc || v.src);
+        } catch (e) { return false }
+      });
+      visible.sort(function (a, b) {
+        try {
+          var ra = a.getBoundingClientRect();
+          var rb = b.getBoundingClientRect();
+          return rb.width * rb.height - ra.width * ra.height;
+        } catch (e) { return 0 }
+      });
+      return visible[0] || null;
+    },
+    bind: function (v) {
+      if (!v || v.__cspBound) return;
+      v.__cspBound = true;
+      v.addEventListener('ended', function () {
+        try {
+          if (!(v.duration >= 60)) return;
+          bridge.endedAt = Date.now();
+        } catch (e) {}
+      });
+      v.addEventListener('play', function () { bridge.endedAt = 0 });
+    },
+    refresh: function () {
+      var nodes = Array.prototype.slice.call(document.querySelectorAll('video'));
+      for (var i = 0; i < nodes.length; i += 1) bridge.bind(nodes[i]);
+      return bridge.pick();
+    },
+    cmd: function (action) {
+      var v = bridge.refresh();
+      if (!v) return 'no-video';
+      try {
+        if (action === 'toggle') {
+          if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}) } else { v.pause() }
+        } else if (action === 'back') {
+          v.currentTime = Math.max(0, (Number(v.currentTime) || 0) - 10);
+        } else if (action === 'forward') {
+          var d = Number(v.duration);
+          var target = (Number(v.currentTime) || 0) + 10;
+          v.currentTime = d > 0 ? Math.min(d - 0.5, target) : target;
+        } else if (action === 'volume-up') {
+          v.muted = false;
+          v.volume = Math.min(1, (Number(v.volume) || 0) + 0.1);
+        } else if (action === 'volume-down') {
+          v.muted = false;
+          v.volume = Math.max(0, (Number(v.volume) || 1) - 0.1);
+        } else if (action === 'mute') {
+          v.muted = !v.muted;
+        } else if (action === 'ack-ended') {
+          bridge.endedAt = 0;
+        } else {
+          return 'unknown';
+        }
+        return 'ok';
+      } catch (e) { return 'error' }
+    },
+    snapshot: function () {
+      var v = bridge.refresh();
+      if (!v) return null;
+      return {
+        t: Number(v.currentTime) || 0,
+        d: Number(v.duration) || 0,
+        paused: Boolean(v.paused),
+        volume: Number(v.volume) || 0,
+        muted: Boolean(v.muted),
+        ended: Boolean(bridge.endedAt && Date.now() - bridge.endedAt < 12000 && (v.paused || v.ended))
+      };
+    }
+  };
+  window.__cspVideoBridge = bridge;
+  bridge.refresh();
+  return 'ok';
+})()`
+
+function parseWebviewContents() {
+  try {
+    const parseSession = session.fromPartition(PARSE_PARTITION)
+    return (
+      webContents.getAllWebContents().find((item) => {
+        try {
+          return item.getType() === 'webview' && item.session === parseSession && !item.isDestroyed()
+        } catch {
+          return false
+        }
+      }) || null
+    )
+  } catch (error) {
+    log(`[player] 查找解析页失败：${error?.message || error}`)
+    return null
+  }
+}
+
+function parseFrames(contents) {
+  try {
+    return contents.mainFrame.framesInSubtree.filter(Boolean).slice(0, 8)
+  } catch {
+    try {
+      return [contents.mainFrame]
+    } catch {
+      return []
+    }
+  }
+}
+
+async function runInParseFrames(contents, expression, timeout = 2000) {
+  const frames = parseFrames(contents)
+  return Promise.all(
+    frames.map(async (frame) => {
+      try {
+        const value = await Promise.race([
+          frame.executeJavaScript(`${PLAYER_BRIDGE_JS}; (${expression})`, false),
+          new Promise((resolve) => setTimeout(() => resolve('__timeout__'), timeout)),
+        ])
+        return { frame, url: frame.url, value }
+      } catch (error) {
+        return { frame, url: frame.url, error: String(error?.message || error).slice(0, 120) }
+      }
+    }),
+  )
+}
+
+// 解析页里可能同时有正片和广告 / 浮动小窗的 video：按时长挑最像正片的那一个，
+// 只对那一帧执行暂停/快进/音量，避免把广告和正片一起控制。
+async function scanPlayerFrame(contents) {
+  const results = await runInParseFrames(contents, 'JSON.stringify(window.__cspVideoBridge.snapshot())')
+  let best = null
+  for (const item of results) {
+    if (typeof item.value !== 'string' || item.value.charAt(0) !== '{') continue
+    let snapshot = null
+    try {
+      snapshot = JSON.parse(item.value)
+    } catch {
+      continue
+    }
+    if (!snapshot || !(Number(snapshot.d) > 5)) continue
+    if (!best || Number(snapshot.d) > Number(best.snapshot.d)) best = { frame: item.frame, snapshot }
+  }
+  return best
+}
+
+async function dispatchPlayerAction(action) {
+  const contents = parseWebviewContents()
+  if (!contents) return { ok: false, error: 'no-webview' }
+  const target = await scanPlayerFrame(contents)
+  if (!target) {
+    contents.__cspHasVideo = false
+    return { ok: false, error: 'no-video' }
+  }
+  try {
+    const value = await target.frame.executeJavaScript(
+      `${PLAYER_BRIDGE_JS}; window.__cspVideoBridge.cmd(${JSON.stringify(action)})`,
+      false,
+    )
+    contents.__cspHasVideo = true
+    return { ok: value === 'ok' }
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error).slice(0, 120) }
+  }
+}
+
+async function readPlayerSnapshot() {
+  const contents = parseWebviewContents()
+  if (!contents) return { ok: false }
+  const target = await scanPlayerFrame(contents)
+  contents.__cspHasVideo = Boolean(target)
+  return { ok: Boolean(target), video: target ? target.snapshot : null }
+}
+
+// 解析页自己进了视频全屏时，Esc 需要真正把它的全屏退掉；
+// Chromium 对 webview 里的 HTML 全屏不一定会自己处理 Esc。
+async function exitParseFullscreen(contents) {
+  try {
+    const frames = parseFrames(contents)
+    await Promise.all(
+      frames.map((frame) =>
+        frame
+          .executeJavaScript('(() => { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); return true })()', false)
+          .catch(() => {}),
+      ),
+    )
+  } catch {
+    /* 忽略 */
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,10 +432,16 @@ function createMainWindow() {
   })
 
   mainWindow.webContents.on('enter-html-full-screen', () => {
+    htmlFullScreen = true
     sendCommand('window:fullscreen', true)
   })
   mainWindow.webContents.on('leave-html-full-screen', () => {
-    sendCommand('window:fullscreen', false)
+    // 视频退出网页全屏后，窗口可能还停在应用自己的全屏里；以窗口真实状态回填，
+    // 避免工具栏已经恢复、画面却还按影院模式显示。
+    htmlFullScreen = false
+    setTimeout(() => {
+      sendCommand('window:fullscreen', Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()))
+    }, 120)
   })
   mainWindow.on('enter-full-screen', () => sendCommand('window:fullscreen', true))
   mainWindow.on('leave-full-screen', () => sendCommand('window:fullscreen', false))
@@ -346,6 +561,68 @@ app.on('web-contents-created', (_event, contents) => {
       return { action: 'deny' }
     }
   })
+  // 解析页（网页线路）里的键盘：播放器是第三方的，有的只在鼠标聚焦时响应，
+  // 有的干脆没绑快捷键。这里统一拦截，效果和内置播放器保持一致。
+  if (contents.session === session.fromPartition(PARSE_PARTITION)) {
+    contents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      const key = String(input.key || '')
+      if (input.control || input.alt || input.meta) return
+      if (key === 'F11') {
+        event.preventDefault()
+        if (htmlFullScreen || contents.__cspHtmlFullscreen) {
+          contents.__cspHtmlFullscreen = false
+          exitParseFullscreen(contents).catch(() => {})
+        } else {
+          sendCommand('app:fullscreen-toggle')
+        }
+        return
+      }
+      if (key === 'Escape') {
+        // 页面自己在全屏（视频全屏）时先退出视频全屏；否则按 Esc 退出软件影院模式。
+        if (htmlFullScreen || contents.__cspHtmlFullscreen) {
+          event.preventDefault()
+          contents.__cspHtmlFullscreen = false
+          exitParseFullscreen(contents).catch(() => {})
+          return
+        }
+        if (mainWindow && mainWindow.isFullScreen()) {
+          event.preventDefault()
+          sendCommand('app:fullscreen-toggle')
+        }
+        return
+      }
+      if (contents.__cspHasVideo !== true) return
+      const space = key === ' ' || key === 'Spacebar' || key === 'Space' || input.code === 'Space'
+      const action = space
+        ? 'toggle'
+        : key === 'ArrowLeft'
+          ? 'back'
+          : key === 'ArrowRight'
+            ? 'forward'
+            : key === 'ArrowUp'
+              ? 'volume-up'
+              : key === 'ArrowDown'
+                ? 'volume-down'
+                : key === 'm' || key === 'M'
+                  ? 'mute'
+                  : ''
+      if (!action) return
+      event.preventDefault()
+      dispatchPlayerAction(action).catch(() => {})
+    })
+    contents.on('enter-html-full-screen', () => {
+      contents.__cspHtmlFullscreen = true
+      sendCommand('window:fullscreen', true)
+    })
+    contents.on('leave-html-full-screen', () => {
+      contents.__cspHtmlFullscreen = false
+      setTimeout(() => {
+        sendCommand('window:fullscreen', Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()))
+      }, 120)
+    })
+  }
+
   // 平台 webview 里也有键盘：Alt+←/→ 后退/前进、Esc 返回主界面、Ctrl+W 关闭当前标签页。
   // 主窗口的 document keydown 拿不到 webview 内的按键，所以必须在主进程拦截。
   const platformForContents = PLATFORMS.find((item) => session.fromPartition(item.partition) === contents.session)
@@ -711,7 +988,7 @@ function registerIpc() {
 
   ipcMain.handle('history:add', (_event, entry = {}) => {
     const platform = detectPlatformByUrl(entry.url)
-    return store.addHistory({ ...entry, platform: platform?.name || entry.platform || '其他' })
+    return store.addHistory({ ...entry, platform: platform?.key || entry.platform || '' })
   })
 
   ipcMain.handle('history:clear', () => store.clearHistory())
@@ -719,6 +996,14 @@ function registerIpc() {
   ipcMain.handle('history:update', (_event, entry = {}) => store.updateHistory(entry))
 
   ipcMain.handle('history:remove', (_event, url) => store.removeHistory(url))
+
+  // 网页解析线路的播放控制 / 进度读取（跨域 iframe 也行）
+  ipcMain.handle('player:command', (_event, payload = {}) => {
+    const action = String(payload.action || '')
+    if (!PLAYER_ACTIONS.includes(action)) return { ok: false, error: 'unknown-action' }
+    return dispatchPlayerAction(action)
+  })
+  ipcMain.handle('player:state', () => readPlayerSnapshot())
 
   ipcMain.handle('page:title', async (_event, url) => resolvePageTitle(normalizeUrlText(url)))
 

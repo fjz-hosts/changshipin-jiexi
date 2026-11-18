@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('desktop', {
   updateHistory: (entry) => ipcRenderer.invoke('history:update', entry),
   removeHistory: (url) => ipcRenderer.invoke('history:remove', url),
   clearHistory: () => ipcRenderer.invoke('history:clear'),
+  playerCommand: (payload) => ipcRenderer.invoke('player:command', payload),
+  playerState: () => ipcRenderer.invoke('player:state'),
   pageTitle: (url) => ipcRenderer.invoke('page:title', url),
   resolveSeries: (payload) => ipcRenderer.invoke('series:resolve', payload),
   downloadCurrent: (payload) => ipcRenderer.invoke('download:start', payload),
