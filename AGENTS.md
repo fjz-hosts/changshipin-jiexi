@@ -42,12 +42,15 @@ latest.yml
 
 ### 下载安装包
 
-`gh release download` 可能很慢（本机实测 8MB/5min）。优先用镜像，只下载到 `release\` 供隔离验证，
-**不要执行安装，也不要覆盖正式版**：
+需要隔离验证的包只放 `release\`，**不要执行安装，也不要覆盖正式版**。
+首选 `node scripts\sync-releases.mjs`（见下一节，它支持断点续传 + sha512 校验，放 `releases\`）。
+
+本机用 curl 走镜像已经不通了：DSH 沙箱里 curl 的 schannel 直接报 `SEC_E_NO_CREDENTIALS (0x8009030E)`，
+`gh release download` 又不支持续传（实测 121MB 下到 18MB 被连接重置）。所以大文件一律走那个 Node 脚本。
 
 ```powershell
-curl.exe -L --max-time 300 -C - -o release\changshipin-Setup-X.Y.Z.exe `
-  "https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/download/vX.Y.Z/changshipin-Setup-X.Y.Z.exe"
+# 只下载到 releases\ 存档（推荐，可续传、校验 sha512）
+node scripts\sync-releases.mjs
 ```
 
 ### 本机不要安装 / 覆盖正式版
@@ -68,7 +71,39 @@ Start-Process -FilePath 'F:\Desktop\长视频解析\release\win-unpacked\长视�
   -RedirectStandardOutput 'F:\Desktop\长视频解析\.tmp\unpacked-smoke.txt'
 ```
 
-## 2. 发版前测试
+## 2. 发版后：最新安装包放进 `releases\`，旧版本清掉
+
+**用户明确规则：每次项目更新 / 发版后，`releases\` 里只保留最新一版的安装包，之前版本的安装包一律删除。**
+每次发版收尾都要做这一步，不需要用户再提醒。
+
+CI 发布成功（`gh release view` 里三个 asset 都是 `uploaded`）后，在项目根目录执行：
+
+```powershell
+node scripts\sync-releases.mjs
+```
+
+脚本会自动完成：
+
+1. 用 GitHub API 取最新 Release 版本（需要指定时 `--version X.Y.Z`，要 `v` 前缀可省）；
+2. 走镜像 + Range 断点续传，下载 `changshipin-Setup-X.Y.Z.exe` 到 `releases\`，
+   按 `latest.yml` 的 `sha512` / `size` 校验通过后才原子改名落地；
+3. 同时留一份 `latest.yml`（核对版本、测更新源用）；
+4. 删除 `releases\` 里更早版本的 `changshipin-Setup-*.exe`、`*.blockmap` 和 `.part` 残留，只留当前版本。
+
+```powershell
+# 只体检，不下载不删除；版本落后 / 有旧版本时退出码为 1
+node scripts\sync-releases.mjs --check
+
+# 只下载新版，不动旧文件（一般不用）
+node scripts\sync-releases.mjs --no-cleanup
+```
+
+- `releases\` 里**只放最新安装包，不进 git**：单个 116MB 已超过 GitHub 100MB 文件上限，`.gitignore` 已忽略；只有 `releases\README.md` 会提交。
+- 这里下载的包是**存档 / 发给用户**用的：**不要执行安装，不要覆盖 `D:\长视频解析\changshipin-jiexi`**（见下一节）。
+- **大文件不要用 curl / gh 下载**：DSH 沙箱里 curl 的 schannel 报 `SEC_E_NO_CREDENTIALS (0x8009030E)`；
+  `gh release download` 不支持断点续传（实测 121MB 下到 18MB 就被连接重置）。脚本用 Node `fetch` + `Range` 续传 + 多镜像就是这个原因。
+
+## 3. 发版前测试
 
 ```powershell
 # 无头自检（32 项）
@@ -79,7 +114,7 @@ node tools\cdp-test8.mjs
 node tools\cdp-test9.mjs
 ```
 
-## 3. 其它约定
+## 4. 其它约定
 
 - 不要在本机对测试安装执行卸载（会删正式版快捷方式）；验证安装包用 `release\win-unpacked` 或独立虚拟机。
 - GitHub push 一律带 `-c http.proxy= -c https.proxy=` 绕过失效代理，失败重试。
@@ -88,7 +123,7 @@ node tools\cdp-test9.mjs
 - 发版记录同步更新：`README.md` 的更新记录、`项目开发交接文档.md` 的版本历史/安装路径/Release 链接。
 - **不要再加入手机端**：用户已明确不要手机版，也不再需要扫码下载。
 
-## 4. 本机环境已知问题
+## 5. 本机环境已知问题
 
 - `desktop\electron\node_modules\builder-util\out\util.js` 的 Windows 分支会把子进程环境替换成只剩 `__COMPAT_LAYER`，
   导致 NSIS 安装器没有 `TEMP`/`PATH`，报临时文件错误。该补丁只作为本地诊断，**不是发版依赖**；

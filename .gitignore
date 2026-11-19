@@ -4,6 +4,10 @@ release/
 dist/
 .tmp/
 
+# 最新安装包存档（scripts/sync-releases.mjs 维护，二进制不入库；只提交说明）
+releases/*
+!releases/README.md
+
 # 本地开发工具产物
 tools/*.png
 tools/*.mp4

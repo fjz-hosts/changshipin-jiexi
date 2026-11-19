@@ -8,6 +8,8 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 >
 > 开发/维护/交接说明：见 [项目开发交接文档.md](项目开发交接文档.md)（架构、数据、构建发版、测试、已知限制、下一步）。
 > 项目规则见 [AGENTS.md](AGENTS.md)：**发版统一走 GitHub Actions 的 `release-windows` 工作流**，不要在本机跑 NSIS 打包。
+>
+> 最新安装包存档在 [`releases\`](releases/)（只留当前最新版，旧版自动清掉）：`node scripts\sync-releases.mjs`。
 
 ![主界面](docs/screenshot-main.png)
 
@@ -106,7 +108,14 @@ GitHub Releases（安装包 + latest.yml）
   git -c http.proxy= -c https.proxy= push origin main
   gh workflow run release-windows --ref main -f version=1.0.11
   gh run watch <run-id> --exit-status
+
+  # 5. CI 发布成功后，把最新安装包同步到 releases\（自动清掉旧版本）
+  node scripts\sync-releases.mjs
   ```
+
+- **安装包存档规则**：`releases/` 里只保留**当前最新一版**的 `changshipin-Setup-<版本>.exe` + `latest.yml`，
+  每次发版后跑一次 `node scripts\sync-releases.mjs`，脚本会取最新 Release、镜像断点续传下载、按 `latest.yml` 的
+  sha512/size 校验，再删掉更早版本的安装包；只检查是否落后用 `--check`。二进制不进 git（单个 116MB 超过 GitHub 文件上限）。
 
 - 本机 `desktop\release.ps1` / `build.ps1` 仅作离线备用：本机 NSIS 生成卸载器时会被安全软件 / SmartScreen / 临时目录挡住（`NSIS Error: Error writing temporary file`），不要再作为发版流程；详见 [AGENTS.md](AGENTS.md)。
 - 本机安装器被 SmartScreen 挡住时，可以用 `release\win-unpacked` 直接覆盖安装目录（robocopy），功能和自动更新都正常。
@@ -137,6 +146,8 @@ desktop/
     build/icon.ico
   verify.ps1               # 发版前自检（smoke，可选 cdp-test8）
 scripts/make_icon.py       # 生成应用图标
+scripts/sync-releases.mjs  # 把最新安装包同步到 releases\（旧版本自动清理）
+releases/                  # 最新安装包存档（只留当前版本；二进制不入库，见 releases/README.md）
 tools/webview-probe/       # 线路探针（开发用）
 tools/guide/               # 图文教程截图生成（Python + CDP）
 tools/cdp-test*.mjs        # 界面 / 全屏 / 找剧 / 关闭窗口的自动化验证
