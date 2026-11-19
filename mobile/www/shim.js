@@ -359,7 +359,7 @@
   }
 
   // -------------------------------------------------------------------------
-  // <webview> 兼容元素：映射到原生 WebView 覆盖层
+  // <mobile-webview> 兼容元素：映射到原生 WebView 覆盖层（自定义元素名必须含连字符）
   // -------------------------------------------------------------------------
   let webviewSeq = 0
   const webviewRegistry = new Set()
@@ -529,11 +529,11 @@
     }
   }
 
-  if (!customElements.get('webview')) {
+  if (!customElements.get('mobile-webview')) {
     try {
-      customElements.define('webview', MobileWebview)
+      customElements.define('mobile-webview', MobileWebview)
     } catch (error) {
-      console.warn('[shim] <webview> 注册失败', error)
+      console.warn('[shim] <mobile-webview> 注册失败', error)
     }
   }
 
@@ -658,6 +658,13 @@
           return
         }
         N.exitApp()
+      })
+      AppPlugin.addListener('appUrlOpen', (event) => {
+        const url = String(event?.url || '')
+        const match = /[?&]platform=(iqiyi|qq|youku|mgtv)(?:&|$)/.exec(url)
+        if (!match) return
+        const target = new URL(url).searchParams.get('target')
+        setTimeout(() => window.__cspOpenBrowser?.(match[1], target ? { url: target } : {}), 600)
       })
     }
   } catch {

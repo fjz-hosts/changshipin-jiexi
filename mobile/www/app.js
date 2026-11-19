@@ -229,7 +229,7 @@
     if (existing) return existing
     const meta = browserMeta(key)
     if (!meta) return null
-    const webview = document.createElement('webview')
+    const webview = document.createElement('mobile-webview')
     webview.className = 'browser-webview'
     webview.setAttribute('partition', `persist:platform-${key}`)
     webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no')
@@ -3011,6 +3011,7 @@
   }
 
   window.__app = { detectPlatform, platformInfo, getState: () => state }
+  window.__cspOpenBrowser = (key, options) => openBrowser(key, options || {})
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
   } else {

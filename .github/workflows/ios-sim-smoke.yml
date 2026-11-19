@@ -1,0 +1,86 @@
+name: ios-sim-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install JS dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Sync Capacitor iOS project
+        working-directory: mobile
+        run: npx cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: mobile/ios/App
+        run: pod install --repo-update
+
+      - name: Build for iOS Simulator
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Boot simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -E 'iPhone (16|15|14)' | head -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | grep -oE '[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}')
+          fi
+          echo "UDID=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Install and launch app
+        env:
+          UDID: ${{ steps.sim.outputs.UDID }}
+        run: |
+          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$UDID" com.fjzhosts.changshipin
+          sleep 8
+          xcrun simctl io "$UDID" screenshot shot-01-home.png
+
+      - name: Open example.com in the in-app browser
+        env:
+          UDID: ${{ steps.sim.outputs.UDID }}
+        run: |
+          xcrun simctl openurl "$UDID" "changshipin://open?platform=mgtv&target=https://example.com"
+          sleep 10
+          xcrun simctl io "$UDID" screenshot shot-02-example.png
+
+      - name: Open MangoTV in the in-app browser
+        env:
+          UDID: ${{ steps.sim.outputs.UDID }}
+        run: |
+          xcrun simctl openurl "$UDID" "changshipin://open?platform=mgtv"
+          sleep 12
+          xcrun simctl io "$UDID" screenshot shot-03-mgtv.png
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sim-screenshots
+          path: shot-*.png
+          if-no-files-found: warn

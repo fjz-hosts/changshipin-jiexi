@@ -62,5 +62,16 @@
 	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.fjzhosts.changshipin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>changshipin</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
