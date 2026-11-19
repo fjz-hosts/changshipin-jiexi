@@ -136,7 +136,7 @@ final class StreamProxy {
                     partial[key] = value
                 }
             }
-            let cookies = HTTPCookie.cookies(withResponseHeaderFields: headers, for: URL(string: target))
+            let cookies = URL(string: target).map { HTTPCookie.cookies(withResponseHeaderFields: headers, for: $0) } ?? []
             if !cookies.isEmpty {
                 let list = cookies.map { "\($0.name)=\($0.value)" }
                 if let encoded = try? JSONSerialization.data(withJSONObject: list, options: []) {
@@ -212,10 +212,10 @@ final class StreamProxy {
                 var output = ""
                 var rest = Substring(trimmed)
                 while let start = rest.range(of: "URI=\"") {
-                    output += rest[..<start.upperBound]
+                    output += String(rest[..<start.upperBound])
                     let afterStart = rest[start.upperBound...]
                     guard let end = afterStart.firstIndex(of: "\"") else {
-                        output += afterStart
+                        output += String(afterStart)
                         rest = ""
                         break
                     }
@@ -223,7 +223,7 @@ final class StreamProxy {
                     output += rewrite(uri)
                     rest = afterStart[end...]
                 }
-                output += rest
+                output += String(rest)
                 return output
             }
             return rewrite(trimmed)
