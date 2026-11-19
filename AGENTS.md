@@ -52,32 +52,27 @@ latest-mobile.json                   # 手机端更新清单
 `gh release download` 可能很慢（本机实测 8MB/5min）。优先用镜像：
 
 ```powershell
-# 镜像下载（支持断点续传 -C -）
+# 只下载到 release\ 供隔离验证；不要执行安装，也不要覆盖正式版
 curl.exe -L --max-time 300 -C - -o release\changshipin-Setup-X.Y.Z.exe `
   "https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/download/vX.Y.Z/changshipin-Setup-X.Y.Z.exe"
 ```
 
-安装前先解除 Mark of the Web，避免 SmartScreen 卡住静默安装：
+### 本机不要安装 / 覆盖正式版
+
+**发版后不要在本机下载安装包、不要静默安装，也不要用 `robocopy` 覆盖 `D:\长视频解析\changshipin-jiexi`。**
+用户会在下次双击启动时由客户端 `electron-updater` 自己检查、后台下载并提示安装；不需要 AI 代替用户更新本机正式版。
+
+- 需要验证安装包时，只在隔离目录里跑：`release\win-unpacked`（`npx electron-builder --dir`）或独立虚拟机。
+- 不要对 `D:\长视频解析\changshipin-jiexi` 做任何写入/删除/覆盖操作。
+- 本机运行 smoke 时用独立配置目录和 `release\win-unpacked`，不要动正式安装目录。
 
 ```powershell
-Unblock-File -Path 'F:\Desktop\长视频解析\release\changshipin-Setup-X.Y.Z.exe'
-Remove-Item -Path 'F:\Desktop\长视频解析\release\changshipin-Setup-X.Y.Z.exe:Zone.Identifier' -ErrorAction SilentlyContinue
-```
-
-### 本机安装
-
-```powershell
-Get-Process '长视频解析' -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Process -FilePath 'F:\Desktop\长视频解析\release\changshipin-Setup-X.Y.Z.exe' `
-  -ArgumentList '/S','/D=D:\长视频解析\changshipin-jiexi' -Wait
-(Get-Item 'D:\长视频解析\changshipin-jiexi\长视频解析.exe').VersionInfo.ProductVersion
-```
-
-如果本机安装器仍被 SmartScreen / NSIS 临时文件问题挡住，用**免安装覆盖**（已验证可用）：
-
-```powershell
-Get-Process '长视频解析' -ErrorAction SilentlyContinue | Stop-Process -Force
-robocopy "F:\Desktop\长视频解析\release\win-unpacked" "D:\长视频解析\changshipin-jiexi" /E /IS /IT /R:1 /W:1
+# 仅隔离验证示例（不要写 D:\长视频解析）
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+$env:CHANGSPIN_USERDATA='F:\Desktop\长视频解析\.tmp\unpacked-smoke'
+Start-Process -FilePath 'F:\Desktop\长视频解析\release\win-unpacked\长视频解析.exe' `
+  -ArgumentList '--smoke-test','--no-sandbox','--disable-gpu' -Wait `
+  -RedirectStandardOutput 'F:\Desktop\长视频解析\.tmp\unpacked-smoke.txt'
 ```
 
 ## 2. 发版前测试
@@ -100,15 +95,7 @@ desktop\electron\node_modules\.bin\electron.cmd mobile\dev\main.js --width 390 -
 
 手机端原生构建只在 CI（ubuntu-latest / macos-15）验证；本机没有 Android SDK、没有 Xcode，不要试图在本机出 APK / IPA。
 
-安装完成后可以再跑一次已安装程序的 smoke：
-
-```powershell
-Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-$env:CHANGSPIN_USERDATA='F:\Desktop\长视频解析\.tmp\installed-smoke'
-Start-Process -FilePath 'D:\长视频解析\changshipin-jiexi\长视频解析.exe' `
-  -ArgumentList '--smoke-test','--no-sandbox','--disable-gpu' -Wait `
-  -RedirectStandardOutput 'F:\Desktop\长视频解析\.tmp\installed-smoke.txt'
-```
+**不要**为了「验证安装」去启动 `changshipin-Setup-X.Y.Z.exe` 或覆盖正式版；正式版的更新由用户下次启动时自动完成。
 
 ## 3. 其它约定（沿用交接文档）
 
