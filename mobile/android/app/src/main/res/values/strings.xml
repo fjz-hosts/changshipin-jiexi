@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">长视频解析</string>
-    <string name="title_activity_main">长视频解析</string>
-    <string name="package_name">com.fjzhosts.changshipin</string>
-    <string name="custom_url_scheme">com.fjzhosts.changshipin</string>
-</resources>

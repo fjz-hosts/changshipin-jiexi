@@ -1,269 +1,76 @@
-name: release-all
+name: release-windows
 
-# 一次构建 / 发布三端：
-#   Windows 桌面端 NSIS + Android APK + iOS 免签名 IPA
-# 版本号一次填写，桌面端与手机端始终同版本；手机端更新清单 latest-mobile.json 一起发布。
+# 手动触发：在 Actions 页面点 "Run workflow"。
+# 用于本地网络推不动 GitHub 时，直接由 CI 构建并上传安装包到 Releases（同名覆盖）。
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（例如 1.1.0；留空则用 mobile/package.json 里的版本）'
+        description: '版本号（例如 1.0.10，留空则用 package.json 里的）'
         required: false
         default: ''
 
 permissions:
   contents: write
 
-concurrency:
-  group: release-all-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  desktop:
+  release:
     runs-on: windows-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Resolve version
-        id: version
-        shell: pwsh
-        run: |
-          $version = "${{ inputs.version }}"
-          if (-not $version) {
-            $version = (Get-Content mobile/package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
-          }
-          node scripts/set-version.mjs $version
-          "value=$version" >> $env:GITHUB_OUTPUT
 
       - name: Install dependencies
         working-directory: desktop/electron
         run: npm install --no-audit --no-fund
 
-      - name: Build Windows installer
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content desktop/electron/package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $version = "${{ inputs.version }}"
+          if (-not $version) { $version = $pkg.version }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Set version
+        if: inputs.version != ''
+        working-directory: desktop/electron
+        shell: pwsh
+        run: |
+          $path = 'package.json'
+          $text = [System.IO.File]::ReadAllText($path)
+          $text = [regex]::Replace($text, '("version"\s*:\s*")[^"]*(")', ('${1}${{ inputs.version }}${2}'), 1)
+          [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+
+      - name: Build installer (NSIS x64)
         working-directory: desktop/electron
         run: npx electron-builder --win nsis --x64 --publish never
 
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-dist
-          path: |
-            release/changshipin-Setup-*.exe
-            release/changshipin-Setup-*.exe.blockmap
-            release/latest.yml
-          if-no-files-found: error
-
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-
-      - name: Resolve version and sync Capacitor
-        working-directory: mobile
+      - name: Publish / update GitHub Release
+        shell: pwsh
         run: |
-          set -euo pipefail
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            VERSION=$(node -p "require('./package.json').version")
-          fi
-          node ../scripts/set-version.mjs "$VERSION"
-          npm ci --no-audit --no-fund
-          npx cap sync android
-          node scripts/patch-android.mjs
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-
-      - name: Build signed APK
-        working-directory: mobile/android
-        env:
-          GRADLE_OPTS: '-Dorg.gradle.internal.http.connectionTimeout=90000 -Dorg.gradle.internal.http.socketTimeout=90000'
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          for attempt in 1 2 3; do
-            echo "Gradle 构建尝试 $attempt / 3"
-            if ./gradlew assembleRelease --no-daemon --stacktrace; then
-              break
-            fi
-            if [ "$attempt" = "3" ]; then
-              echo "Gradle 三次尝试都失败"
-              exit 1
-            fi
-            sleep 20
-          done
-          mkdir -p ../dist
-          APK=app/build/outputs/apk/release/app-release.apk
-          cp "$APK" "../dist/changshipin-android-${VERSION}.apk"
-          cp "$APK" "../dist/changshipin-android.apk"
-          if [ -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]; then
-            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "../dist/changshipin-android.apk"
-          fi
-          ls -lh ../dist
-
-      - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-dist
-          path: mobile/dist/*
-          if-no-files-found: error
-
-  ios:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Resolve version and sync Capacitor
-        working-directory: mobile
-        run: |
-          set -euo pipefail
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            VERSION=$(node -p "require('./package.json').version")
-          fi
-          node ../scripts/set-version.mjs "$VERSION"
-          npm ci --no-audit --no-fund
-          npx cap sync ios
-          node scripts/patch-ios.mjs
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-
-      - name: Pod install
-        working-directory: mobile/ios/App
-        run: |
-          set -euo pipefail
-          pod install --repo-update
-
-      - name: Build unsigned iOS app
-        working-directory: mobile/ios/App
-        run: |
-          set -euo pipefail
-          xcodebuild -list -workspace App.xcworkspace
-          xcodebuild \
-            -workspace App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY= \
-            CODE_SIGN_ENTITLEMENTS= \
-            ONLY_ACTIVE_ARCH=NO \
-            build
-          mkdir -p ../../dist/Payload
-          cp -R build/Build/Products/Release-iphoneos/App.app ../../dist/Payload/
-          cd ../../dist
-          zip -qry "changshipin-ios-unsigned-${VERSION}.ipa" Payload
-          cp "changshipin-ios-unsigned-${VERSION}.ipa" "changshipin-ios-unsigned.ipa"
-          rm -rf Payload
-          ls -lh
-
-      - name: Upload iOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-dist
-          path: mobile/dist/*.ipa
-          if-no-files-found: error
-
-  publish:
-    runs-on: ubuntu-latest
-    needs: [desktop, android, ios]
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Flatten artifacts
-        run: |
-          set -euo pipefail
-          mkdir -p dist/ready
-          find dist -type f \( -name 'changshipin-Setup-*' -o -name 'latest.yml' -o -name 'changshipin-android*' -o -name 'changshipin-ios*' \) -exec cp -v {} dist/ready/ \;
-          ls -lh dist/ready
-
-      - name: Resolve version and build mobile manifest
-        run: |
-          set -euo pipefail
-          VERSION="${{ inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            VERSION=$(node -p "require('./mobile/package.json').version")
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          TAG="v$VERSION"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          node - "$VERSION" <<'NODE'
-          const fs = require('node:fs')
-          const path = require('node:path')
-          const version = process.argv[2]
-          const android = path.join('dist', 'ready', `changshipin-android-${version}.apk`)
-          const ios = path.join('dist', 'ready', `changshipin-ios-unsigned-${version}.ipa`)
-          const sha = (file) => require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex')
-          const size = (file) => fs.statSync(file).size
-          const manifest = {
-            version,
-            versionCode: version.split('.').reduce((acc, item, index) => acc + Number(item) * [10000, 100, 1][index], 0),
-            publishedAt: new Date().toISOString(),
-            notes: '与电脑端同版本发布：解析 / 选集 / 历史 / 下载 / 线路管理 / 全屏手势一致。',
-            android: { asset: 'changshipin-android.apk', size: size(android), sha256: sha(android) },
-            ios: { asset: 'changshipin-ios-unsigned.ipa', size: size(ios), sha256: sha(ios) },
-            mirrors: [
-              'https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi',
-              'https://gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi',
-              'https://ghfile.geekertao.top/https://github.com/fjz-hosts/changshipin-jiexi',
-              'https://hk.gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi',
-              'https://github.com/fjz-hosts/changshipin-jiexi'
-            ]
+          $version = '${{ steps.version.outputs.value }}'
+          $tag = "v$version"
+          $files = @(
+            "release/changshipin-Setup-$version.exe",
+            "release/changshipin-Setup-$version.exe.blockmap",
+            "release/latest.yml"
+          )
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) { throw "缺少产物：$file" }
           }
-          fs.writeFileSync('dist/ready/latest-mobile.json', JSON.stringify(manifest, null, 2) + '\n')
-          NODE
-          ls -lh dist/ready
-
-      - name: Publish GitHub Release
-        run: |
-          set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG 已存在，覆盖上传"
-          else
-            gh release create "$TAG" --title "长视频解析 v$VERSION" --generate-notes --target "${{ github.sha }}"
-          fi
-          gh release upload "$TAG" \
-            "dist/ready/changshipin-Setup-$VERSION.exe" \
-            "dist/ready/changshipin-Setup-$VERSION.exe.blockmap" \
-            "dist/ready/latest.yml" \
-            "dist/ready/changshipin-android-$VERSION.apk" \
-            "dist/ready/changshipin-android.apk" \
-            "dist/ready/changshipin-ios-unsigned-$VERSION.ipa" \
-            "dist/ready/changshipin-ios-unsigned.ipa" \
-            "dist/ready/latest-mobile.json" \
-            --clobber
-          echo "已发布 $TAG"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "长视频解析 v$version" --generate-notes --target "${{ github.sha }}"
+          }
+          gh release upload $tag $files --clobber
+          Write-Host "已发布：$tag"

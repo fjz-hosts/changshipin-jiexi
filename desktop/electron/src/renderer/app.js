@@ -16,19 +16,6 @@
     mgtv: (q) => `https://so.mgtv.com/so?k=${encodeURIComponent(q)}`,
   }
 
-  // 手机版下载：与主进程 mobile.js 保持一致
-  const MOBILE_REPO = 'https://github.com/fjz-hosts/changshipin-jiexi'
-  const MOBILE_MIRRORS = [
-    'https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi',
-    'https://gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi',
-    'https://ghfile.geekertao.top/https://github.com/fjz-hosts/changshipin-jiexi',
-    'https://hk.gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi',
-    MOBILE_REPO,
-  ]
-  const MOBILE_MIRROR_LABELS = ['Monlor 加速', 'gh-proxy 加速', 'Geekertao 加速', '香港加速', 'GitHub 直连']
-  const MOBILE_FILES = { android: 'changshipin-android.apk', ios: 'changshipin-ios-unsigned.ipa' }
-  const MOBILE_LANDING = 'https://fjz-hosts.github.io/changshipin-jiexi/mobile/'
-
   const icons = {
     play: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>',
   }
@@ -79,16 +66,6 @@
     downloadRunning: false,
     downloadPercent: 0,
     finishedDownloads: new Map(),
-    mobile: {
-      open: false,
-      source: 'lan',
-      platform: 'android',
-      info: null,
-      lan: null,
-      lanBusy: false,
-      loading: false,
-      download: {},
-    },
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -1081,7 +1058,6 @@
     if (state.browserOpen) return
     if (!$('#modal').hidden || !$('#search-modal').hidden) return
     if (document.querySelector('#guide-modal') && !$('#guide-modal').hidden) return
-    if (document.querySelector('#mobile-modal') && !$('#mobile-modal').hidden) return
     if (isTypingTarget(event.target)) return
     const key = event.key
     if (key === 'Escape' || key === 'F11' || key === 'F5' || key === 'Tab') return
@@ -1928,435 +1904,6 @@
     })
   }
 
-  // ---------------------------------------------------------------------------
-  // 手机版下载
-  // ---------------------------------------------------------------------------
-
-  function mobileDefaultPlatform() {
-    const ua = String(navigator.userAgent || '')
-    if (/iphone|ipad|ipod/i.test(ua)) return 'ios'
-    return 'android'
-  }
-
-  function mobilePlatformLabel(platform) {
-    return platform === 'ios' ? 'IPA' : 'APK'
-  }
-
-  function mobileFormatBytes(bytes) {
-    const value = Number(bytes) || 0
-    if (value <= 0) return '0 B'
-    if (value < 1024) return `${value} B`
-    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-    if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`
-    return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`
-  }
-
-  function mobileFileUrl(platform, mirror) {
-    const base = String(mirror || MOBILE_MIRRORS[0]).replace(/\/+$/, '')
-    return `${base}/releases/latest/download/${MOBILE_FILES[platform] || MOBILE_FILES.android}`
-  }
-
-  function mobileLandingUrl(platform) {
-    return `${MOBILE_LANDING}?platform=${platform}`
-  }
-
-  function mobileQrTarget() {
-    if (state.mobile.source === 'cloud') return mobileLandingUrl(state.mobile.platform)
-    if (state.mobile.lan?.ok) return String(state.mobile.lan.url || '')
-    return ''
-  }
-
-  function drawMobileQr(text) {
-    const canvas = $('#mobile-qr')
-    if (!canvas) return false
-    const size = 240
-    let ctx = null
-    try {
-      ctx = canvas.getContext('2d')
-    } catch {
-      ctx = null
-    }
-    if (!ctx) return false
-    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
-    canvas.width = Math.round(size * dpr)
-    canvas.height = Math.round(size * dpr)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, size, size)
-    canvas.dataset.qrText = ''
-    if (!text || typeof qrcode !== 'function') {
-      ctx.fillStyle = '#9fb0c8'
-      ctx.font = '600 13px "Microsoft YaHei", sans-serif'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(text ? '二维码生成失败' : '正在准备…', size / 2, size / 2)
-      return false
-    }
-    try {
-      const qr = qrcode(0, 'M')
-      qr.addData(text)
-      qr.make()
-      const count = qr.getModuleCount()
-      const margin = 2
-      const cell = size / (count + margin * 2)
-      const offset = margin * cell
-      ctx.fillStyle = '#07111d'
-      for (let row = 0; row < count; row += 1) {
-        for (let col = 0; col < count; col += 1) {
-          if (!qr.isDark(row, col)) continue
-          ctx.fillRect(Math.round(offset + col * cell), Math.round(offset + row * cell), Math.ceil(cell), Math.ceil(cell))
-        }
-      }
-      canvas.dataset.qrText = text
-      return true
-    } catch (error) {
-      console.warn('二维码生成失败', error)
-      return false
-    }
-  }
-
-  function setMobileStatus(text, kind = 'info') {
-    const node = $('#mobile-status')
-    if (!node) return
-    node.hidden = !text
-    node.textContent = text || ''
-    node.dataset.kind = kind
-  }
-
-  function renderMobileDescription() {
-    const node = $('#mobile-desc')
-    if (!node) return
-    const source = state.mobile.source
-    if (state.mobile.platform === 'android') {
-      node.innerHTML = `
-        <p><strong>Android APK</strong>：下载后直接打开安装。首次安装时，系统可能提示「未知来源」，允许一次即可。</p>
-        <ul>
-          <li>${source === 'lan' ? '同一 Wi-Fi 下扫码，安装包直接从这台电脑下载，国内网络也能跑满。' : '云端镜像会打开 GitHub Release 地址，国内网络建议用前几个镜像。'}</li>
-          <li>如果手机浏览器提示「不支持此文件」，换用手机自带浏览器或文件管理器打开下载目录。</li>
-        </ul>
-      `
-      return
-    }
-    node.innerHTML = `
-      <p><strong>iOS 免签名 IPA</strong>：不能像 Android 一样直接安装，需要用 Sideloadly / AltStore 用 Apple ID 重签后安装。</p>
-      <ol>
-        <li>在电脑上安装 Sideloadly（或 AltStore）。</li>
-        <li>把 IPA 拖进 Sideloadly，用 Apple ID 重签并安装到手机。</li>
-        <li>手机「设置 → 通用 → VPN 与设备管理」里信任开发者证书。</li>
-      </ol>
-      <p class="mobile-ios-tip">重签只在本机有效；Apple ID 会向 Apple 服务器验证，请使用自己的账号。</p>
-    `
-  }
-
-  function renderMobileInstallSteps() {
-    const node = $('#mobile-install-steps')
-    if (!node) return
-    if (state.mobile.platform === 'android') {
-      node.innerHTML = `
-        <ol class="mobile-step-list">
-          <li><b>下载</b>：手机扫码或打开链接，浏览器会下载 <code>changshipin-android.apk</code>。</li>
-          <li><b>找到文件</b>：下拉通知栏点「下载完成」，或打开「文件管理 → 下载 / Download」。</li>
-          <li><b>允许安装</b>：第一次点 APK 会提示「禁止安装未知应用」→ 点「设置」→ 允许当前浏览器 / 文件管理器 → 返回继续。</li>
-          <li><b>点安装</b>：安装完成后回到桌面，打开「长视频解析」。</li>
-          <li><b>以后升级</b>：直接下载新 APK 覆盖安装，不用卸载，配置和历史都保留。</li>
-        </ol>
-        <p class="mobile-step-tip">如果提示「解析包错误 / 应用未安装」：删掉旧 APK 重新下载；仍然不行就把 APK 用数据线/微信文件传到手机再点开。</p>
-      `
-      return
-    }
-    node.innerHTML = `
-      <ol class="mobile-step-list">
-        <li><b>下载 IPA</b>：手机扫码或打开链接下载 <code>changshipin-ios-unsigned.ipa</code>；Safari 会存到「文件」App → 下载。</li>
-        <li><b>准备电脑</b>：iOS 不能直接点 IPA 安装。需要一台 Windows / Mac 电脑、一根数据线，电脑上安装 <a href="https://sideloadly.io/" target="_blank" rel="noreferrer noopener">Sideloadly</a>（或 AltStore）。</li>
-        <li><b>自签安装</b>：iPhone 连电脑并点「信任」；把 IPA 拖进 Sideloadly，输入自己的 Apple ID（普通账号即可），点 Start。</li>
-        <li><b>信任证书</b>：手机「设置 → 通用 → VPN 与设备管理」→ 信任你的开发者证书。</li>
-        <li><b>开发者模式</b>：iOS 16 及以上打开「设置 → 隐私与安全性 → 开发者模式」，重启手机一次。</li>
-        <li><b>打开与续期</b>：回桌面打开应用。个人 Apple ID 签名 7 天有效，到期重复第 3 步覆盖安装，配置和历史保留。</li>
-      </ol>
-      <p class="mobile-step-tip">免签名 IPA 不含任何证书；Apple ID 只在本机验证，不会上传到本项目。</p>
-      <details class="mobile-ios-more">
-        <summary>为什么 iOS 不能像 Android 一样直接装？有没有更省事的办法？</summary>
-        <p>Android 允许「自签名 APK + 未知来源」，所以点一下就能装；iOS 只运行 Apple 信任证书签名的 App，免签名 IPA 没有证书，系统安装器会直接拒绝。这是 iOS 的机制，不是本程序能绕过的。</p>
-        <p><b>更省事的选择（按省事程度）：</b></p>
-        <ul>
-          <li><b>TrollStore</b>：部分 iOS 14.0–17.0 设备支持，装上后永久使用、不用续签；先看 <a href="https://github.com/opa334/TrollStore" target="_blank" rel="noreferrer noopener">官方兼容表</a>。</li>
-          <li><b>AltStore + AltServer</b>：首次用电脑，之后同一 Wi-Fi 下自动续签，7 天一次不用反复插线（<a href="https://altstore.io/" target="_blank" rel="noreferrer noopener">altstore.io</a>）。</li>
-          <li><b>SideStore</b>：配置一次后可在手机上续签，不用一直开电脑（<a href="https://sidestore.io/" target="_blank" rel="noreferrer noopener">sidestore.io</a>）。</li>
-          <li><b>Apple Developer Program</b>：$99/年，签名 1 年；首次仍需电脑安装，但不用每 7 天续一次。</li>
-        </ul>
-        <p>没有「免费 + 永久 + 完全不用电脑」的通用办法。PWA 网页版虽然免安装，但拿不到本地取流代理、下载、内置浏览器等完整能力，不能替代手机 App。</p>
-      </details>
-    `
-  }
-
-  function renderMobileMirrors() {
-    const list = $('#mobile-mirror-list')
-    if (!list) return
-    list.innerHTML = ''
-    const platform = state.mobile.platform
-    MOBILE_MIRRORS.forEach((mirror, index) => {
-      let host = mirror
-      try {
-        host = new URL(mirror).host
-      } catch {
-        /* 忽略 */
-      }
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'mobile-mirror'
-      button.title = mobileFileUrl(platform, mirror)
-      button.innerHTML = `<span class="mirror-name">${escapeHtml(MOBILE_MIRROR_LABELS[index] || `镜像 ${index + 1}`)}</span><span class="mirror-host">${escapeHtml(host)}</span><span class="mirror-go">下载 ↗</span>`
-      button.addEventListener('click', () => {
-        window.desktop.openExternal(mobileFileUrl(platform, mirror))
-      })
-      list.appendChild(button)
-    })
-  }
-
-  function renderMobileAll() {
-    if (!state.mobile.open) return
-    const platform = state.mobile.platform
-    const source = state.mobile.source
-    const entry = state.mobile.info ? state.mobile.info[platform] : null
-    const cached = Boolean(entry && entry.exists)
-    const runningState = state.mobile.download[platform]
-    const running = Boolean(runningState && runningState.status === 'running') || state.mobile.loading
-
-    $$('#mobile-source-tabs button[data-source]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.source === source)
-    })
-    $$('#mobile-platform-tabs button[data-platform]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.platform === platform)
-    })
-
-    $('#mobile-lan-panel').hidden = source !== 'lan'
-    $('#mobile-mirror-panel').hidden = source !== 'cloud'
-
-    const target = mobileQrTarget()
-    $('#mobile-link').textContent = target || (source === 'lan' ? '正在启动局域网服务…' : '—')
-    $('#mobile-link').title = target
-    $('#mobile-copy').disabled = !target
-    const drawn = drawMobileQr(target)
-    $('#mobile-qr-tip').textContent = !target
-      ? '正在准备二维码…'
-      : !drawn
-        ? '二维码生成失败，可直接复制链接'
-        : source === 'lan'
-          ? '手机扫码后可从这台电脑直接下载'
-          : '手机扫码打开云端下载页'
-
-    renderMobileDescription()
-    renderMobileInstallSteps()
-    renderMobileMirrors()
-
-    const cacheState = $('#mobile-cache-state')
-    if (cacheState) {
-      cacheState.textContent = !entry ? '检查中…' : cached ? `已缓存 · ${mobileFormatBytes(entry.size)}` : '未缓存'
-      cacheState.classList.toggle('ok', cached)
-    }
-
-    const percent = runningState && runningState.status === 'running'
-      ? Number(runningState.percent) || 0
-      : cached
-        ? 100
-        : 0
-    $('#mobile-progress').hidden = !(running && !cached)
-    $('#mobile-progress-fill').style.width = `${percent}%`
-    $('#mobile-progress-text').textContent = `${percent}%`
-
-    const prepareButton = $('#mobile-prepare')
-    prepareButton.hidden = cached
-    prepareButton.disabled = running
-    prepareButton.textContent = running ? `正在从镜像下载 ${percent}%` : '先从国内镜像下载到电脑'
-
-    const directButton = $('#mobile-download-btn')
-    directButton.textContent = `下载 ${mobilePlatformLabel(platform)} 到电脑`
-    directButton.disabled = source === 'lan' && !cached
-    directButton.title = directButton.disabled ? '电脑上还没有安装包，先从镜像下载' : ''
-  }
-
-  async function refreshMobileInfo() {
-    try {
-      state.mobile.info = await window.desktop.mobileInfo()
-    } catch (error) {
-      setMobileStatus(`读取安装包状态失败：${String(error?.message || error)}`, 'error')
-    }
-    renderMobileAll()
-  }
-
-  async function startMobileLanService() {
-    if (!state.mobile.open) return
-    if (state.mobile.lan?.ok || state.mobile.lanBusy) {
-      renderMobileAll()
-      return
-    }
-    state.mobile.lanBusy = true
-    setMobileStatus('正在启动电脑上的局域网下载服务…')
-    renderMobileAll()
-    try {
-      const result = await window.desktop.startMobileLan()
-      if (!result || result.ok !== true) throw new Error(result?.error || '局域网服务启动失败')
-      if (!state.mobile.open) {
-        // 启动过程中用户已经把弹窗关掉：立刻停掉，避免留下没人用的监听。
-        try {
-          window.desktop.stopMobileLan?.()
-        } catch {
-          /* 忽略 */
-        }
-        return
-      }
-      state.mobile.lan = result
-      if (state.mobile.info) {
-        if (state.mobile.info.android) state.mobile.info.android.exists = Boolean(result.android)
-        if (state.mobile.info.ios) state.mobile.info.ios.exists = Boolean(result.ios)
-      }
-      setMobileStatus('局域网下载页已就绪，手机扫码即可下载。', 'ok')
-    } catch (error) {
-      state.mobile.lan = null
-      setMobileStatus(`局域网服务启动失败：${String(error?.message || error)}。已自动切到云端镜像。`, 'error')
-      if (state.mobile.source === 'lan') state.mobile.source = 'cloud'
-    } finally {
-      state.mobile.lanBusy = false
-      renderMobileAll()
-    }
-  }
-
-  function switchMobileSource(source) {
-    if (source !== 'lan' && source !== 'cloud') return
-    if (state.mobile.source === source) return
-    state.mobile.source = source
-    setMobileStatus('')
-    renderMobileAll()
-    if (source === 'lan') startMobileLanService()
-  }
-
-  async function prepareMobilePackage() {
-    if (!state.mobile.open || state.mobile.loading) return
-    const platform = state.mobile.platform
-    state.mobile.loading = true
-    setMobileStatus(`正在从国内镜像下载 ${mobilePlatformLabel(platform)} 到电脑，请稍候…`)
-    renderMobileAll()
-    try {
-      const result = await window.desktop.prepareMobile({ platform, mirror: MOBILE_MIRRORS[0] })
-      if (!result || result.ok === false) {
-        setMobileStatus(`下载失败：${result?.error || '所有镜像都不可用'}`, 'error')
-        toast(`手机版下载失败：${result?.error || '镜像不可用'}`, 'error')
-      } else {
-        setMobileStatus(`安装包已下载到电脑（${mobileFormatBytes(result.size)}），现在可以扫码直传。`, 'ok')
-        toast('手机版安装包已缓存到电脑', 'ok')
-      }
-    } catch (error) {
-      setMobileStatus(`下载失败：${String(error?.message || error)}`, 'error')
-    } finally {
-      state.mobile.loading = false
-      await refreshMobileInfo()
-    }
-  }
-
-  function downloadMobileToComputer() {
-    const platform = state.mobile.platform
-    if (state.mobile.source === 'cloud') {
-      window.desktop.openExternal(mobileFileUrl(platform, MOBILE_MIRRORS[0]))
-      return
-    }
-    const entry = state.mobile.info ? state.mobile.info[platform] : null
-    if (!entry || !entry.exists) {
-      toast('电脑上还没有安装包，先点「先从国内镜像下载到电脑」', 'warn')
-      return
-    }
-    if (!state.mobile.lan?.ok) {
-      toast('局域网服务还没准备好，请稍候再试', 'warn')
-      startMobileLanService()
-      return
-    }
-    window.desktop.openExternal(`${state.mobile.lan.url}/download/${platform}`)
-  }
-
-  async function copyMobileLink() {
-    const target = mobileQrTarget()
-    if (!target) {
-      toast('链接还没准备好', 'warn')
-      return
-    }
-    try {
-      await window.desktop.copyText(target)
-      toast('链接已复制', 'ok')
-    } catch {
-      toast('复制失败', 'error')
-    }
-  }
-
-  async function openMobileCacheFolder() {
-    try {
-      const result = await window.desktop.openMobileFolder()
-      if (typeof result === 'string' && result) toast(`打开缓存目录失败：${result}`, 'error')
-    } catch (error) {
-      toast(`打开缓存目录失败：${String(error?.message || error)}`, 'error')
-    }
-  }
-
-  function openMobileModal() {
-    const modal = $('#mobile-modal')
-    if (!modal) return
-    state.mobile.open = true
-    state.mobile.source = 'lan'
-    state.mobile.platform = mobileDefaultPlatform()
-    state.mobile.info = null
-    state.mobile.lan = null
-    state.mobile.lanBusy = false
-    state.mobile.loading = false
-    state.mobile.download = {}
-    modal.hidden = false
-    setMobileStatus('')
-    renderMobileAll()
-    try {
-      $('#mobile-close').focus()
-    } catch {
-      /* 忽略 */
-    }
-    refreshMobileInfo()
-    startMobileLanService()
-  }
-
-  function closeMobileModal() {
-    const modal = $('#mobile-modal')
-    if (!modal || modal.hidden) return
-    modal.hidden = true
-    state.mobile.open = false
-    state.mobile.lan = null
-    state.mobile.lanBusy = false
-    state.mobile.loading = false
-    try {
-      window.desktop.stopMobileLan?.()
-    } catch {
-      /* 忽略 */
-    }
-  }
-
-  function onMobileState(update) {
-    if (!update || !update.platform) return
-    state.mobile.download[update.platform] = update
-    if (!state.mobile.open || update.platform !== state.mobile.platform) return
-    const label = mobilePlatformLabel(update.platform)
-    if (update.status === 'running') {
-      setMobileStatus(
-        update.error
-          ? `镜像暂时不可用（${update.error}），正在尝试下一个镜像…`
-          : `正在下载 ${label} 到电脑：${Number(update.percent) || 0}%${update.total ? `（${mobileFormatBytes(update.bytes)} / ${mobileFormatBytes(update.total)}）` : ''}`,
-        update.error ? 'error' : 'info',
-      )
-    } else if (update.status === 'done') {
-      state.mobile.loading = false
-      setMobileStatus(`${label} 已下载到电脑（${mobileFormatBytes(update.bytes)}），现在可以扫码直传。`, 'ok')
-      refreshMobileInfo()
-    } else if (update.status === 'failed') {
-      state.mobile.loading = false
-      setMobileStatus(`下载失败：${update.error || '所有镜像都不可用'}`, 'error')
-      refreshMobileInfo()
-    }
-    renderMobileAll()
-  }
-
   function switchTab(tab) {
     $$('#modal-tabs button').forEach((button) => {
       button.classList.toggle('active', button.dataset.tab === tab)
@@ -3184,31 +2731,6 @@
       })
     })
 
-    // 手机版下载
-    $('#btn-mobile').addEventListener('click', openMobileModal)
-    $('#mobile-close').addEventListener('click', closeMobileModal)
-    $('#mobile-modal').addEventListener('click', (event) => {
-      if (event.target === event.currentTarget) closeMobileModal()
-    })
-    $('#mobile-source-tabs').addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-source]')
-      if (button) switchMobileSource(button.dataset.source)
-    })
-    $('#mobile-platform-tabs').addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-platform]')
-      if (!button || !state.mobile.open) return
-      state.mobile.platform = button.dataset.platform === 'ios' ? 'ios' : 'android'
-      setMobileStatus('')
-      renderMobileAll()
-    })
-    $('#mobile-copy').addEventListener('click', () => copyMobileLink())
-    $('#mobile-prepare').addEventListener('click', () => prepareMobilePackage())
-    $('#mobile-open-folder').addEventListener('click', () => openMobileCacheFolder())
-    $('#mobile-open-landing').addEventListener('click', () => {
-      window.desktop.openExternal(mobileLandingUrl(state.mobile.platform))
-    })
-    $('#mobile-download-btn').addEventListener('click', () => downloadMobileToComputer())
-
     $('#btn-open-repo').addEventListener('click', () => window.desktop.openExternal(state.info?.repo || 'https://github.com/fjz-hosts/changshipin-jiexi'))
     $('#btn-open-userdata').addEventListener('click', () => window.desktop.openUserData())
     $('#btn-open-logs').addEventListener('click', () => window.desktop.openLogs())
@@ -3235,12 +2757,6 @@
         if (guide && !guide.hidden) {
           event.preventDefault()
           closeGuide()
-          return
-        }
-        const mobile = document.querySelector('#mobile-modal')
-        if (mobile && !mobile.hidden) {
-          event.preventDefault()
-          closeMobileModal()
           return
         }
       }
@@ -3285,7 +2801,6 @@
     document.addEventListener('keydown', (event) => {
       if (!state.series || state.browserOpen) return
       if (!$('#modal').hidden || !$('#search-modal').hidden) return
-      if (document.querySelector('#mobile-modal') && !$('#mobile-modal').hidden) return
       const target = event.target
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
       const next = (event.ctrlKey && event.key === 'ArrowRight') || (!event.ctrlKey && event.key === ']')
@@ -3359,7 +2874,6 @@
       if (update.status === 'downloaded') toast(`新版本 v${update.version || ''} 已下载，重启后生效`, 'ok', 6000)
     })
     window.desktop.onDownloadState?.(onDownloadState)
-    window.desktop.onMobileState?.((update) => onMobileState(update))
 
     // 拖拽链接
     const urlBox = $('#url-box')
@@ -3487,13 +3001,6 @@
         requestSeries,
         setDownloadButton,
         updateNativeButton,
-        openMobile: openMobileModal,
-        closeMobile: closeMobileModal,
-        getMobileState: () => state.mobile,
-        mobileQrDataUrl: () => {
-          const canvas = $('#mobile-qr')
-          return canvas ? canvas.toDataURL('image/png') : ''
-        },
       }
     } catch (error) {
       console.error(error)

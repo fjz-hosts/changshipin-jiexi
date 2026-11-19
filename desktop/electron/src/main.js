@@ -40,7 +40,6 @@ const {
 } = require('./lines')
 const { resolveSeries } = require('./series')
 const { DownloadManager } = require('./download')
-const { MobileManager } = require('./mobile')
 const { PLATFORMS, detectPlatformByUrl, platformByKey } = require('./platforms')
 
 const APP_ID = 'com.fjzhosts.changshipin'
@@ -99,7 +98,6 @@ let store = null
 let proxy = null
 let updater = null
 let downloader = null
-let mobileManager = null
 let lastStream = null
 let quitting = false
 let trayNoticeShown = false
@@ -1118,32 +1116,6 @@ function registerIpc() {
     return false
   })
 
-  // 手机版：缓存安装包 + 局域网直传
-  ipcMain.handle('mobile:info', () => (mobileManager ? mobileManager.info() : null))
-  ipcMain.handle('mobile:prepare', (_event, payload = {}) =>
-    mobileManager
-      ? mobileManager.prepare(payload)
-      : { ok: false, status: 'failed', error: '手机版下载还没准备好' },
-  )
-  ipcMain.handle('mobile:lan-start', () =>
-    mobileManager
-      ? mobileManager.startLanServer()
-      : { ok: false, error: '手机版下载还没准备好' },
-  )
-  ipcMain.handle('mobile:lan-stop', () => {
-    if (mobileManager) mobileManager.stopLanServer().catch(() => {})
-    return true
-  })
-  ipcMain.handle('mobile:open-folder', async () => {
-    if (!mobileManager) return '手机版下载还没准备好'
-    try {
-      fs.mkdirSync(mobileManager.cacheDir, { recursive: true })
-    } catch {
-      /* 目录已存在 / 权限异常时交给 shell 反馈 */
-    }
-    return shell.openPath(mobileManager.cacheDir)
-  })
-
   ipcMain.handle('lines:test', async (_event, payload = {}) => {
     const sample = isHttpUrl(payload.url) ? normalizeUrlText(payload.url) : SAMPLE_URL
     if (payload.draft && typeof payload.draft === 'object') {
@@ -1281,7 +1253,6 @@ app.on('before-quit', () => {
   updater?.dispose()
   proxy?.stop()
   downloader?.cancelAll()
-  mobileManager?.stopLanServer()
 })
 
 app.on('activate', () => {
@@ -1315,14 +1286,6 @@ app.whenReady().then(async () => {
     beforeInstall: () => {
       proxy?.stop()
     },
-  })
-
-  // 手机版安装包下载 / 局域网直传：只在用户点开「手机版」时启动服务，
-  // smoke 模式不会自动起监听。
-  mobileManager = new MobileManager({
-    userDataDir,
-    log,
-    onState: (state) => sendCommand('mobile:state', state),
   })
 
   registerIpc()
