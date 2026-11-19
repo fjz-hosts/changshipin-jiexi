@@ -18,31 +18,31 @@ Windows NSIS + Android APK + iOS 免签名 IPA，并统一上传到同一个 Rel
 cd F:\Desktop\长视频解析
 
 # 1. 统一改三端版本号（桌面 + 手机 + Android/iOS 原生工程 + latest.json）
-node scripts\set-version.mjs 1.1.1
+node scripts\set-version.mjs 1.1.2
 
 # 2. 提交并推送（GitHub git 通道不稳，失败重试 3–6 次）
 git add -A
-git commit -m "feat: v1.1.1 <简要说明>"
+git commit -m "feat: v1.1.2 <简要说明>"
 git -c http.proxy= -c https.proxy= push origin main
 
 # 3. 触发三端 CI 构建 + 发布（workflow 文件：.github/workflows/release.yml）
-gh workflow run release-all --ref main -f version=1.1.1
+gh workflow run release-all --ref main -f version=1.1.2
 
 # 4. 看进度 / 结果
 gh run list --workflow release-all --limit 3
 gh run watch <run-id> --exit-status
-gh release view v1.1.1 --json tagName,assets --jq '{tag:.tagName,assets:[.assets[]|{name,size,state}]}'
+gh release view v1.1.2 --json tagName,assets --jq '{tag:.tagName,assets:[.assets[]|{name,size,state}]}'
 ```
 
 CI 成功后 Release 会包含：
 
 ```text
-changshipin-Setup-1.1.1.exe
-changshipin-Setup-1.1.1.exe.blockmap
+changshipin-Setup-1.1.2.exe
+changshipin-Setup-1.1.2.exe.blockmap
 latest.yml
-changshipin-android-1.1.1.apk
+changshipin-android-1.1.2.apk
 changshipin-android.apk              # 固定文件名，手机更新/二维码用
-changshipin-ios-unsigned-1.1.1.ipa
+changshipin-ios-unsigned-1.1.2.ipa
 changshipin-ios-unsigned.ipa         # 固定文件名
 latest-mobile.json                   # 手机端更新清单
 ```

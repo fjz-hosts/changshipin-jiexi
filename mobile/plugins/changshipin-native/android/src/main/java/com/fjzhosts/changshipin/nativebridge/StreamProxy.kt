@@ -378,7 +378,7 @@ class StreamProxy {
         sb.append("HTTP/1.1 ").append(status).append(' ').append(statusText(status)).append("\r\n")
         sb.append("Access-Control-Allow-Origin: *\r\n")
         sb.append("Access-Control-Allow-Headers: *\r\n")
-        sb.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, X-Proxy-Status\r\n")
+        sb.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, X-Proxy-Status, X-Proxy-Set-Cookie\r\n")
         sb.append("Connection: close\r\n")
         for ((key, value) in headers) sb.append(key).append(": ").append(value).append("\r\n")
         sb.append("\r\n")

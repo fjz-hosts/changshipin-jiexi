@@ -243,7 +243,7 @@ final class StreamProxy {
         response.setValue("*", forAdditionalHeader: "Access-Control-Allow-Origin")
         response.setValue("*", forAdditionalHeader: "Access-Control-Allow-Headers")
         response.setValue("GET, POST, HEAD, OPTIONS", forAdditionalHeader: "Access-Control-Allow-Methods")
-        response.setValue("Content-Length, Content-Range, Accept-Ranges, X-Proxy-Status", forAdditionalHeader: "Access-Control-Expose-Headers")
+        response.setValue("Content-Length, Content-Range, Accept-Ranges, X-Proxy-Status, X-Proxy-Set-Cookie", forAdditionalHeader: "Access-Control-Expose-Headers")
         response.setValue("close", forAdditionalHeader: "Connection")
     }
 

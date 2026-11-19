@@ -612,11 +612,11 @@
   })
 
   // 安卓返回键：先退全屏 / 关弹窗，再走浏览器后退，最后才退出应用
-  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-    // 旧的 Capacitor.Plugins 直接访问方式不可靠，这里通过 registerPlugin 已注册的 App 插件处理
-  }
+  // 原生 bridge 把 App 插件挂在 Capacitor.Plugins.App；registerPlugin 只作为旧环境兜底。
   try {
-    const AppPlugin = window.Capacitor?.registerPlugin?.('App')
+    const AppPlugin =
+      (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) ||
+      window.Capacitor?.registerPlugin?.('App')
     if (AppPlugin) {
       AppPlugin.addListener('backButton', () => {
         const guide = document.querySelector('#guide-modal')

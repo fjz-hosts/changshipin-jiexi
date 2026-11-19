@@ -137,9 +137,7 @@ button {
 }
 
 .card-ext {
-  width: 26px;
-  padding: 0;
-  font-size: 13px;
+  display: none;
 }
 
 /* ---------------- 链接 / 线路 ---------------- */

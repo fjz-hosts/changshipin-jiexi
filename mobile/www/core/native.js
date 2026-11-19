@@ -8,6 +8,10 @@
 
   function plugin(name) {
     try {
+      // Capacitor 原生桥会直接把每个已注册插件挂到 window.Capacitor.Plugins 上。
+      // 不要只依赖 registerPlugin——原生的 native-bridge.js 里没有这个函数，
+      // 那会导致取流代理 / WebView / 文件 / 剪贴板全部拿不到。
+      if (Cap && Cap.Plugins && Cap.Plugins[name]) return Cap.Plugins[name]
       if (Cap && typeof Cap.registerPlugin === 'function') return Cap.registerPlugin(name)
     } catch (error) {
       console.warn('[native] 插件不可用', name, error)
