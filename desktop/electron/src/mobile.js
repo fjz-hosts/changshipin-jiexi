@@ -17,6 +17,20 @@ const { pipeline } = require('node:stream/promises')
 
 const REPO = 'https://github.com/fjz-hosts/changshipin-jiexi'
 
+let cachedIconDataUrl = null
+
+/** 手机落地页/下载页统一用应用图标（和桌面端、手机桌面图标同一张图）。 */
+function appIconDataUrl() {
+  if (cachedIconDataUrl !== null) return cachedIconDataUrl
+  try {
+    const iconPath = path.join(__dirname, 'renderer', 'assets', 'app-icon.png')
+    cachedIconDataUrl = `data:image/png;base64,${fs.readFileSync(iconPath).toString('base64')}`
+  } catch {
+    cachedIconDataUrl = ''
+  }
+  return cachedIconDataUrl
+}
+
 const MIRRORS = [
   'https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi',
   'https://gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi',
@@ -663,6 +677,7 @@ class MobileManager {
       : recommended === 'android'
         ? '检测到 Android，推荐 Android APK'
         : '用手机浏览器打开本页，下载速度最快'
+    const iconUrl = appIconDataUrl()
 
     return `<!doctype html>
 <html lang="zh-CN">
@@ -700,10 +715,11 @@ class MobileManager {
   .hero { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
   .logo {
     width: 46px; height: 46px; flex: none; display: grid; place-items: center;
-    border-radius: 14px; font-weight: 800; font-size: 20px; color: #04140c;
-    background: linear-gradient(135deg, #41eb9a, #28c5ff);
-    box-shadow: 0 10px 30px -12px rgba(55, 224, 139, 0.7);
+    border-radius: 14px; overflow: hidden; background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 10px 30px -12px rgba(55, 224, 139, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    font-weight: 800; font-size: 20px; color: #04140c;
   }
+  .logo img { width: 100%; height: 100%; display: block; object-fit: cover; }
   h1 { margin: 0; font-size: 18px; letter-spacing: 0.4px; }
   .sub { margin: 3px 0 0; font-size: 11.5px; color: var(--faint); }
   .tip {
@@ -729,6 +745,16 @@ class MobileManager {
   .badge.err { color: #ffa3aa; border-color: rgba(255, 100, 112, 0.4); background: rgba(255, 100, 112, 0.1); }
   .card p { margin: 9px 0 0; font-size: 12px; line-height: 1.75; color: var(--muted); }
   .steps { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.85; color: var(--muted); }
+  .steps code { padding: 1px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); color: var(--text); font-size: 11px; }
+  .steps a { color: var(--accent); }
+  .ios-why {
+    margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line);
+    font-size: 11px; line-height: 1.75; color: var(--muted);
+  }
+  .ios-why summary { cursor: pointer; color: var(--accent); }
+  .ios-why p { margin: 7px 0 0; }
+  .ios-why ul { margin: 5px 0 0; padding-left: 16px; }
+  .ios-why a { color: var(--accent); }
   .btn {
     display: flex; align-items: center; justify-content: center; gap: 8px;
     width: 100%; min-height: 46px; margin-top: 12px; padding: 0 16px;
@@ -770,7 +796,7 @@ class MobileManager {
 <body>
 <main class="wrap">
   <header class="hero">
-    <div class="logo">长</div>
+    <div class="logo">${iconUrl ? `<img src="${iconUrl}" alt="" />` : '长'}</div>
     <div>
       <h1>长视频解析 · 手机版</h1>
       <p class="sub">电脑直传 · 手机和电脑连同一个 Wi-Fi 最快</p>
@@ -780,19 +806,41 @@ class MobileManager {
 
   <section class="card ${recommended === 'android' ? 'recommend' : ''}" id="card-android">
     <div class="card-head"><h2>Android APK</h2><span class="badge" id="badge-android">检测中</span></div>
-    <p>下载后直接打开安装。首次安装时，系统可能提示「未知来源」，允许一次即可。</p>
+    <p>下载完成后按下面步骤装到手机；首次安装需要允许「未知来源」。</p>
+    <ol class="steps">
+      <li>点下面的按钮下载 <code>changshipin-android.apk</code>。</li>
+      <li>下载完成后，点手机通知栏的「下载完成」，或打开「文件管理 → 下载 / Download」找到 APK。</li>
+      <li>第一次点开 APK 会提示「禁止安装未知应用」：点「设置」→ 允许当前浏览器 / 文件管理器安装应用 → 返回继续。</li>
+      <li>点「安装」，完成后在桌面打开「长视频解析」。</li>
+      <li>以后升级直接下载新 APK 覆盖安装，不用卸载，配置和历史都保留。</li>
+    </ol>
     <div class="progress" id="prog-android" hidden><div class="bar"><i id="fill-android"></i></div><span class="pct" id="pct-android">0%</span></div>
     <button class="btn" id="btn-android" type="button" disabled>检测安装包…</button>
   </section>
 
   <section class="card ${recommended === 'ios' ? 'recommend' : ''}" id="card-ios">
     <div class="card-head"><h2>iOS 免签名 IPA</h2><span class="badge" id="badge-ios">检测中</span></div>
-    <p>iOS 不能像 Android 一样直接安装免签名 IPA，需要借助 Sideloadly / AltStore 用 Apple ID 重签：</p>
+    <p>iOS 不能像 Android 一样直接装 IPA；免签名版需要一台电脑用 Sideloadly / AltStore 自签一次。</p>
     <ol class="steps">
-      <li>在电脑上安装 Sideloadly（或 AltStore）。</li>
-      <li>把 IPA 拖进 Sideloadly，用 Apple ID 重签后安装到手机。</li>
-      <li>手机「设置 → 通用 → VPN 与设备管理」里信任开发者证书后打开。</li>
+      <li>点下面的按钮下载 <code>changshipin-ios-unsigned.ipa</code>（Safari 会存到「文件」App → 下载）。</li>
+      <li>准备一台 Windows / Mac 电脑和数据线；电脑上安装 <a href="https://sideloadly.io/" target="_blank" rel="noreferrer noopener">Sideloadly</a> 或 AltStore。</li>
+      <li>iPhone 连接电脑并点「信任」；把 IPA 拖进 Sideloadly，输入自己的 Apple ID，点 Start。</li>
+      <li>手机上「设置 → 通用 → VPN 与设备管理」→ 信任你的开发者证书。</li>
+      <li>iOS 16 及以上还要打开「设置 → 隐私与安全性 → 开发者模式」，重启手机一次。</li>
+      <li>回桌面打开应用。个人 Apple ID 签名 7 天有效，到期重复第 3 步覆盖安装即可，配置和历史保留。</li>
     </ol>
+    <details class="ios-why">
+      <summary>为什么 iOS 不能像 Android 一样直接装？有没有更省事的办法？</summary>
+      <p>Android 允许自签名 APK + 未知来源；iOS 只运行 Apple 信任证书签名的 App，免签名 IPA 没有证书，系统安装器会直接拒绝。这是 iOS 的机制，不是本程序能绕过的。</p>
+      <p><b>更省事的选择：</b></p>
+      <ul>
+        <li><b>TrollStore</b>：部分 iOS 14.0–17.0 设备支持，装上后永久使用、不用续签；先看 <a href="https://github.com/opa334/TrollStore" target="_blank" rel="noreferrer noopener">官方兼容表</a>。</li>
+        <li><b>AltStore + AltServer</b>：首次用电脑，之后同一 Wi-Fi 下自动续签，7 天一次不用反复插线（<a href="https://altstore.io/" target="_blank" rel="noreferrer noopener">altstore.io</a>）。</li>
+        <li><b>SideStore</b>：配置一次后可在手机上续签，不用一直开电脑（<a href="https://sidestore.io/" target="_blank" rel="noreferrer noopener">sidestore.io</a>）。</li>
+        <li><b>Apple Developer Program</b>：$99/年，签名 1 年；首次仍需电脑安装。</li>
+      </ul>
+      <p>没有「免费 + 永久 + 完全不用电脑」的通用办法。PWA 网页版虽然免安装，但拿不到本地取流代理、下载、内置浏览器等完整能力，不能替代手机 App。</p>
+    </details>
     <div class="progress" id="prog-ios" hidden><div class="bar"><i id="fill-ios"></i></div><span class="pct" id="pct-ios">0%</span></div>
     <button class="btn" id="btn-ios" type="button" disabled>检测安装包…</button>
   </section>

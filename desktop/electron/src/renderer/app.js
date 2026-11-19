@@ -2048,6 +2048,47 @@
     `
   }
 
+  function renderMobileInstallSteps() {
+    const node = $('#mobile-install-steps')
+    if (!node) return
+    if (state.mobile.platform === 'android') {
+      node.innerHTML = `
+        <ol class="mobile-step-list">
+          <li><b>下载</b>：手机扫码或打开链接，浏览器会下载 <code>changshipin-android.apk</code>。</li>
+          <li><b>找到文件</b>：下拉通知栏点「下载完成」，或打开「文件管理 → 下载 / Download」。</li>
+          <li><b>允许安装</b>：第一次点 APK 会提示「禁止安装未知应用」→ 点「设置」→ 允许当前浏览器 / 文件管理器 → 返回继续。</li>
+          <li><b>点安装</b>：安装完成后回到桌面，打开「长视频解析」。</li>
+          <li><b>以后升级</b>：直接下载新 APK 覆盖安装，不用卸载，配置和历史都保留。</li>
+        </ol>
+        <p class="mobile-step-tip">如果提示「解析包错误 / 应用未安装」：删掉旧 APK 重新下载；仍然不行就把 APK 用数据线/微信文件传到手机再点开。</p>
+      `
+      return
+    }
+    node.innerHTML = `
+      <ol class="mobile-step-list">
+        <li><b>下载 IPA</b>：手机扫码或打开链接下载 <code>changshipin-ios-unsigned.ipa</code>；Safari 会存到「文件」App → 下载。</li>
+        <li><b>准备电脑</b>：iOS 不能直接点 IPA 安装。需要一台 Windows / Mac 电脑、一根数据线，电脑上安装 <a href="https://sideloadly.io/" target="_blank" rel="noreferrer noopener">Sideloadly</a>（或 AltStore）。</li>
+        <li><b>自签安装</b>：iPhone 连电脑并点「信任」；把 IPA 拖进 Sideloadly，输入自己的 Apple ID（普通账号即可），点 Start。</li>
+        <li><b>信任证书</b>：手机「设置 → 通用 → VPN 与设备管理」→ 信任你的开发者证书。</li>
+        <li><b>开发者模式</b>：iOS 16 及以上打开「设置 → 隐私与安全性 → 开发者模式」，重启手机一次。</li>
+        <li><b>打开与续期</b>：回桌面打开应用。个人 Apple ID 签名 7 天有效，到期重复第 3 步覆盖安装，配置和历史保留。</li>
+      </ol>
+      <p class="mobile-step-tip">免签名 IPA 不含任何证书；Apple ID 只在本机验证，不会上传到本项目。</p>
+      <details class="mobile-ios-more">
+        <summary>为什么 iOS 不能像 Android 一样直接装？有没有更省事的办法？</summary>
+        <p>Android 允许「自签名 APK + 未知来源」，所以点一下就能装；iOS 只运行 Apple 信任证书签名的 App，免签名 IPA 没有证书，系统安装器会直接拒绝。这是 iOS 的机制，不是本程序能绕过的。</p>
+        <p><b>更省事的选择（按省事程度）：</b></p>
+        <ul>
+          <li><b>TrollStore</b>：部分 iOS 14.0–17.0 设备支持，装上后永久使用、不用续签；先看 <a href="https://github.com/opa334/TrollStore" target="_blank" rel="noreferrer noopener">官方兼容表</a>。</li>
+          <li><b>AltStore + AltServer</b>：首次用电脑，之后同一 Wi-Fi 下自动续签，7 天一次不用反复插线（<a href="https://altstore.io/" target="_blank" rel="noreferrer noopener">altstore.io</a>）。</li>
+          <li><b>SideStore</b>：配置一次后可在手机上续签，不用一直开电脑（<a href="https://sidestore.io/" target="_blank" rel="noreferrer noopener">sidestore.io</a>）。</li>
+          <li><b>Apple Developer Program</b>：$99/年，签名 1 年；首次仍需电脑安装，但不用每 7 天续一次。</li>
+        </ul>
+        <p>没有「免费 + 永久 + 完全不用电脑」的通用办法。PWA 网页版虽然免安装，但拿不到本地取流代理、下载、内置浏览器等完整能力，不能替代手机 App。</p>
+      </details>
+    `
+  }
+
   function renderMobileMirrors() {
     const list = $('#mobile-mirror-list')
     if (!list) return
@@ -2105,6 +2146,7 @@
           : '手机扫码打开云端下载页'
 
     renderMobileDescription()
+    renderMobileInstallSteps()
     renderMobileMirrors()
 
     const cacheState = $('#mobile-cache-state')

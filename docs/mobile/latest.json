@@ -1,7 +1,7 @@
 {
-  "version": "1.1.0",
-  "versionCode": 10100,
-  "publishedAt": "2026-11-19T12:31:11.397Z",
+  "version": "1.1.1",
+  "versionCode": 10101,
+  "publishedAt": "2026-11-19T13:06:17.811Z",
   "notes": "手机端首发：与电脑端同一套解析、选集、历史、下载与线路管理；支持长按 2 倍速、双击快进、全屏手势。",
   "android": {
     "asset": "changshipin-android.apk"

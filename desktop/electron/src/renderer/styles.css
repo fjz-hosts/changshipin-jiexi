@@ -2885,6 +2885,98 @@ body.cinema .video-view video {
   color: var(--warn);
 }
 
+.mobile-install-card {
+  padding: 12px 14px;
+  border: 1px solid rgba(55, 224, 139, 0.28);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(55, 224, 139, 0.075), rgba(255, 255, 255, 0.02));
+}
+
+.mobile-install-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mobile-install-head strong {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.mobile-install-head span {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.mobile-step-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.85;
+  color: var(--muted);
+}
+
+.mobile-step-list li {
+  margin: 2px 0;
+}
+
+.mobile-step-list b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mobile-step-list code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 10.5px;
+}
+
+.mobile-step-list a {
+  color: var(--accent);
+}
+
+.mobile-step-tip {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--warn);
+}
+
+.mobile-ios-more {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font-size: 10.5px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.mobile-ios-more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.mobile-ios-more p {
+  margin: 7px 0 0;
+}
+
+.mobile-ios-more ul {
+  margin: 5px 0 0;
+  padding-left: 16px;
+}
+
+.mobile-ios-more li {
+  margin: 2px 0;
+}
+
+.mobile-ios-more a {
+  color: var(--accent);
+}
+
 .mobile-lan-panel,
 .mobile-mirror-panel {
   display: flex;

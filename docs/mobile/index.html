@@ -54,6 +54,17 @@
       .mirror small { color: var(--muted); font-size: 11px; }
       .mirror:active { transform: scale(.995); }
       .steps { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.9; color: var(--muted); }
+      .steps code { padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.07); color: var(--text); font-size: 11px; }
+      .steps a { color: var(--accent); }
+      .steps b { color: var(--text); }
+      .ios-why {
+        margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line);
+        font-size: 11.5px; line-height: 1.8; color: var(--muted);
+      }
+      .ios-why summary { cursor: pointer; color: var(--accent); }
+      .ios-why p { margin: 8px 0 0; }
+      .ios-why ul { margin: 5px 0 0; padding-left: 16px; }
+      .ios-why a { color: var(--accent); }
       .note { font-size: 11.5px; line-height: 1.7; color: rgba(233,238,247,.42); }
       .pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; }
       .pill { font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
@@ -80,10 +91,17 @@
 
       <div class="card" id="android-card">
         <h2>Android 版</h2>
-        <p>下载 APK 直接安装。首次安装如果系统提示「未知来源」，允许一次即可；后续版本覆盖安装，配置和历史都会保留。</p>
+        <p>下载 APK 后按下面步骤装到手机；首次安装需要允许「未知来源」。后续版本覆盖安装，配置和历史都会保留。</p>
         <a class="btn" id="android-primary" href="https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-android.apk">下载 Android APK</a>
+        <ol class="steps">
+          <li>点上面的按钮下载 <code>changshipin-android.apk</code>。</li>
+          <li>下载完成后，下拉通知栏点「下载完成」，或打开「文件管理 → 下载 / Download」。</li>
+          <li>第一次点 APK 会提示「禁止安装未知应用」：点「设置」→ 允许当前浏览器 / 文件管理器 → 返回继续。</li>
+          <li>点「安装」，完成后在桌面打开「长视频解析」。</li>
+          <li>以后升级直接下载新 APK 覆盖安装，不用卸载。</li>
+        </ol>
         <div class="mirrors" id="android-mirrors"></div>
-        <p class="note">如果某个镜像打不开，换下面任意一个；安装包在所有镜像上是同一个文件。</p>
+        <p class="note">如果某个镜像打不开，换下面任意一个；安装包在所有镜像上是同一个文件。提示「解析包错误」时删掉旧 APK 重新下载。</p>
       </div>
 
       <div class="card" id="ios-card">
@@ -96,11 +114,26 @@
         <a class="btn" id="ios-primary" href="https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-ios-unsigned.ipa">下载 iOS IPA</a>
         <div class="mirrors" id="ios-mirrors"></div>
         <ol class="steps">
-          <li>电脑安装 Sideloadly（或 AltStore），iPhone 用数据线连接电脑。</li>
-          <li>把下载的 IPA 拖进 Sideloadly，输入自己的 Apple ID，点 Start。</li>
-          <li>手机上到「设置 → 通用 → VPN 与设备管理」信任开发者。</li>
-          <li>到期后重新拖一次 IPA 即可，应用内配置和历史会保留。</li>
+          <li>点上面的按钮下载 <code>changshipin-ios-unsigned.ipa</code>；Safari 会存到「文件」App → 下载。</li>
+          <li>电脑安装 <a href="https://sideloadly.io/" target="_blank" rel="noreferrer noopener">Sideloadly</a>（或 AltStore），iPhone 用数据线连接电脑并点「信任」。</li>
+          <li>把下载的 IPA 拖进 Sideloadly，输入自己的 Apple ID（普通账号即可），点 Start。</li>
+          <li>手机上到「设置 → 通用 → VPN 与设备管理」信任开发者证书。</li>
+          <li>iOS 16 及以上打开「设置 → 隐私与安全性 → 开发者模式」，重启手机一次。</li>
+          <li>回桌面打开应用。个人 Apple ID 签名 7 天有效，到期重复第 3 步覆盖安装，配置和历史保留。</li>
         </ol>
+        <p class="note">免签名 IPA 不含任何证书；Apple ID 只在本机验证，不会上传到本项目。</p>
+        <details class="ios-why">
+          <summary>为什么 iOS 不能像 Android 一样直接装？有没有更省事的办法？</summary>
+          <p>Android 允许自签名 APK + 未知来源；iOS 只运行 Apple 信任证书签名的 App，免签名 IPA 没有证书，系统安装器会直接拒绝。这是 iOS 的机制，不是本程序能绕过的。</p>
+          <p><b>更省事的选择：</b></p>
+          <ul>
+            <li><b>TrollStore</b>：部分 iOS 14.0–17.0 设备支持，装上后永久使用、不用续签；先看 <a href="https://github.com/opa334/TrollStore" target="_blank" rel="noreferrer noopener">官方兼容表</a>。</li>
+            <li><b>AltStore + AltServer</b>：首次用电脑，之后同一 Wi-Fi 下自动续签，7 天一次不用反复插线（<a href="https://altstore.io/" target="_blank" rel="noreferrer noopener">altstore.io</a>）。</li>
+            <li><b>SideStore</b>：配置一次后可在手机上续签，不用一直开电脑（<a href="https://sidestore.io/" target="_blank" rel="noreferrer noopener">sidestore.io</a>）。</li>
+            <li><b>Apple Developer Program</b>：$99/年，签名 1 年；首次仍需电脑安装。</li>
+          </ul>
+          <p>没有「免费 + 永久 + 完全不用电脑」的通用办法。PWA 网页版虽然免安装，但拿不到本地取流代理、下载、内置浏览器等完整能力，不能替代手机 App。</p>
+        </details>
       </div>
 
       <div class="card">

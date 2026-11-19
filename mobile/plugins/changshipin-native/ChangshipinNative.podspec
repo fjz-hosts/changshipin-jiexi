@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = 'ChangshipinNative'
-  s.version = '1.1.0'
+  s.version = '1.1.1'
   s.summary = '长视频解析手机端原生能力：本地取流代理、内置 WebView、嗅探与下载'
   s.homepage = 'https://github.com/fjz-hosts/changshipin-jiexi'
   s.license = { :type => 'MIT', :text => 'MIT License' }
