@@ -631,7 +631,8 @@ body.browser-open .browser-panel {
 .browser-fallback {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
+  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
