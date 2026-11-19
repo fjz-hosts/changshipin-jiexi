@@ -200,11 +200,6 @@ class WebviewHost(
                 emit("did-stop-loading")
             }
 
-            override fun onReceivedTitle(view: WebView?, title: String?) {
-                currentTitle = title ?: ""
-                emit("page-title-updated")
-            }
-
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 if (!url.isNullOrEmpty()) {
                     currentUrl = url

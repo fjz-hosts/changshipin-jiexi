@@ -102,7 +102,7 @@ class ChangshipinNativePlugin : Plugin() {
             call.getFloat("y") ?: 0f,
             call.getFloat("width") ?: 1f,
             call.getFloat("height") ?: 1f,
-            call.getBoolean("visible", false)
+            call.getBoolean("visible", false) ?: false
         )
         call.resolve()
     }
@@ -166,7 +166,7 @@ class ChangshipinNativePlugin : Plugin() {
     @PluginMethod
     fun setWebviewMuted(call: PluginCall) {
         val id = call.getString("id") ?: return call.reject("缺少 id")
-        webviews[id]?.setMuted(call.getBoolean("muted", false))
+        webviews[id]?.setMuted(call.getBoolean("muted", false) ?: false)
         call.resolve()
     }
 
