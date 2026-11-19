@@ -65,7 +65,8 @@ final class StreamProxy {
         guard let query = request.query, query["t"] == token else {
             return textResponse("forbidden", status: 403)
         }
-        guard let target = decode(query["u"]), isHttp(target) else {
+        let target = decode(query["u"])
+        guard isHttp(target) else {
             return textResponse("bad target", status: 400)
         }
         let referer = decode(query["r"])
@@ -112,7 +113,8 @@ final class StreamProxy {
         guard let query = request.query, query["t"] == token else {
             return textResponse("forbidden", status: 403)
         }
-        guard let target = decode(query["u"]), isHttp(target) else {
+        let target = decode(query["u"])
+        guard isHttp(target) else {
             return textResponse("bad target", status: 400)
         }
         let referer = decode(query["r"])

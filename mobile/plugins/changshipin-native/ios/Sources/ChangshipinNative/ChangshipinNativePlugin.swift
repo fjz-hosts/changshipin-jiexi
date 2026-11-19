@@ -185,10 +185,11 @@ public class ChangshipinNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func pageEval(_ call: CAPPluginCall) {
-        guard let url = call.getString("url"), let script = call.getString("script", "document.title") else {
+        guard let url = call.getString("url") else {
             call.reject("缺少参数")
             return
         }
+        let script = call.getString("script", "document.title")
         let timeout = call.getInt("timeoutMs", 18000)
         let id = "page-\(UUID().uuidString)"
         var finished = false
