@@ -45,7 +45,7 @@ class StreamProxy {
 
     fun start() {
         if (running.get()) return
-        val socket = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
+        val socket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
         server = socket
         port = socket.localPort
         running.set(true)

@@ -114,9 +114,24 @@ function patchNetworking() {
   }
 }
 
+function patchStyles() {
+  const file = path.join(appDir, 'src/main/res/values/styles.xml')
+  if (!fs.existsSync(file)) return
+  let text = fs.readFileSync(file, 'utf8')
+  if (!text.includes('windowOptOutEdgeToEdgeEnforcement')) {
+    text = text.replace(
+      /(<style name="AppTheme\.NoActionBar"[^>]*>)([\s\S]*?)(<\/style>)/,
+      (match, open, body, close) =>
+        `${open}${body}\n        <item name="android:statusBarColor">#05080E</item>\n        <item name="android:navigationBarColor">#05080E</item>\n        <item name="android:windowLightStatusBar">false</item>\n        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>\n    ${close}`,
+    )
+    write(file, text)
+  }
+}
+
 patchRootGradle()
 patchBuildGradle()
 patchManifest()
 patchFilePaths()
 patchNetworking()
+patchStyles()
 console.log(`Android patched: version=${version} versionCode=${versionCode}`)
