@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#05080e" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>长视频解析 · 四平台链接解析播放</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="mobile.css" />
+    <script src="core/version.js"></script>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-img" src="assets/app-icon.png" alt="" />
+          <div class="brand-text">
+            <strong>长视频解析</strong>
+            <span>爱奇艺 · 腾讯视频 · 优酷 · 芒果TV</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="pill-btn" id="update-pill" title="点击检查更新">
+            <span class="status-dot" id="update-dot"></span>
+            <span id="update-text">v1.0.0</span>
+          </button>
+          <button class="ghost-btn accent" id="btn-search">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M15.4 15.4 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            找剧
+          </button>
+          <button class="ghost-btn" id="btn-guide">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+              <path d="M8 8h7M8 11.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            使用教程
+          </button>
+          <button class="ghost-btn" id="btn-lines">线路管理</button>
+          <button class="ghost-btn" id="btn-settings">设置</button>
+        </div>
+      </header>
+
+      <section class="quick-row" aria-label="平台快捷入口">
+        <div class="quick-head">
+          <span>快捷入口</span>
+          <small>点卡片进入平台官网（内置窗口，可登录会员）；点「找剧」可跨平台搜索</small>
+        </div>
+        <div class="platform-grid">
+          <div class="platform-card" data-platform="iqiyi" style="--brand: #00d95f; --brand-soft: rgba(0, 217, 95, 0.18)">
+            <button class="card-main" data-action="open">
+              <img class="logo" src="assets/platform-iqiyi.png" alt="" />
+              <span class="platform-meta"><b>爱奇艺</b><small>www.iqiyi.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="qq" style="--brand: #2b8cff; --brand-soft: rgba(43, 140, 255, 0.18)">
+            <button class="card-main" data-action="open">
+              <img class="logo" src="assets/platform-qq.png" alt="" />
+              <span class="platform-meta"><b>腾讯视频</b><small>v.qq.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="youku" style="--brand: #35a6ff; --brand-soft: rgba(53, 166, 255, 0.18)">
+            <button class="card-main" data-action="open">
+              <img class="logo" src="assets/platform-youku.png" alt="" />
+              <span class="platform-meta"><b>优酷</b><small>www.youku.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+          <div class="platform-card" data-platform="mgtv" style="--brand: #ff8a1f; --brand-soft: rgba(255, 138, 31, 0.18)">
+            <button class="card-main" data-action="open">
+              <img class="logo" src="assets/platform-mgtv.png" alt="" />
+              <span class="platform-meta"><b>芒果TV</b><small>www.mgtv.com</small></span>
+              <span class="card-go">进入</span>
+            </button>
+            <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="parse-row">
+        <div class="url-box" id="url-box">
+          <span class="platform-badge" id="platform-badge">未识别</span>
+          <input
+            id="url-input"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="粘贴视频链接，例如 https://www.iqiyi.com/v_xxx.html  或  https://v.qq.com/x/cover/xxx/xxx.html"
+          />
+          <button class="mini-btn" id="btn-paste" title="从剪贴板粘贴">粘贴</button>
+          <button class="icon-btn" id="btn-clear" title="清空">✕</button>
+        </div>
+        <div class="line-box">
+          <select class="select" id="line-select" aria-label="选择解析线路"></select>
+          <button class="parse-btn" id="btn-parse">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor" /></svg>
+            <span>解析播放</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="browser-panel" id="browser-panel" hidden>
+        <div class="browser-tabs" id="browser-tabs"></div>
+        <div class="browser-bar">
+          <div class="browser-nav">
+            <button id="browser-back" class="nav-btn" title="后退 (Alt+←)">←</button>
+            <button id="browser-forward" class="nav-btn" title="前进 (Alt+→)">→</button>
+            <button id="browser-reload" class="nav-btn" title="刷新 (F5)">⟳</button>
+            <button id="browser-home" class="nav-btn" title="回到平台首页">⌂</button>
+          </div>
+          <div class="browser-brand">
+            <img id="browser-icon" src="assets/platform-iqiyi.png" alt="" />
+            <span id="browser-name">爱奇艺</span>
+          </div>
+          <div class="browser-address">
+            <input id="browser-address" type="text" spellcheck="false" placeholder="输入网址，回车打开" />
+            <span class="browser-badge" id="browser-badge">浏览中</span>
+          </div>
+          <label class="browser-auto" title="点开某一集时自动送到主界面解析">
+            <input type="checkbox" id="browser-auto" checked />
+            <span>自动解析</span>
+          </label>
+          <div class="browser-actions">
+            <button id="browser-copy" class="tool-btn">复制本集</button>
+            <button id="browser-parse" class="primary-sm">解析本集</button>
+            <button id="browser-external" class="tool-btn">浏览器</button>
+            <button id="browser-close" class="tool-btn">返回首页</button>
+          </div>
+        </div>
+        <div class="browser-viewport" id="browser-viewport"></div>
+      </section>
+
+      <main class="workspace">
+        <section class="stage" id="stage">
+          <div class="stage-head">
+            <div class="stage-title">
+              <span class="live-dot" id="live-dot"></span>
+              <span id="stage-title-text">等待解析</span>
+              <span class="chip" id="stage-line">未选择线路</span>
+            </div>
+            <div class="stage-tools">
+              <button class="tool-btn" id="btn-reload" title="重新加载当前画面">刷新</button>
+              <button class="tool-btn" id="btn-next-line" title="换一条解析线路">换线路</button>
+              <button class="tool-btn" id="btn-native" title="用平台自己的播放器取流（免费内容可用，能记录进度）" hidden>原生播放</button>
+              <button class="tool-btn" id="btn-download" title="下载本集（仅内置播放器可用）" disabled>下载</button>
+              <button class="tool-btn" id="btn-open-web" title="用系统浏览器打开当前链接">浏览器打开</button>
+              <button class="tool-btn" id="btn-fullscreen" title="全屏（F11）">全屏</button>
+            </div>
+          </div>
+
+          <div class="stage-body" id="stage-body">
+            <div class="stage-view empty" id="view-empty">
+              <div class="empty-art" aria-hidden="true">
+                <div class="empty-ring"></div>
+                <svg viewBox="0 0 64 64"><path d="M26 18v28l24-14-24-14Z" fill="currentColor" /></svg>
+              </div>
+              <h2>把链接粘进来，直接开播</h2>
+              <p>四平台通用 · 自动识别 · 线路可切换 · 失败自动换线</p>
+              <ol class="steps">
+                <li><b>1</b><span>复制平台视频页链接</span></li>
+                <li><b>2</b><span>粘贴到上方输入框</span></li>
+                <li><b>3</b><span>点「解析播放」，或按 Enter</span></li>
+              </ol>
+              <p class="empty-note">解析线路来自公开第三方接口，失效时请「换线路」或在「线路管理」里添加自己的接口。</p>
+              <button class="guide-entry" id="btn-empty-guide">第一次用？打开图文教程 →</button>
+            </div>
+
+            <div class="stage-view loading" id="view-loading" hidden>
+              <div class="spinner" aria-hidden="true"></div>
+              <h2 id="loading-title">正在连接解析线路…</h2>
+              <p id="loading-detail">首次加载可能稍慢，长时间无画面请点击「换线路」。</p>
+            </div>
+
+            <div class="stage-view error" id="view-error" hidden>
+              <div class="error-mark" aria-hidden="true">!</div>
+              <h2 id="error-title">解析失败</h2>
+              <p id="error-detail"></p>
+              <div class="error-actions">
+                <button class="primary-sm" id="btn-error-retry">重试</button>
+                <button class="ghost-sm" id="btn-error-next">换线路</button>
+                <button class="ghost-sm" id="btn-error-lines">线路管理</button>
+              </div>
+            </div>
+
+            <div class="stage-view video-view" id="view-video" hidden>
+              <video id="video" controls playsinline preload="metadata"></video>
+            </div>
+
+            <div class="stage-view webview-view" id="view-webview" hidden>
+              <webview id="parse-view" partition="persist:parse" webpreferences="contextIsolation=yes, nodeIntegration=no"></webview>
+            </div>
+          </div>
+
+          <div class="stage-foot">
+            <span class="source-url" id="source-url" title="当前解析的链接">尚未解析</span>
+            <div class="foot-actions">
+              <button class="tool-btn" id="btn-copy-source">复制链接</button>
+              <button class="tool-btn" id="btn-reparse">重新解析</button>
+            </div>
+          </div>
+
+          <div class="episode-bar" id="episode-bar" hidden>
+            <div class="episode-head">
+              <div class="episode-series">
+                <span class="episode-series-name" id="episode-series-name">选集</span>
+                <span class="episode-count" id="episode-count"></span>
+                <span class="episode-tip" id="episode-tip">点任意一集直接切换，不用回平台页</span>
+              </div>
+              <div class="episode-tools">
+                <label class="episode-auto-next" title="本集播完后自动播放下一集">
+                  <input type="checkbox" id="episode-auto-next" />
+                  <span>自动连播</span>
+                </label>
+                <button class="mini-btn" id="episode-prev" title="上一集 (Ctrl+←)">上一集</button>
+                <button class="mini-btn" id="episode-next" title="下一集 (Ctrl+→)">下一集</button>
+                <button class="mini-btn" id="episode-order" title="切换正序 / 倒序">倒序</button>
+                <button class="mini-btn" id="episode-toggle" title="收起 / 展开选集">收起</button>
+              </div>
+            </div>
+            <div class="episode-list" id="episode-list"></div>
+          </div>
+        </section>
+
+        <aside class="side">
+          <section class="panel">
+            <header>
+              <h3>解析线路 <span class="legend">灰=未启用，点一下启用</span></h3>
+              <div class="panel-actions">
+                <button class="mini-btn" id="btn-toggle-dead" title="隐藏/显示体检失效的线路">隐藏失效</button>
+                <button class="mini-btn" id="btn-test-all">测速</button>
+              </div>
+            </header>
+            <ul class="line-list" id="line-list"></ul>
+          </section>
+
+          <section class="panel history-panel">
+            <header>
+              <h3>观看历史 <span class="legend" id="history-legend"></span></h3>              <div class="panel-actions">
+                <select class="mini-select" id="history-sort" title="历史排序 / 分组">
+                  <option value="recent">最近</option>
+                  <option value="continue">继续观看</option>
+                  <option value="grouped">按平台</option>
+                </select>
+                <button class="mini-btn" id="btn-clear-history">清空</button>
+              </div>
+            </header>
+            <div class="history-search">
+              <input id="history-search-input" type="text" spellcheck="false" placeholder="搜索剧名 / 集数 / 平台" />
+              <button class="icon-btn" id="history-search-clear" title="清除搜索" hidden>✕</button>
+            </div>
+            <ul class="history-list" id="history-list"></ul>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="statusbar">
+        <span class="status-main" id="status-text">就绪</span>
+        <span class="status-meta"><span id="version-text">v1.0.0</span> · Enter 解析 / F11 全屏 / Ctrl+Shift+V 粘贴解析</span>
+      </footer>
+    </div>
+
+    <!-- 找剧：跨平台搜索 -->
+    <div class="modal-mask" id="search-modal" hidden>
+      <div class="modal search-modal" role="dialog" aria-modal="true" aria-labelledby="search-title">
+        <header class="modal-head">
+          <h2 id="search-title">找剧 · 跨平台搜索</h2>
+          <button class="icon-btn" id="search-close" title="关闭">✕</button>
+        </header>
+        <div class="search-body">
+          <div class="search-input-row">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M15.4 15.4 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            <input id="search-input" type="text" placeholder="输入剧名、综艺、动漫，例如：庆余年" spellcheck="false" />
+            <button class="primary-sm" id="search-submit">聚合搜索</button>
+          </div>
+          <div class="platform-picks" id="platform-picks">
+            <label class="pick" data-platform="iqiyi">
+              <img src="assets/platform-iqiyi.png" alt="" />
+              <span>爱奇艺</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="qq">
+              <img src="assets/platform-qq.png" alt="" />
+              <span>腾讯视频</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="youku">
+              <img src="assets/platform-youku.png" alt="" />
+              <span>优酷</span>
+              <input type="checkbox" checked />
+            </label>
+            <label class="pick" data-platform="mgtv">
+              <img src="assets/platform-mgtv.png" alt="" />
+              <span>芒果TV</span>
+              <input type="checkbox" checked />
+            </label>
+          </div>
+          <div class="search-status" id="search-status" hidden></div>
+          <div class="search-results" id="search-results" hidden></div>
+          <p class="hint">
+            聚合搜索会在后台打开各平台搜索页并抓取结果，不打断当前播放。点结果：单集直接解析播放，整部剧会在内置浏览器里打开让您选集；
+            如果平台提示验证码，可以点结果栏里的「打开平台页」手动搜索。
+          </p>
+          <div class="quick-searches">
+            <span>试试：</span>
+            <button data-q="庆余年">庆余年</button>
+            <button data-q="甄嬛传">甄嬛传</button>
+            <button data-q="披荆斩棘">披荆斩棘</button>
+            <button data-q="漫长的季节">漫长的季节</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-mask" id="modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-head">
+          <h2 id="modal-title">设置</h2>
+          <button class="icon-btn" id="modal-close" title="关闭">✕</button>
+        </header>
+        <nav class="tabs" id="modal-tabs">
+          <button data-tab="lines" class="active">解析线路</button>
+          <button data-tab="play">播放</button>
+          <button data-tab="update">更新</button>
+          <button data-tab="about">关于</button>
+        </nav>
+        <div class="tab-panes">
+          <section class="tab-pane" data-pane="lines">
+            <p class="hint">
+              线路顺序即自动切换顺序。网页线路需要「地址 + ?url=」，接口线路返回 JSON 或 HTML 时程序会自动提取
+              m3u8 / mp4 地址。失效线路请删除或在线更新；灰色的那条只是没有启用，保存后即可使用。
+            </p>
+            <div class="line-editor" id="line-editor"></div>
+            <div class="row-btns">
+              <button class="ghost-sm" id="btn-add-line">+ 新增线路</button>
+              <button class="ghost-sm" id="btn-online-lines">在线更新线路</button>
+              <button class="ghost-sm" id="btn-clean-lines">清理失效线路</button>
+              <button class="ghost-sm" id="btn-reset-lines">恢复内置线路</button>
+              <span class="spacer"></span>
+              <button class="primary-sm" id="btn-save-lines">保存线路</button>
+            </div>
+          </section>
+
+          <section class="tab-pane" data-pane="play" hidden>
+            <div class="settings-group">播放</div>
+            <label class="switch-row">
+              <input type="checkbox" id="set-auto-fallback" />
+              <span>解析失败自动切换下一条线路（失效线路会排在最后）</span>
+            </label>
+            <label class="switch-row">
+              <input type="checkbox" id="set-close-tray" />
+              <span>关闭窗口时最小化到托盘（后台继续播放）</span>
+            </label>
+            <div class="settings-group">线路体检</div>
+            <label class="switch-row">
+              <input type="checkbox" id="set-auto-line-test" />
+              <span>启动时自动测速线路，失效线路自动标记并排到解析顺序最后</span>
+            </label>
+            <div class="settings-note">
+              体检在后台进行，不阻塞播放；测速失败只代表当前网络下接口不可访问，稍后可再点侧栏「测速」。
+            </div>
+            <div class="settings-group">下载 / 离线</div>
+            <div class="settings-note">
+              内置播放器的 m3u8 / mp4 可以下载：优先保存到「下载\长视频解析」，如果系统（Defender 受控文件夹访问等）拦截写入，
+              会自动改用配置目录下的 downloads；HLS 会合并成一个 .ts / .mp4 文件，不需要 ffmpeg。
+              第三方网页解析线路（page）拿不到真实流地址，不支持下载。
+            </div>
+            <div class="row-btns">
+              <button class="ghost-sm" id="btn-open-downloads">打开下载目录</button>
+            </div>
+            <div class="settings-group">其它</div>
+            <p class="hint">
+              内置浏览器的登录状态会保留，已登录会员可以选用「官网页面（会员登录）」线路直接播放原片，不经过第三方解析。
+              每个平台的「自动解析」开关是分开记忆的。
+            </p>
+          </section>
+
+          <section class="tab-pane" data-pane="update" hidden>
+            <div class="kv"><span>当前版本</span><b id="set-version">-</b></div>
+            <label class="switch-row">
+              <input type="checkbox" id="set-auto-update" />
+              <span>启动时自动检查更新（GitHub Releases）</span>
+            </label>
+            <div class="update-status" id="update-status">等待检查</div>
+            <div class="row-btns">
+              <button class="primary-sm" id="btn-check-update">立即检查更新</button>
+              <button class="ghost-sm" id="btn-install-update" hidden>重启安装</button>
+            </div>
+            <details class="feeds">
+              <summary>更新源（多镜像自动切换）</summary>
+              <ul id="feed-list"></ul>
+            </details>
+          </section>
+
+          <section class="tab-pane" data-pane="about" hidden>
+            <div class="about-block">
+              <h3>长视频解析</h3>
+              <p>桌面端的四平台链接解析播放工具：粘贴链接，选择线路，直接观看。</p>
+              <p class="muted">
+                本程序不存储、不转码、不分发任何视频内容。解析能力来自互联网公开的第三方接口，接口随时可能失效或变更；
+                请在遵守平台服务条款与当地法律的前提下，用于个人学习与合法观看。
+              </p>
+              <div class="row-btns">
+                <button class="ghost-sm" id="btn-about-guide">查看图文教程</button>
+                <button class="ghost-sm" id="btn-open-repo">GitHub 项目主页</button>
+                <button class="ghost-sm" id="btn-open-userdata">打开配置目录</button>
+                <button class="ghost-sm" id="btn-open-logs">打开日志目录</button>
+                <button class="ghost-sm" id="btn-create-shortcut">重建桌面快捷方式</button>
+              </div>
+              <p class="muted small">版本 <span id="about-version">-</span> · MIT License</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图文教程 -->
+    <div class="modal-mask" id="guide-modal" hidden>
+      <div class="modal guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+        <header class="modal-head guide-head">
+          <div>
+            <h2 id="guide-title">使用教程 · 图文版</h2>
+            <p>从粘贴链接到全屏播放，一步一步来。图里的红框就是重点。</p>
+          </div>
+          <button class="icon-btn" id="guide-close" title="关闭（Esc）">✕</button>
+        </header>
+        <div class="guide-body">
+          <nav class="guide-nav" id="guide-nav" aria-label="教程目录">
+            <button data-guide="intro" class="active">开始之前</button>
+            <button data-guide="main">1 · 认识主界面</button>
+            <button data-guide="paste">2 · 粘贴链接解析</button>
+            <button data-guide="browser">3 · 内置浏览器找剧</button>
+            <button data-guide="episodes">4 · 选集与自动连播</button>
+            <button data-guide="history">5 · 观看历史</button>
+            <button data-guide="lines">6 · 线路与体检</button>
+            <button data-guide="download">7 · 下载到电脑</button>
+            <button data-guide="fullscreen">8 · 全屏与快捷键</button>
+            <button data-guide="settings">9 · 设置与常见问题</button>
+            <div class="guide-nav-foot">按 Esc 或点右上角关闭</div>
+          </nav>
+          <div class="guide-content" id="guide-content">
+            <section class="guide-section" id="guide-intro">
+              <h3><span class="guide-step">0</span>开始之前</h3>
+              <p>「长视频解析」是一个 Windows 桌面工具：把爱奇艺、腾讯视频、优酷、芒果TV 的视频页链接粘贴进来，选一条解析线路，就能在软件里直接播放，不用在浏览器和播放器之间来回切换。</p>
+              <div class="guide-quick">
+                <div><b>1</b><span>复制某一集的网页链接</span></div>
+                <div><b>2</b><span>粘贴到软件里</span></div>
+                <div><b>3</b><span>点「解析播放」</span></div>
+              </div>
+              <ul class="guide-points">
+                <li>软件只做<strong>链接解析和播放</strong>，不存储、不转码、不分发视频。</li>
+                <li>解析线路来自公开的第三方接口，<strong>可能随时失效</strong>；失效时换一条线路即可。</li>
+                <li>会员内容建议先在软件内置的平台窗口里<strong>登录一次</strong>，之后解析会更稳定。</li>
+                <li>想离开软件找剧也可以：点顶部平台卡片，平台官网会直接开在软件里。</li>
+              </ul>
+              <div class="guide-tip">第一次用，建议按顺序看：主界面 → 粘贴链接 → 选集 → 观看历史。遇到问题直接翻到最后一节。</div>
+            </section>
+
+            <section class="guide-section" id="guide-main">
+              <h3><span class="guide-step">1</span>认识主界面</h3>
+              <p>软件打开后只有一屏，常用的东西都在这一屏里。先认清这几个区域，后面操作就不会迷路。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-01-main.webp" alt="主界面分区：平台入口、链接输入框、播放区、线路和观看历史" />
+                <figcaption><b>①</b> 平台快捷入口　<b>②</b> 链接输入框　<b>③</b> 解析播放　<b>④</b> 线路与观看历史（中间是播放画面）</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li><b>①</b> 点平台卡片进入官网找剧；右上角「找剧」可以跨平台搜索。</li>
+                <li><b>②</b> 粘贴视频页链接，软件会自动识别平台，右侧的线路一般不用改。</li>
+                <li><b>③</b> 点「解析播放」开始；也可以直接按 Enter。</li>
+                <li><b>④</b> 解析成功后画面出现在这里，下载、全屏、换线路按钮都在播放区右上角。</li>
+                <li><b>⑤</b> 右边是解析线路和观看历史；底部状态栏显示当前状态和版本号。</li>
+              </ul>
+              <div class="guide-tip">窗口太小时，可以按 F11 或点右上角「全屏」；播放时页面会自动滚动，把大画面留给视频。</div>
+            </section>
+
+            <section class="guide-section" id="guide-paste">
+              <h3><span class="guide-step">2</span>粘贴链接解析</h3>
+              <p>最常用的方式：在浏览器里打开任意一集，复制地址栏链接，回到软件粘贴。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-02-paste.webp" alt="粘贴链接后点解析播放" />
+                <figcaption><b>①</b> 粘贴链接，自动识别平台　<b>②</b> 选解析线路　<b>③</b> 点「解析播放」</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>复制的必须是<strong>某一集的播放页链接</strong>，不要复制平台首页或搜索页。</li>
+                <li>链接粘贴后，左侧标签会显示识别到的平台，比如「芒果TV」。</li>
+                <li>线路默认用当前选中的一条；不确定就保持默认，失败会自动换线（可在设置里关闭）。</li>
+                <li>一直转圈或黑屏：点播放区右上角「换线路」，软件会按顺序试下一条。</li>
+              </ul>
+              <div class="guide-tip">也可以直接按 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd> 把剪贴板里的链接粘贴并解析，不用先点输入框。</div>
+            </section>
+
+            <section class="guide-section" id="guide-browser">
+              <h3><span class="guide-step">3</span>内置浏览器找剧 · 自动解析</h3>
+              <p>不想来回复制链接，就直接在软件里点平台卡片找剧。点开某一集，软件会自动把这一集送去解析。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-03-browser.webp" alt="内置浏览器打开平台官网并自动解析" />
+                <figcaption><b>①</b> 平台标签页　<b>②</b> 地址栏/前进后退　<b>③</b> 自动解析开关　<b>④</b> 解析本集</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>点顶部任意平台卡片，官网会开在软件里；登录状态会保留，会员只需登录一次。</li>
+                <li>点开具体某一集后，上方会提示「正在解析」，画面自动出现在主界面。</li>
+                <li>每个平台的「自动解析」开关是分开记忆的；不想自动跳转可以单独关掉。</li>
+                <li>地址栏可以直接输入网址；<kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd> 后退、前进，<kbd>F5</kbd> 刷新。</li>
+              </ul>
+              <div class="guide-tip">遇到登录、支付或授权页面时，软件会单独弹一个小窗，不会打断当前播放。</div>
+            </section>
+
+            <section class="guide-section" id="guide-episodes">
+              <h3><span class="guide-step">4</span>选集与自动连播</h3>
+              <p>解析成功后，视频下方会出现整部剧的选集。当前这一集是高亮的，点任意一集就能切换，不用再回平台页面。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-04-episodes.webp" alt="选集条、上一集下一集和自动连播" />
+                <figcaption><b>①</b> 自动连播　<b>②</b> 当前集高亮　<b>③</b> 下一集（旁边是上一集）　<b>④</b> 播放区右上角的刷新 / 换线路 / 下载 / 全屏</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>「自动连播」默认开启：这一集播完会自动播放下一集，内置播放器和网页线路都支持。</li>
+                <li>用键盘也能换集：<kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd>，或者 <kbd>[</kbd> / <kbd>]</kbd>。</li>
+                <li>选集可以切「正序 / 倒序」，也可以「收起」，给视频留出更大的画面。</li>
+                <li>选集列表会记住，下次从观看历史点回来还能直接换集。</li>
+              </ul>
+              <div class="guide-tip">如果不想自动连播，取消勾选「自动连播」即可；这个设置会记住，下次打开还是关的。</div>
+            </section>
+
+            <section class="guide-section" id="guide-history">
+              <h3><span class="guide-step">5</span>观看历史：一部剧只记一条</h3>
+              <p>观看历史现在<strong>按作品记录</strong>：同一部剧只保留一条，记的是你最近一次看到的集数，以及这一集看到了百分之多少。之前看完的集数不再重复占位置。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-05-history.webp" alt="观看历史：每部剧一条，显示最近集数和进度" />
+                <figcaption><b>①</b> 每部剧一条：最近集数 + 进度 + 「继续」　<b>②</b> 搜索　<b>③</b> 排序 / 分组</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>点一条记录，会直接打开<strong>最近看的那一集</strong>，并从上次的进度继续。</li>
+                <li>进度每隔几秒自动保存；网页解析线路也会记录进度。</li>
+                <li>搜索框可以按剧名、集数或平台过滤；排序支持「最近」「继续观看」「按平台」。</li>
+                <li>单条记录可以删除，右上角「清空」会清掉全部历史。</li>
+              </ul>
+              <div class="guide-tip">看完一集后记录会更新到下一集；如果这一集已经看完（进度 96% 以上），点记录会从头开始。</div>
+            </section>
+
+            <section class="guide-section" id="guide-lines">
+              <h3><span class="guide-step">6</span>解析线路与体检</h3>
+              <p>线路决定视频从哪里取。同一部剧可能有几条线路都能用，也可能有的已经失效。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-06-lines.webp" alt="解析线路列表、启用状态和体检标记" />
+                <figcaption><b>①</b> 线路列表：绿点已启用，灰点未启用，红色「失效」是体检失败　<b>②</b> 隐藏失效 / 测速</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>灰色的是<strong>未启用</strong>，点一下就能启用；越靠前的线路会越早被尝试。</li>
+                <li>软件启动后会在后台体检线路，失效的会划线标记，也可以一键隐藏。</li>
+                <li>「线路管理」里可以增删改线路、单独测试、在线更新，或者恢复内置线路。</li>
+                <li>建议只保留自己常用的 2–4 条，顺序按成功率排。</li>
+              </ul>
+              <div class="guide-tip">「测速」结果只代表当前网络下接口能不能访问，不代表一定出画面；以实际播放为准。</div>
+            </section>
+
+            <section class="guide-section" id="guide-download">
+              <h3><span class="guide-step">7</span>下载到电脑</h3>
+              <p>内置播放器能拿到的视频流，可以点「下载」保存到电脑。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-07-download.webp" alt="下载按钮与下载目录设置" />
+                <figcaption><b>①</b> 下载按钮（按钮上显示进度，再点一次取消）</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>下载按钮上会显示百分比；下载过程中再点一次可以取消。</li>
+                <li>HLS 分片会自动合并成一个文件，不需要额外装 ffmpeg。</li>
+                <li>在「设置 → 播放 → 下载 / 离线」里可以打开下载目录。</li>
+                <li>网页解析线路（第三方解析页）拿不到真实地址，不能下载；会员加密内容也不支持。</li>
+              </ul>
+              <div class="guide-tip">下载目录优先用「下载\长视频解析」；如果系统安全软件拦截写入，会自动改用软件配置目录里的 downloads。</div>
+            </section>
+
+            <section class="guide-section" id="guide-fullscreen">
+              <h3><span class="guide-step">8</span>全屏与键盘快捷键</h3>
+              <p>点播放区右上角「全屏」或直接按 <kbd>F11</kbd>，窗口会铺满屏幕并进入影院模式：顶部工具栏变淡，把鼠标移到屏幕顶部才会出现。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-08-fullscreen.webp" alt="影院模式下的全屏播放和键盘快捷键" />
+                <figcaption><b>①</b> 全屏时「自动连播」同样生效；左下角是键盘快捷键</figcaption>
+              </figure>
+              <div class="keymap">
+                <span><kbd>空格</kbd>暂停 / 播放</span>
+                <span><kbd>←</kbd><kbd>→</kbd>快退 / 快进 10 秒</span>
+                <span><kbd>↑</kbd><kbd>↓</kbd>音量</span>
+                <span><kbd>M</kbd>静音</span>
+                <span><kbd>Esc</kbd>退出全屏</span>
+                <span><kbd>F11</kbd>切换全屏</span>
+              </div>
+              <ul class="guide-points">
+                <li>全屏后键盘同样可用：空格暂停、左右方向键快退快进、上下方向键调音量。</li>
+                <li>网页解析线路（解析页里的播放器）也支持这些键，不需要先用鼠标点一下画面。</li>
+                <li>视频播完会自动播放下一集（「自动连播」勾选时）。</li>
+                <li>如果视频本身进入了网页全屏，先按 <kbd>Esc</kbd> 退出网页全屏，再按一次退出软件全屏。</li>
+              </ul>
+              <div class="guide-tip">全屏时顶部工具栏只是变淡了，鼠标移到屏幕上边缘就会重新出现，可以点「换线路」或「下载」。</div>
+            </section>
+
+            <section class="guide-section" id="guide-settings">
+              <h3><span class="guide-step">9</span>设置、更新与常见问题</h3>
+              <p>右上角「设置」里可以调整播放和更新行为；「关于」页能打开配置目录、日志目录和项目主页。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-09-settings.webp" alt="设置页面：自动换线、托盘、线路体检、下载目录" />
+                <figcaption><b>①</b> 解析失败自动换线　<b>②</b> 启动时自动测速线路　<b>③</b> 打开下载目录</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li><strong>解析失败自动换线</strong>：一条线路失败会自动尝试下一条，建议保持开启。</li>
+                <li><strong>关闭窗口时最小化到托盘</strong>：后台继续播放/下载，双击托盘图标恢复窗口。</li>
+                <li><strong>启动时自动测速线路</strong>：失效线路会被标记并排到最后，不阻塞播放。</li>
+                <li><strong>检查更新</strong>：设置 → 更新，可以手动检查新版本；软件启动时也会自动检查。</li>
+              </ul>
+              <div class="faq">
+                <h4>常见问题</h4>
+                <dl>
+                  <dt>所有线路都没能解析成功</dt>
+                  <dd>链接是否有效、是否是某一集的播放页；换一条线路，或在「线路管理 → 在线更新线路」拉一次最新线路，稍后再试。</dd>
+                  <dt>提示地区限制 / 会员 / 登录</dt>
+                  <dd>芒果TV 等平台会按网络地区判断；换成中国大陆网络，或先在软件内置窗口登录会员，再回来解析。</dd>
+                  <dt>画面卡顿、进度条拖不动</dt>
+                  <dd>换一条线路；第三方解析页的清晰度和稳定性由线路决定。下载到本地再播放会更稳。</dd>
+                  <dt>下载按钮是灰的</dt>
+                  <dd>网页解析线路拿不到真实视频地址，不能下载；换到接口线路或平台原生线路再试。</dd>
+                  <dt>更新后旧设置还在吗</dt>
+                  <dd>配置、观看历史和下载目录都保存在本机，覆盖安装新版本不会清空。</dd>
+                </dl>
+              </div>
+              <div class="guide-tip">第三方线路来源公开、质量参差，请只用于个人学习与合法观看；支持正版请使用平台官方客户端。</div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+    <!-- 手机端底部导航（仅移动端显示） -->
+    <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="手机端导航">
+      <button data-mtab="home" class="active">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.6 12 4l8 6.6V20h-5.2v-5.4h-5.6V20H4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <span>首页</span>
+      </button>
+      <button data-mtab="lines">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>线路</span>
+      </button>
+      <button data-mtab="history">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>历史</span>
+      </button>
+      <button data-mtab="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.8v2M12 18.2v2M3.8 12h2M18.2 12h2M6.2 6.2l1.4 1.4M16.4 16.4l1.4 1.4M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span>设置</span>
+      </button>
+    </nav>
+
+    <script src="vendor/hls.min.js"></script>
+    <script src="core/platforms.js"></script>
+    <script src="core/native.js"></script>
+    <script src="core/lines.js"></script>
+    <script src="core/series.js"></script>
+    <script src="core/store.js"></script>
+    <script src="core/download.js"></script>
+    <script src="core/updater.js"></script>
+    <script src="shim.js"></script>
+    <script src="app.js"></script>
+    <script src="mobile.js"></script>
+  </body>
+</html>

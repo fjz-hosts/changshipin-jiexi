@@ -1,13 +1,16 @@
 # 长视频解析
 
-Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视频 / 优酷 / 芒果TV** 的视频页链接粘进来，选一条解析线路，直接在内置播放器里观看。
+Windows 桌面端 + Android / iOS 手机端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视频 / 优酷 / 芒果TV** 的视频页链接粘进来，选一条解析线路，直接在内置播放器里观看。
 
 程序本身不提供、不存储、不分发任何视频内容；解析能力来自互联网上公开的第三方解析接口，线路失效时可自行更换或添加。
 
+> 手机端与桌面端**同一次发布、同一版本号**：功能一致，界面按手机重新排布，并支持长按 2 倍速、双击左右快进、全屏手势。
+> 桌面端点右上角「手机版」会显示二维码：手机可以扫码直接下载 Android APK，或打开 iOS 免签名 IPA 的下载页。
+>
 > 图文教程：软件里点右上角「使用教程」，或直接看 [PDF 版](docs/长视频解析-图文使用教程.pdf)。
 >
 > 开发/维护/交接说明：见 [项目开发交接文档.md](项目开发交接文档.md)（架构、数据、构建发版、测试、已知限制、下一步）。
-> 项目规则见 [AGENTS.md](AGENTS.md)：**发版统一走 GitHub Actions 的 `release-windows` 工作流**，不要在本机跑 NSIS 打包。
+> 项目规则见 [AGENTS.md](AGENTS.md)：**发版统一走 GitHub Actions 的 `release-all` 工作流**（桌面 + 安卓 + iOS 一次出包），不要在本机跑 NSIS 打包。
 
 ![主界面](docs/screenshot-main.png)
 
@@ -15,6 +18,9 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 
 ## 功能
 
+- **手机端（1.1.0 新增）**：独立的 Android APK 与 iOS 免签名 IPA，与桌面端同一套解析 / 选集 / 历史 / 下载 / 线路管理；界面按手机重排（底部导航、抽屉式弹窗、全屏播放器），支持**长按画面 2 倍速**、双击左右快进 10 秒、上下滑动调亮度 / 音量、自动隐藏控制条。
+- **桌面端点「手机版」扫码下载（1.1.0 新增）**：右上角「手机版」打开二维码；支持同一 Wi-Fi 下从电脑直传 APK/IPA（电脑没有安装包时先从国内镜像下载到缓存），也支持云端镜像落地页。二维码不会用在线生成接口，全部本地绘制。
+- **镜像同步**：手机端和桌面端都按 `gh.monlor.com → gh-proxy.com → ghfile.geekertao.top → hk.gh-proxy.com → GitHub` 的顺序自动切换；APK/IPA 在所有镜像上是同一份文件。
 - **链接解析直连播放**：粘贴视频页链接 → 自动识别平台 → 解析 → 内嵌播放（页面播放器或 m3u8/mp4 原生播放）。
 - **播放器下选集条（1.0.10 新增）**：解析完一集后，视频下面直接出现整部剧的选集：点任意一集切换、上一集 / 下一集、正序 / 倒序、收起、可选的「自动连播」；四平台都支持，选集列表会记住，下次从观看历史点回来也不用重新抓。芒果走官方分集接口，腾讯 / 优酷 / 爱奇艺从平台页面或官方接口取。视频按 16:9 显示，播放时整页滚动，顶部平台入口 / 链接栏会随页面滚走，不再挡住视频。
 - **主窗口内置浏览器**：点平台卡片或「找剧」，平台网页直接在主窗口里打开，不再新开窗口；带**多标签栏**、后退 / 前进 / 刷新 / 返回首页，Alt+←/→ 在网页里也能用；每个平台的「自动解析」开关分开记忆，切换标签会尽量保留滚动位置。
@@ -35,9 +41,20 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 
 ## 下载与安装
 
+### 电脑端（Windows 10/11 x64）
+
 到 [Releases](https://github.com/fjz-hosts/changshipin-jiexi/releases/latest) 下载 `changshipin-Setup-<版本>.exe`，双击安装即可（不签名，SmartScreen 首次运行点「更多信息 → 仍要运行」）。
 
-要求：Windows 10/11 x64。
+### 手机端（Android / iOS）
+
+- **Android**：下载 `changshipin-android.apk` 直接安装；首次安装如果提示「未知来源」，允许一次即可。后续版本覆盖安装，配置和历史都保留。
+- **iOS 免签名版**：下载 `changshipin-ios-unsigned.ipa`，用电脑上的 **Sideloadly / AltStore** 输入自己的 Apple ID 重签后安装。iOS 不能像 Android 一样直接装 IPA；到期后重新拖一次 IPA 即可，应用内配置和历史保留。
+- **最方便的入口**：打开桌面版，点右上角「手机版」，手机扫二维码即可。同一 Wi-Fi 下会走「电脑直传」，速度最快；也可以切到「云端镜像」。
+- 国内镜像（任选其一，路径相同）：
+  `https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-android.apk`
+  `https://gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-android.apk`
+  iOS 把文件名换成 `changshipin-ios-unsigned.ipa`。
+- 静态下载页：<https://cdn.jsdelivr.net/gh/fjz-hosts/changshipin-jiexi@main/docs/mobile/index.html>（会按 UA 推荐 Android / iOS，并列出全部镜像）。
 
 ## 使用
 
@@ -81,49 +98,70 @@ Windows 桌面端的视频链接解析播放工具：把 **爱奇艺 / 腾讯视
 ## 自动更新与发版
 
 ```
-改版本号（desktop/electron/package.json）→ git push main
+node scripts/set-version.mjs <版本>   # 桌面 + 手机 + Android/iOS 原生工程一次同步
         │
         ▼
-GitHub Actions · release-windows（干净 windows-latest）
-   ├─ electron-builder 打包 NSIS 安装包 + latest.yml + blockmap
-   └─ gh release create/upload → GitHub Releases
-                │
-                ▼
-GitHub Releases（安装包 + latest.yml）
-                │  gh.monlor.com / gh-proxy.com / ghfile.geekertao.top / hk.gh-proxy.com / github.com
-                ▼
-客户端 electron-updater：启动 6 秒后检查 → 后台整包下载 → 提示重启安装
+git push main
+        │
+        ▼
+GitHub Actions · release-all
+   ├─ Windows：electron-builder NSIS + latest.yml + blockmap
+   ├─ Android：Capacitor + Gradle assembleRelease（固定 sideload 签名）
+   ├─ iOS：Capacitor + xcodebuild 免签名 .app → 打包 unsigned IPA
+   └─ 统一发布到同一个 GitHub Release（v<版本>）
+        │
+        ▼
+GitHub Releases（桌面安装包 + latest.yml + APK + IPA + latest-mobile.json）
+        │  gh.monlor.com / gh-proxy.com / ghfile.geekertao.top / hk.gh-proxy.com / github.com / jsDelivr
+        ▼
+桌面 electron-updater / 手机端内置更新：启动后台检查 → 多镜像回退 → 提示安装
 ```
 
-- 更新配置在 `desktop/electron/package.json` 的 `build.publish`（generic provider，指向 `gh.monlor.com` 镜像）。
-- 客户端 `src/updater.js` 内置 5 个更新源，按顺序回退；镜像不可用时自动换下一个。
-- 安装包与 `latest.yml` 同名同级，`latest.yml` 里的下载地址是相对路径，因此换哪个镜像都能下载。
+- 桌面更新配置在 `desktop/electron/package.json` 的 `build.publish`（generic provider，指向 `gh.monlor.com` 镜像）。
+- 手机端更新清单是 Release 里的 `latest-mobile.json`，另有仓库内 `mobile/latest.json` 作为 jsDelivr 兜底；客户端 `mobile/www/core/updater.js` 同样多镜像回退。
 - **标准发版（推荐）**：
 
   ```powershell
+  node scripts\set-version.mjs 1.1.0
   git add -A
-  git commit -m "feat: v1.0.11 <说明>"
+  git commit -m "feat: v1.1.0 <说明>"
   git -c http.proxy= -c https.proxy= push origin main
-  gh workflow run release-windows --ref main -f version=1.0.11
+  gh workflow run release-all --ref main -f version=1.1.0
   gh run watch <run-id> --exit-status
+  gh release view v1.1.0 --json tagName,assets --jq '{tag:.tagName,assets:[.assets[]|{name,size,state}]}'
   ```
 
+- Android 签名：`mobile/keystore/changshipin-release.keystore`（公开的 sideload 开发签名，密码 `changshipin`；只有用同一签名覆盖安装才能升级）。可用 `CHANGSPIN_KEYSTORE` / `CHANGSPIN_STORE_PASSWORD` / `CHANGSPIN_KEY_ALIAS` / `CHANGSPIN_KEY_PASSWORD` 覆盖。
+- iOS 免签名 IPA 只做 `CODE_SIGNING_ALLOWED=NO` 构建，不包含任何证书；用户必须用 Sideloadly / AltStore 自签。
 - 本机 `desktop\release.ps1` / `build.ps1` 仅作离线备用：本机 NSIS 生成卸载器时会被安全软件 / SmartScreen / 临时目录挡住（`NSIS Error: Error writing temporary file`），不要再作为发版流程；详见 [AGENTS.md](AGENTS.md)。
 - 本机安装器被 SmartScreen 挡住时，可以用 `release\win-unpacked` 直接覆盖安装目录（robocopy），功能和自动更新都正常。
-- `.github/workflows/build.yml` 仍然只在推送 `v*` tag 时构建 artifact；`release.yml` 是手动触发的“构建 + 发布”工作流，两者不冲突。
+- `.github/workflows/build.yml` 仍然只在推送 `v*` tag 时构建 artifact；`release.yml` 是手动触发的「桌面 + 安卓 + iOS 一次构建 + 发布」工作流，两者不冲突。
+
+## 手机端使用
+
+1. **安装**：Android 直接装 APK；iOS 用 Sideloadly / AltStore 自签 IPA。
+2. **首页**：粘贴视频页链接或点平台卡片进入内置浏览器；内置浏览器保留登录状态，点开某一集会自动送到主界面解析。
+3. **播放**：解析成功后进入播放器。**长按画面 2 倍速**，松手恢复；**双击左/右 1/3 快退/快进 10 秒**；点画面显示/隐藏控制条；上下滑动右半屏调音量、左半屏调亮度；「选集」按钮定位到选集条。
+4. **全屏**：点播放器右下角全屏（或工具栏「全屏」），自动横屏并隐藏状态栏；左上角「退出全屏」或 Android 返回键退出。
+5. **找剧 / 线路 / 历史 / 设置**：底部导航；「线路」打开完整线路管理（增删启停、测速、在线更新），「历史」滚动到观看历史。
+6. **下载**：内置播放器的 m3u8 / mp4 可下载；Android 保存到系统「下载」目录，iOS 保存到「文件」App → 我的 iPhone → 长视频解析。网页解析线路拿不到真实流地址，不支持下载。
+7. **更新**：设置 → 更新，或启动后台检查；Android 直接下载并调起安装器，iOS 跳转 IPA 下载页（需要重新自签）。
+
+> iOS 免签名版的 7 天 / 1 年有效期由 Apple ID 签名决定，不是应用本身限制；到期后重新自签即可。
 
 ## 目录结构
 
-```
+```text
 desktop/
-  build.ps1                # 构建安装包
+  build.ps1                # 构建安装包（本机备用）
   publish.ps1              # 上传到 GitHub Releases
-  release.ps1              # 一键发版（版本号 → 构建 → 发布 → 打 tag → 校验镜像）
+  release.ps1              # 一键发版（本机备用；正式发版走 CI）
   使用说明.txt
   electron/
     package.json           # appId / 版本 / electron-builder / publish
     src/
       main.js              # 主进程：窗口、菜单、托盘、IPC、官网窗口
+      mobile.js            # 手机版安装包缓存 / 局域网直传 / 云端落地页
       proxy.js             # 本地取流代理（m3u8 改写 / Referer / Range）
       lines.js             # 内置线路、解析、地址提取、在线线路清单
       series.js            # 四平台选集（爱奇艺/腾讯/优酷/芒果接口）
@@ -133,19 +171,35 @@ desktop/
       updater.js           # electron-updater + 多镜像回退
       preload.js           # 主界面 IPC 桥
       smoke.js             # 无头自检（--smoke-test，32 项）
-      renderer/            # 主界面、内置官网页、官方平台图标、hls.js
+      renderer/            # 主界面、内置官网页、官方平台图标、hls.js、二维码库
     build/icon.ico
   verify.ps1               # 发版前自检（smoke，可选 cdp-test8）
-scripts/make_icon.py       # 生成应用图标
+
+mobile/
+  package.json             # Capacitor 依赖 / 版本号（与桌面端一致）
+  capacitor.config.json
+  www/                     # 手机端界面（复用桌面渲染层 + mobile.css / mobile.js）
+    core/                  # 线路 / 选集 / 存储 / 下载 / 更新 / 原生桥
+    shim.js                # Electron API 兼容层 + <webview> 原生覆盖层
+  plugins/changshipin-native/  # 本地原生插件（Android Kotlin + iOS Swift）
+  android/                 # Capacitor 生成的 Android 工程（CI 打 APK）
+  ios/                     # Capacitor 生成的 iOS 工程（CI 打免签名 IPA）
+  keystore/                # sideload 固定签名
+  latest.json              # 手机端更新兜底清单（jsDelivr）
+  scripts/                 # 版本 / Android / iOS 补丁 / 图标生成
+  resources/icon.png       # 与桌面端同一张图标
+
+scripts/set-version.mjs    # 桌面 + 手机版本号统一修改
+docs/mobile/index.html     # 手机版静态下载页（jsDelivr / Pages）
+lines.json                 # 在线线路清单
 tools/webview-probe/       # 线路探针（开发用）
 tools/guide/               # 图文教程截图生成（Python + CDP）
 tools/cdp-test*.mjs        # 界面 / 全屏 / 找剧 / 关闭窗口的自动化验证
-tools/cdp-eval.mjs         # 开发用：在运行中的窗口里执行一段 JS
-tools/probe-platform.mjs   # 开发用：打开平台页并执行探针表达式
-lines.json                 # 在线线路清单
 ```
 
 ## 开发
+
+### 桌面端
 
 ```powershell
 cd desktop\electron
@@ -163,21 +217,42 @@ powershell -ExecutionPolicy Bypass -File ..\verify.ps1
 powershell -ExecutionPolicy Bypass -File ..\verify.ps1 -Browser
 ```
 
+### 手机端
+
+```powershell
+cd mobile
+npm install
+npx cap sync android           # 把 www 和本地插件同步进 Android 工程
+
+# 手机端界面快速预览（Electron 的 Chromium，不需要 Android SDK）
+cd ..
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+desktop\electron\node_modules\.bin\electron.cmd mobile\dev\main.js --width 390 --height 844 --out .tmp\mobile.png
+```
+
+- 手机端界面复用 `desktop/electron/src/renderer/` 的 HTML/CSS/JS；`mobile/www/mobile.css` 负责手机布局，`mobile/www/mobile.js` 负责手势和自定义播放器，`mobile/www/shim.js` 把 `window.desktop` / `<webview>` 映射到原生能力。
+- 原生插件在 `mobile/plugins/changshipin-native/`：Android 手写本地取流代理 + WebView 覆盖层；iOS 用 GCDWebServer + WKWebView。改了插件后需要重新 `npx cap sync`。
+- iOS 工程在 macOS 上运行 `cd mobile/ios/App && pod install`；本机 Windows 只能预览界面，不能打 IPA。
+- 版本号统一用 `node scripts/set-version.mjs <版本>`，不要手改单个文件。
+- 图标：`python mobile/scripts/make-assets.py` 从 `brand-assets/icon.png` 生成 Android / iOS 图标和启动图。
+
 - 自检会输出 PASS/FAIL，并以非零退出码表示失败；可用 `CHANGSPIN_USERDATA` 指定独立配置目录，避免污染真实配置。
 - 开发/调试时如果环境设置了 `ELECTRON_RUN_AS_NODE=1`，electron 会以纯 Node 模式启动，需要先 `Remove-Item Env:ELECTRON_RUN_AS_NODE`（构建脚本已处理）。
-- 图标：`python scripts/make_icon.py`（需要 Pillow）。
+- 图标：`python scripts/make_icon.py`（桌面端）。
 - 界面验证：以 `--remote-debugging-port=9222` 启动后运行 `node tools/cdp-test8.mjs`（内嵌浏览器/自动解析/历史）和 `node tools/cdp-test9.mjs`（选集条/历史分组/下载按钮）；`cdp-test2/3/4/5/6/8` 是历史回归脚本，`cdp-test7`（旧版多窗口）已随旧代码删除。
-- 发版前的自检已接进 `desktop\release.ps1`（`-SkipChecks` 可跳过）；`.github\workflows\release.yml` 支持手动触发 CI 构建并发布，本地 git 推不上去时可以用。
+- 发版前的自检已接进 `desktop\release.ps1`（`-SkipChecks` 可跳过）；`.github\workflows\release.yml` 是「桌面 + 安卓 + iOS」一次构建发布的 `release-all` 工作流。
 
 ## 数据与隐私
 
-- 配置、历史记录、更新缓存：`%APPDATA%\长视频解析\`（菜单「文件 → 打开配置目录」）。
-- 日志：`%APPDATA%\长视频解析\logs\desktop.log`。
-- 登录状态按平台隔离在 Electron 的 `persist:platform-*` 分区里；程序不上传任何本地数据。
+- 电脑端配置、历史记录、更新缓存：`%APPDATA%\长视频解析\`（菜单「文件 → 打开配置目录」）。
+- 手机端配置、历史记录：应用私有目录（`localStorage` + Filesystem）；Android 下载在系统「下载」目录，iOS 下载在「文件」App → 我的 iPhone → 长视频解析。
+- 电脑端日志：`%APPDATA%\长视频解析\logs\desktop.log`。
+- 登录状态：电脑端按平台隔离在 Electron 的 `persist:platform-*` 分区；手机端使用系统 WebView / WKWebView 的 Cookie 存储。程序不上传任何本地数据。
 - 解析请求直接发往你选择的第三方接口；「官网页面」线路直接访问对应平台。
 
 ## 更新记录
 
+- **1.1.0** — **新增手机端（Android APK + iOS 免签名 IPA）**，与桌面端同一版本发布、同一套解析 / 选集 / 历史 / 下载 / 线路管理；手机界面重排为底部导航 + 抽屉弹窗，播放器支持长按 2 倍速、双击左右快进 10 秒、上下滑动调亮度 / 音量、自动隐藏控制条。桌面端右上角新增「手机版」：二维码扫码下载，支持同一 Wi-Fi 下电脑直传 APK/IPA（没有缓存时先从国内镜像下载），也可切云端镜像；二维码本地绘制，不走在线接口。手机端内置更新清单 `latest-mobile.json`，与桌面更新一样多镜像回退；APK 使用仓库内固定 sideload 签名，覆盖安装可升级。新增 `release-all` CI：一次出 Windows + Android + iOS 三端产物。手机图标与桌面端同一张原图。
 - **1.0.11** — 修复全屏后键盘失效（焦点留在「全屏」按钮上）：全屏后自动把焦点还给播放器，新增全局空格/方向键/音量/静音快捷键，网页解析线路由主进程统一接管按键，跨域 iframe 也能控制；网页线路播完自动下一集。观看历史改为「一部剧一条」，只记最近一次观看的集数和进度，旧版按集记录启动时自动合并；历史分组改为按平台。新增应用内「使用教程 · 图文版」：9 张真实截图 + 红框/聚光灯标注 + 常见问题，右上角和空播放区都有入口；另附可打印的 [PDF 版](docs/长视频解析-图文使用教程.pdf)。
 - **1.0.10** — 播放器下方新增选集条（四平台，上一集/下一集/倒序/收起/自动连播/记忆）；观看历史加搜索、继续观看、按剧集分组；内置浏览器加多标签栏、滚动位置、网页内 Alt+←/→/Esc/Ctrl+W、按平台记忆自动解析；线路体检（启动测速、失效标记/隐藏/清理、解析排序）；找剧聚合搜索；HLS/mp4 下载（AES-128 解密、进度、取消）；新增平台原生取流实验线路（默认关闭，失败自动回退）；清理旧版独立平台窗口代码；发版前自检与 GitHub Actions 发布工作流。
 - **1.0.9** — 平台网页改为在主窗口内打开（不再另开窗口），支持后退 / 前进 / 返回首页；新增观看历史（剧名、集数、进度、续播、删除）；解析按钮不再因为长时间解析被禁用。

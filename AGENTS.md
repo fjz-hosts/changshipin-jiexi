@@ -7,34 +7,44 @@
 **不要在本机跑 NSIS 打包**（`desktop\build.ps1` / `release.ps1` 的本地打包部分）。
 本机 electron-builder 在生成卸载器时会执行刚打出来的安装器，受系统安全软件 / SmartScreen / 临时目录注入影响，
 会出现 `NSIS Error: Error writing temporary file`，导致安装包只留下 315KB 的坏 stub。
-代码本身没问题：同一提交在 GitHub Actions 的干净 `windows-latest` 上构建成功并已发布 v1.0.10。
+代码本身没问题：同一提交在 GitHub Actions 的干净 `windows-latest` 上构建成功并已发布。
+
+**桌面端和手机端必须同版本一次发布**：`.github/workflows/release.yml` 的 `release-all` 一次产出
+Windows NSIS + Android APK + iOS 免签名 IPA，并统一上传到同一个 Release。不要单独发桌面端或手机端。
 
 标准发版流程：
 
 ```powershell
 cd F:\Desktop\长视频解析
 
-# 1. 改版本号（只改 package.json 的 version）
+# 1. 统一改三端版本号（桌面 + 手机 + Android/iOS 原生工程 + latest.json）
+node scripts\set-version.mjs 1.1.0
+
 # 2. 提交并推送（GitHub git 通道不稳，失败重试 3–6 次）
 git add -A
-git commit -m "feat: vX.Y.Z <简要说明>"
+git commit -m "feat: v1.1.0 <简要说明>"
 git -c http.proxy= -c https.proxy= push origin main
 
-# 3. 触发 CI 构建 + 发布（workflow 文件：.github/workflows/release.yml）
-gh workflow run release-windows --ref main -f version=X.Y.Z
+# 3. 触发三端 CI 构建 + 发布（workflow 文件：.github/workflows/release.yml）
+gh workflow run release-all --ref main -f version=1.1.0
 
 # 4. 看进度 / 结果
-gh run list --workflow release-windows --limit 3
+gh run list --workflow release-all --limit 3
 gh run watch <run-id> --exit-status
-gh release view vX.Y.Z --json tagName,assets --jq '{tag:.tagName,assets:[.assets[]|{name,size,state}]}'
+gh release view v1.1.0 --json tagName,assets --jq '{tag:.tagName,assets:[.assets[]|{name,size,state}]}'
 ```
 
 CI 成功后 Release 会包含：
 
 ```text
-changshipin-Setup-X.Y.Z.exe
-changshipin-Setup-X.Y.Z.exe.blockmap
+changshipin-Setup-1.1.0.exe
+changshipin-Setup-1.1.0.exe.blockmap
 latest.yml
+changshipin-android-1.1.0.apk
+changshipin-android.apk              # 固定文件名，手机更新/二维码用
+changshipin-ios-unsigned-1.1.0.ipa
+changshipin-ios-unsigned.ipa         # 固定文件名
+latest-mobile.json                   # 手机端更新清单
 ```
 
 ### 下载安装包
@@ -73,13 +83,22 @@ robocopy "F:\Desktop\长视频解析\release\win-unpacked" "D:\长视频解析\c
 ## 2. 发版前测试
 
 ```powershell
-# 无头自检（30 项）
+# 无头自检（32 项）
 powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 
 # 界面回归（需要先启动开发版并开 9345 调试端口）
 node tools\cdp-test8.mjs
 node tools\cdp-test9.mjs
 ```
+
+手机端界面预览（不需要 Android SDK）：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+desktop\electron\node_modules\.bin\electron.cmd mobile\dev\main.js --width 390 --height 844 --out .tmp\mobile.png
+```
+
+手机端原生构建只在 CI（ubuntu-latest / macos-15）验证；本机没有 Android SDK、没有 Xcode，不要试图在本机出 APK / IPA。
 
 安装完成后可以再跑一次已安装程序的 smoke：
 
@@ -96,7 +115,10 @@ Start-Process -FilePath 'D:\长视频解析\changshipin-jiexi\长视频解析.ex
 - 不要在本机对测试安装执行卸载（会删正式版快捷方式）；验证安装包用 `release\win-unpacked` 或独立虚拟机。
 - GitHub push 一律带 `-c http.proxy= -c https.proxy=` 绕过失效代理，失败重试。
 - 不要用 PowerShell 5.1 无 BOM 写 `.ps1` / `使用说明.txt`；README 不带 BOM。
-- 版本号只改 `desktop\electron\package.json` 的 `version`；CI 会按 workflow 输入的版本号重新设置。
+- 版本号统一用 `node scripts\set-version.mjs X.Y.Z` 修改，会同步桌面 `package.json`、手机 `package.json`、Android/iOS 原生工程和 `mobile/latest.json`；不要只改单个文件。
+- 手机端原生工程已经提交在 `mobile/android` / `mobile/ios`；CI 在打 APK/IPA 前会先 `npx cap sync`，再跑 `mobile/scripts/patch-android.mjs` / `patch-ios.mjs`。不要手改生成出来的 `android/app/src/main/assets/public` 等临时产物。
+- Android 使用仓库内固定 sideload 签名 `mobile/keystore/changshipin-release.keystore`（密码 `changshipin`）；更换签名会导致老用户无法覆盖安装。
+- iOS 产物是 `CODE_SIGNING_ALLOWED=NO` 的免签名 IPA，本身不能直接安装，必须由用户用 Sideloadly / AltStore 自签；不要在文档里写成「直接安装」。
 - 发版记录同步更新：`README.md` 的更新记录、`项目开发交接文档.md` 的版本历史/安装路径/Release 链接。
 
 ## 4. 本机环境已知问题

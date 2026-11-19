@@ -1,0 +1,1100 @@
+/* 手机端适配：复用桌面端结构与设计语言，重排为单列 + 底部导航 + 大触控目标。 */
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-height: calc(56px + var(--safe-bottom));
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+body::before {
+  opacity: 0.35;
+}
+
+.app {
+  height: auto;
+  min-height: 100dvh;
+  padding: calc(var(--safe-top) + 10px) 12px calc(var(--tabbar-height) + 16px);
+  gap: 10px;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+/* ---------------- 顶栏 ---------------- */
+.topbar {
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.brand {
+  gap: 9px;
+}
+
+.brand-img {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+.brand-text strong {
+  font-size: 15px;
+}
+
+.brand-text span {
+  display: none;
+}
+
+.top-actions {
+  width: 100%;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 3px;
+  scrollbar-width: none;
+}
+
+.top-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.top-actions > * {
+  flex: none;
+}
+
+.ghost-btn,
+.pill-btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+#update-pill {
+  padding: 0 9px;
+}
+
+/* ---------------- 平台快捷入口 ---------------- */
+.quick-head {
+  margin-bottom: 7px;
+}
+
+.quick-head small {
+  display: none;
+}
+
+.platform-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.platform-card {
+  border-radius: 11px;
+}
+
+.card-main {
+  padding: 9px 8px;
+  gap: 8px;
+}
+
+.platform-card .logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.platform-meta b {
+  font-size: 13px;
+}
+
+.platform-meta small {
+  display: none;
+}
+
+.card-go {
+  display: none;
+}
+
+.card-ext {
+  width: 26px;
+  padding: 0;
+  font-size: 13px;
+}
+
+/* ---------------- 链接 / 线路 ---------------- */
+.parse-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.url-box {
+  height: 48px;
+  padding: 0 6px 0 10px;
+}
+
+#url-input {
+  font-size: 16px;
+}
+
+.url-box .mini-btn,
+.url-box .icon-btn {
+  height: 34px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.platform-badge {
+  font-size: 10px;
+  padding: 3px 6px;
+}
+
+.line-box {
+  display: flex;
+  gap: 8px;
+}
+
+.select {
+  flex: 1;
+  height: 44px;
+  font-size: 14px !important;
+}
+
+.parse-btn {
+  height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* ---------------- 播放区 ---------------- */
+.workspace {
+  display: block;
+  flex: none;
+  min-height: 0;
+}
+
+.stage {
+  min-height: 0;
+  overflow: visible;
+  border-radius: 13px;
+}
+
+.stage-head {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 9px;
+}
+
+.stage-title {
+  flex: 1 1 100%;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.chip {
+  flex: none;
+}
+
+.stage-tools {
+  width: 100%;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+}
+
+.stage-tools::-webkit-scrollbar {
+  display: none;
+}
+
+.tool-btn {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.stage-android-fullscreen .stage-tools {
+  display: none;
+}
+
+.stage-body {
+  min-height: 210px;
+}
+
+.stage:not(.stage-playing) .stage-body {
+  min-height: 260px;
+}
+
+.stage.stage-playing .stage-body {
+  aspect-ratio: 16 / 9;
+  flex: none;
+}
+
+.stage.stage-playing .stage-body {
+  min-height: 0;
+}
+
+.stage-foot {
+  height: 32px;
+  padding: 0 9px;
+  font-size: 10.5px;
+}
+
+.stage-foot .tool-btn {
+  height: 26px;
+}
+
+.empty {
+  padding: 18px 16px;
+}
+
+.empty h2 {
+  font-size: 17px;
+}
+
+.empty p {
+  font-size: 12px;
+}
+
+.steps {
+  display: none;
+}
+
+.empty-note {
+  font-size: 11px !important;
+}
+
+.guide-entry {
+  margin-top: 8px;
+}
+
+/* ---------------- 选集 ---------------- */
+.episode-bar {
+  flex-wrap: wrap;
+  padding: 7px 9px;
+  gap: 6px;
+}
+
+.episode-head {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  gap: 6px;
+}
+
+.episode-series {
+  width: 100%;
+  font-size: 12px;
+}
+
+.episode-tip {
+  display: none;
+}
+
+.episode-tools {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.episode-tools::-webkit-scrollbar {
+  display: none;
+}
+
+.episode-tools .mini-btn,
+.episode-auto-next {
+  flex: none;
+  height: 28px;
+  font-size: 11px;
+}
+
+.episode-list {
+  height: 34px;
+  gap: 6px;
+}
+
+.episode-item {
+  height: 30px;
+  min-width: 44px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* ---------------- 侧栏 / 历史 ---------------- */
+.side {
+  margin-top: 12px;
+  gap: 10px;
+  min-height: 0;
+}
+
+.panel {
+  flex: none;
+  padding: 10px;
+  border-radius: 13px;
+}
+
+.panel > header {
+  margin-bottom: 8px;
+}
+
+.panel h3 {
+  font-size: 13px;
+}
+
+.panel-actions .mini-btn,
+.panel-actions .mini-select {
+  height: 28px;
+  font-size: 11px;
+}
+
+.line-list,
+.history-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.history-list {
+  max-height: 56vh;
+}
+
+.history-item {
+  padding: 9px 10px;
+}
+
+.history-title {
+  font-size: 13.5px;
+}
+
+.history-meta {
+  font-size: 11px;
+}
+
+.history-search input {
+  height: 36px;
+  font-size: 14px !important;
+}
+
+.line-item {
+  min-height: 38px;
+}
+
+.line-name {
+  font-size: 13px;
+}
+
+/* ---------------- 底部导航 ---------------- */
+.mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 46;
+  display: flex;
+  height: var(--tabbar-height);
+  padding: 4px 6px calc(4px + var(--safe-bottom));
+  gap: 2px;
+  background: rgba(7, 12, 20, 0.94);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.mobile-tabbar button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.mobile-tabbar button svg {
+  width: 21px;
+  height: 21px;
+}
+
+.mobile-tabbar button.active {
+  color: var(--accent);
+  background: rgba(55, 224, 139, 0.08);
+}
+
+body.cinema .mobile-tabbar,
+body.browser-open .mobile-tabbar {
+  display: none;
+}
+
+body.cinema .app {
+  padding: 0;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+body.cinema .workspace {
+  height: 100%;
+}
+
+body.cinema .stage {
+  height: 100%;
+  min-height: 0;
+}
+
+body.cinema .stage-body,
+body.cinema .stage.stage-playing .stage-body {
+  flex: 1 1 auto;
+  width: auto;
+  aspect-ratio: auto;
+  min-height: 0;
+}
+
+body.cinema .stage-head {
+  display: none;
+}
+
+body.cinema .episode-bar {
+  display: none;
+}
+
+body.cinema .stage-foot {
+  display: none;
+}
+
+body.cinema .app::before {
+  content: '';
+}
+
+/* 全屏退出按钮 */
+.mobile-fs-exit {
+  position: fixed;
+  top: calc(var(--safe-top) + 10px);
+  left: 12px;
+  z-index: 10020;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+
+body.cinema .mobile-fs-exit {
+  display: flex;
+}
+
+/* ---------------- 内置浏览器 ---------------- */
+body.browser-open .topbar,
+body.browser-open .mobile-tabbar,
+body.browser-open .statusbar {
+  display: none !important;
+}
+
+body.browser-open .app {
+  height: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+body.browser-open .browser-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+}
+
+.browser-panel {
+  border-radius: 13px;
+}
+
+.browser-tabs {
+  min-height: 36px;
+  padding: calc(var(--safe-top) + 4px) 6px 4px;
+  overflow-x: auto;
+  gap: 4px;
+}
+
+.browser-tab {
+  flex: none;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.browser-bar {
+  height: auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 7px;
+}
+
+.browser-nav {
+  order: 1;
+  gap: 2px;
+}
+
+.browser-nav .nav-btn {
+  width: 34px;
+  height: 32px;
+  font-size: 15px;
+}
+
+.browser-brand {
+  display: none;
+}
+
+.browser-address {
+  order: 3;
+  flex: 1 0 100%;
+  height: 38px;
+}
+
+.browser-address input {
+  font-size: 14px !important;
+}
+
+.browser-auto {
+  order: 2;
+  margin-left: auto;
+  font-size: 11px;
+  gap: 4px;
+}
+
+.browser-auto input {
+  width: 16px;
+  height: 16px;
+}
+
+.browser-actions {
+  order: 4;
+  flex: 1 0 100%;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.browser-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-actions .tool-btn,
+.browser-actions .primary-sm {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.browser-viewport {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------------- 弹窗 / 设置 ---------------- */
+.modal-mask {
+  z-index: 90;
+  place-items: end center;
+  align-items: end;
+}
+
+.modal {
+  width: 100%;
+  max-height: 92dvh;
+  border-radius: 18px 18px 0 0;
+  border-bottom: 0;
+  box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, 0.9);
+}
+
+.modal.guide-modal {
+  height: 92dvh;
+  max-height: 92dvh;
+}
+
+.modal-head {
+  padding: 13px 14px;
+}
+
+.modal-head h2 {
+  font-size: 15px;
+}
+
+.tabs {
+  overflow-x: auto;
+  padding: 0 8px;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs button {
+  flex: none;
+  padding: 11px 12px;
+  font-size: 13px;
+}
+
+.tab-panes {
+  padding: 14px 14px calc(24px + var(--safe-bottom));
+}
+
+.tab-panes .hint {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 桌面状态栏在手机上由底部导航替代 */
+.statusbar {
+  display: none;
+}
+
+.line-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 9px;
+}
+
+.line-row .line-enabled {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.line-row .line-name {
+  flex: 1 1 120px;
+}
+
+.line-row .line-kind {
+  flex: 0 0 84px;
+}
+
+.line-row .line-url {
+  flex: 1 1 100%;
+}
+
+.line-row .line-test,
+.line-row .line-del {
+  flex: 1 1 42%;
+  height: 34px;
+  font-size: 12px;
+}
+
+.line-row .row-note {
+  flex: 1 1 100%;
+}
+
+.line-editor {
+  max-height: none;
+  overflow: visible;
+}
+
+.row-btns {
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.row-btns .primary-sm,
+.row-btns .ghost-sm {
+  height: 38px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.switch-row {
+  padding: 12px 0;
+  font-size: 13.5px;
+  gap: 10px;
+}
+
+.switch-row input[type='checkbox'] {
+  width: 19px;
+  height: 19px;
+  flex: none;
+}
+
+.settings-group {
+  margin-top: 16px;
+  font-size: 11px;
+}
+
+/* 手机端不适用的桌面设置 */
+label.switch-row:has(#set-close-tray),
+#btn-open-userdata,
+#btn-open-logs,
+#btn-create-shortcut {
+  display: none !important;
+}
+
+/* 找剧 */
+.search-modal {
+  width: 100%;
+}
+
+.search-body {
+  padding: 14px 14px calc(20px + var(--safe-bottom));
+  overflow-y: auto;
+}
+
+.search-input-row {
+  gap: 7px;
+}
+
+.search-input-row input {
+  height: 42px;
+}
+
+.search-input-row .primary-sm {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.platform-picks {
+  gap: 7px;
+}
+
+.pick {
+  flex: 1 1 calc(50% - 7px);
+  justify-content: center;
+}
+
+.search-results {
+  max-height: 46vh;
+}
+
+.search-result {
+  padding: 10px 11px;
+  font-size: 13px;
+}
+
+/* 图文教程 */
+.guide-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.guide-head p {
+  display: none;
+}
+
+.guide-nav {
+  flex: none;
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 4px;
+  padding: 8px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+
+.guide-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.guide-nav button {
+  flex: none;
+  white-space: nowrap;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.guide-nav-foot {
+  display: none;
+}
+
+.guide-content {
+  flex: 1;
+  padding: 14px 14px calc(30px + var(--safe-bottom));
+}
+
+.guide-section img {
+  width: 100%;
+  height: auto;
+}
+
+.guide-quick {
+  grid-template-columns: 1fr;
+}
+
+/* 提示条放到顶部，避免被原生 WebView 盖住 */
+.toast-stack {
+  left: 10px;
+  right: 10px;
+  top: calc(var(--safe-top) + 8px);
+  bottom: auto;
+  z-index: 10030;
+  align-items: center;
+}
+
+.toast {
+  max-width: 100%;
+  font-size: 12.5px;
+  pointer-events: auto;
+}
+
+/* ---------------- 自定义播放器控制层 ---------------- */
+.video-view {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.video-view video {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.video-view video::-webkit-media-controls {
+  display: none !important;
+}
+
+.video-gesture-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  touch-action: none;
+}
+
+.video-gesture-layer.controls-visible {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 28%, transparent 70%, rgba(0, 0, 0, 0.42));
+}
+
+.player-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px 10px calc(8px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.video-gesture-layer.controls-visible + .player-controls,
+.player-controls.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.player-controls .pc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pc-btn {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+
+.pc-btn.wide {
+  width: auto;
+  padding: 0 10px;
+}
+
+.pc-time {
+  flex: none;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.86);
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-progress {
+  flex: 1;
+  height: 22px;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.pc-progress::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) var(--pc-progress, 0%), rgba(255, 255, 255, 0.24) var(--pc-progress, 0%));
+}
+
+.pc-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(55, 224, 139, 0.28);
+}
+
+.player-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.player-hint.show {
+  opacity: 1;
+}
+
+.player-hint.speed {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.player-seek-indicator {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  transform: translateY(-50%);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.player-seek-indicator.show {
+  opacity: 1;
+}
+
+.player-seek-indicator.left {
+  left: 9%;
+}
+
+.player-seek-indicator.right {
+  right: 9%;
+}
+
+.brightness-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.cinema .video-view,
+body.cinema .stage-body {
+  background: #000;
+}
+
+/* 手机端弹窗关闭按钮不要把焦点环留在屏幕上 */
+#modal-close:focus-visible,
+#search-close:focus-visible,
+#guide-close:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ---------------- 小屏细节 ---------------- */
+@media (max-width: 380px) {
+  .app {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .platform-grid {
+    gap: 6px;
+  }
+
+  .card-main {
+    padding: 7px 6px;
+  }
+
+  .stage-title {
+    font-size: 11.5px;
+  }
+
+  .tool-btn {
+    padding: 0 8px;
+  }
+
+  .mobile-tabbar button {
+    font-size: 10px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  body:not(.browser-open):not(.cinema) .topbar .brand-text {
+    display: none;
+  }
+
+  body:not(.browser-open):not(.cinema) .quick-row {
+    display: none;
+  }
+
+  body:not(.browser-open):not(.cinema) .app {
+    padding-top: calc(var(--safe-top) + 6px);
+  }
+}
