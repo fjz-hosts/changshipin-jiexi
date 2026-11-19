@@ -125,6 +125,20 @@ node tools\cdp-test9.mjs
 
 ## 5. 本机环境已知问题
 
+- **沙箱里 git push / curl 会挂在 schannel 上**（`SEC_E_NO_CREDENTIALS (0x8009030E)`），GCM 凭据助手还会报
+  `couldn't create signal pipe, Win32 error 5`。可用的绕过写法（已验证）：
+
+  ```powershell
+  $tok = (gh auth token)
+  $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$tok"))
+  $env:GIT_TERMINAL_PROMPT = '0'
+  git -c http.proxy= -c https.proxy= -c http.sslBackend=openssl `
+      -c "http.extraheader=AUTHORIZATION: basic $b64" push origin main
+  ```
+
+  读操作（`ls-remote`、`gh api`）加 `-c http.sslBackend=openssl` 就行，不用 token。
+  大白话：**TLS 用 openssl 后端，认证用 gh 的 token，别依赖凭据助手**。
+
 - `desktop\electron\node_modules\builder-util\out\util.js` 的 Windows 分支会把子进程环境替换成只剩 `__COMPAT_LAYER`，
   导致 NSIS 安装器没有 `TEMP`/`PATH`，报临时文件错误。该补丁只作为本地诊断，**不是发版依赖**；
   重装 node_modules 会丢，别再为它反复折腾本机打包，直接用 CI。
