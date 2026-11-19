@@ -628,6 +628,32 @@ body.browser-open .browser-panel {
   min-height: 0;
 }
 
+.browser-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #04070d;
+  color: var(--muted);
+}
+
+.browser-fallback b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.browser-fallback span {
+  max-width: 280px;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
 /* ---------------- 弹窗 / 设置 ---------------- */
 .modal-mask {
   z-index: 90;

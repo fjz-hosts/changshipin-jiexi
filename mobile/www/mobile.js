@@ -542,6 +542,57 @@
     statusMeta.innerHTML = `<span id="version-text">v${window.CSP_VERSION || ''}</span> · 手机端 · 长按画面 2 倍速 · 双击左右快进 10 秒`
   }
 
+  // 内置浏览器视口在原生 WebView 没起来时至少给一个提示，而不是纯黑
+  const browserViewport = $('#browser-viewport')
+  if (browserViewport && !$('#browser-fallback')) {
+    const fallback = document.createElement('div')
+    fallback.id = 'browser-fallback'
+    fallback.className = 'browser-fallback'
+    fallback.innerHTML = `
+      <b>页面正在原生浏览器里打开…</b>
+      <span>如果这里一直黑屏，请退回首页 → 设置 → 关于 → 复制诊断信息发给开发者。</span>
+    `
+    browserViewport.appendChild(fallback)
+  }
+
+  // 设置 → 关于：复制诊断信息（排查手机端原生插件/WebView 问题）
+  function collectDiagnostics() {
+    const cap = window.Capacitor
+    const webviews = window.__cspShim?.getWebviews?.() || []
+    return {
+      at: new Date().toISOString(),
+      version: window.CSP_VERSION,
+      build: window.CSP_BUILD,
+      platform: N.platform,
+      isNative: N.isNative,
+      ua: navigator.userAgent,
+      screen: `${window.screen.width}x${window.screen.height}@${window.devicePixelRatio || 1}`,
+      capacitor: Boolean(cap),
+      capacitorPlugins: cap && cap.Plugins ? Object.keys(cap.Plugins) : [],
+      hasNativePlugin: Boolean(cap && cap.Plugins && cap.Plugins.ChangshipinNative),
+      proxy: N.proxyBase(),
+      browserOpen: Boolean(browserViewport && !browserViewport.closest('#browser-panel')?.hidden),
+      webviews,
+    }
+  }
+
+  const aboutActions = document.querySelector('.tab-pane[data-pane="about"] .row-btns')
+  if (aboutActions && !$('#mobile-diag')) {
+    const diagButton = document.createElement('button')
+    diagButton.type = 'button'
+    diagButton.className = 'ghost-sm'
+    diagButton.id = 'mobile-diag'
+    diagButton.textContent = '复制诊断信息'
+    diagButton.addEventListener('click', async () => {
+      const text = JSON.stringify(collectDiagnostics(), null, 2)
+      const ok = await N.copyText(text)
+      showToast(ok ? '诊断信息已复制，发给开发者即可' : '复制失败，请截图本页', ok ? 'ok' : 'warn', 4000)
+    })
+    aboutActions.appendChild(diagButton)
+  }
+
+  window.__cspDiagnostics = collectDiagnostics
+
   // 设置里的下载说明改成手机端口径
   for (const note of $$('.tab-pane[data-pane="play"] .settings-note')) {
     if (note.textContent.includes('内置播放器的 m3u8')) {

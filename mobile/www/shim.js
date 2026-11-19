@@ -347,6 +347,15 @@
       if (typeof fn === 'function') toastBridge = fn
     },
     getFullscreen: () => fullscreen,
+    getWebviews: () =>
+      [...webviewRegistry].map((element) => ({
+        id: element.__nativeId,
+        created: Boolean(element.__created),
+        visible: Boolean(element.__lastFrame && element.__lastFrame !== '0'),
+        frame: element.__lastFrame || '',
+        url: element.getURL(),
+        title: element.getTitle(),
+      })),
   }
 
   // -------------------------------------------------------------------------
