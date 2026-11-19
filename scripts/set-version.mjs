@@ -92,5 +92,11 @@ updateJson('mobile/latest.json', (data) => {
   data.ios = { asset: 'changshipin-ios-unsigned.ipa' }
 })
 
+// GitHub Pages 下载页同源读取的版本清单（避免 CORS / 镜像不稳）
+const mobileLatest = JSON.parse(fs.readFileSync(path.join(root, 'mobile/latest.json'), 'utf8'))
+fs.mkdirSync(path.join(root, 'docs/mobile'), { recursive: true })
+fs.writeFileSync(path.join(root, 'docs/mobile/latest.json'), `${JSON.stringify(mobileLatest, null, 2)}\n`, 'utf8')
+console.log('updated docs/mobile/latest.json')
+
 console.log(`\n版本已同步为 v${raw}（versionCode ${versionCode}）`)
 console.log('记得同步更新 README / 项目开发交接文档的更新记录。')

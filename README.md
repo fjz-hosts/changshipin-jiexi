@@ -54,7 +54,7 @@ Windows 桌面端 + Android / iOS 手机端的视频链接解析播放工具：�
   `https://gh.monlor.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-android.apk`
   `https://gh-proxy.com/https://github.com/fjz-hosts/changshipin-jiexi/releases/latest/download/changshipin-android.apk`
   iOS 把文件名换成 `changshipin-ios-unsigned.ipa`。
-- 静态下载页：<https://cdn.jsdelivr.net/gh/fjz-hosts/changshipin-jiexi@main/docs/mobile/index.html>（会按 UA 推荐 Android / iOS，并列出全部镜像）。
+- 静态下载页：<https://fjz-hosts.github.io/changshipin-jiexi/mobile/>（会按 UA 推荐 Android / iOS，并列出全部镜像）。
 
 ## 使用
 

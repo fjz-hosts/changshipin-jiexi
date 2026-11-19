@@ -27,7 +27,7 @@
   ]
   const MOBILE_MIRROR_LABELS = ['Monlor 加速', 'gh-proxy 加速', 'Geekertao 加速', '香港加速', 'GitHub 直连']
   const MOBILE_FILES = { android: 'changshipin-android.apk', ios: 'changshipin-ios-unsigned.ipa' }
-  const MOBILE_LANDING = 'https://cdn.jsdelivr.net/gh/fjz-hosts/changshipin-jiexi@main/docs/mobile/index.html'
+  const MOBILE_LANDING = 'https://fjz-hosts.github.io/changshipin-jiexi/mobile/'
 
   const icons = {
     play: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>',
