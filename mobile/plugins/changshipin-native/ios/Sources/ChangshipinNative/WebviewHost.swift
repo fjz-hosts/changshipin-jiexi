@@ -126,12 +126,11 @@ final class WebviewHost: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
                 return
             }
             // Capacitor 的 CAPBridgeViewController 把 view 直接设成了 WKWebView。
-            // 如果把覆盖层加在 viewController.view（也就是 WKWebView 自己）上，
-            // 它会被 WKWebView 的内部滚动层盖住/裁掉，表现就是工具栏下面是纯黑。
-            // 必须加到 Capacitor WKWebView 的父视图（通常是窗口根视图）上。
+            // 加到 viewController.view（也就是 WKWebView 自己）上会被内部滚动层盖住；
+            // 加到 window 最稳，window 还没挂上时再退到 superview。
             guard let bridge = self.plugin?.bridge,
                   let capacitorWebView = bridge.webView else { return }
-            let hostView = capacitorWebView.superview ?? bridge.viewController?.view
+            let hostView = capacitorWebView.window ?? capacitorWebView.superview ?? bridge.viewController?.view
             guard let hostView = hostView else { return }
             let config = WKWebViewConfiguration()
             config.allowsInlineMediaPlayback = true
