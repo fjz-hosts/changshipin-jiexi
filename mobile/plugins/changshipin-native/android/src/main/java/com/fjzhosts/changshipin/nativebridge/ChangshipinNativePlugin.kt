@@ -487,8 +487,8 @@ class ChangshipinNativePlugin : Plugin() {
                         if (request?.isForMainFrame == true) finish(null)
                     }
                 }
-                val container = getActivity().findViewById<android.view.ViewGroup>(android.R.id.content)
-                val metrics = getActivity().resources.displayMetrics
+                val container = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                val metrics = activity.resources.displayMetrics
                 container.addView(view, android.widget.FrameLayout.LayoutParams(metrics.widthPixels, metrics.heightPixels).apply {
                     leftMargin = -14000
                     topMargin = 0

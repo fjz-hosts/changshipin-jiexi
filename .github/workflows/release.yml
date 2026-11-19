@@ -147,9 +147,10 @@ jobs:
         working-directory: mobile/ios/App
         run: |
           set -euo pipefail
+          xcodebuild -list -workspace App.xcworkspace
           xcodebuild \
             -workspace App.xcworkspace \
-            -target App \
+            -scheme App \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
