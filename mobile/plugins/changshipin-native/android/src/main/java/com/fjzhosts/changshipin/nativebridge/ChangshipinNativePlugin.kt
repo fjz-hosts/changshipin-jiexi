@@ -29,9 +29,6 @@ import org.json.JSONTokener
 
 @CapacitorPlugin(name = "ChangshipinNative")
 class ChangshipinNativePlugin : Plugin() {
-    val activity: AppCompatActivity
-        get() = getActivity()
-
     private var proxy: StreamProxy? = null
     private val webviews = ConcurrentHashMap<String, WebviewHost>()
     private val sniffers = ConcurrentHashMap<String, WebviewHost>()
@@ -75,7 +72,7 @@ class ChangshipinNativePlugin : Plugin() {
     fun createWebview(call: PluginCall) {
         val id = call.getString("id") ?: return call.reject("缺少 id")
         val src = call.getString("src") ?: ""
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 val existing = webviews[id]
                 if (existing != null) {
@@ -178,7 +175,7 @@ class ChangshipinNativePlugin : Plugin() {
             call.resolve(JSObject())
             return
         }
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             val state = host.state()
             call.resolve(state)
         }
@@ -200,7 +197,7 @@ class ChangshipinNativePlugin : Plugin() {
         val url = call.getString("url") ?: return call.reject("缺少 url")
         val script = call.getString("script") ?: "document.title"
         val timeout = call.getInt("timeoutMs") ?: 18000
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             HiddenPage(this, url, script, timeout.toLong()) { value ->
                 val result = JSObject()
                 if (value != null) result.put("value", value)
@@ -213,7 +210,7 @@ class ChangshipinNativePlugin : Plugin() {
     fun createSniffer(call: PluginCall) {
         val id = call.getString("id") ?: return call.reject("缺少 id")
         val url = call.getString("url") ?: return call.reject("缺少 url")
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 serverHost(id)?.destroy()
                 snifferSeen[id] = java.util.Collections.synchronizedSet(LinkedHashSet())
@@ -260,7 +257,7 @@ class ChangshipinNativePlugin : Plugin() {
     @PluginMethod
     fun openDownload(call: PluginCall) {
         val raw = call.getString("uri") ?: return call.reject("缺少 uri")
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 openUriString(raw)
                 call.resolve(JSObject().put("ok", true))
@@ -273,15 +270,15 @@ class ChangshipinNativePlugin : Plugin() {
     @PluginMethod
     fun shareDownload(call: PluginCall) {
         val raw = call.getString("uri") ?: return call.reject("缺少 uri")
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 val uri = toContentUri(raw)
                 val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = activity.contentResolver.getType(uri) ?: mimeOf(raw)
+                    type = getActivity().contentResolver.getType(uri) ?: mimeOf(raw)
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                activity.startActivity(Intent.createChooser(intent, call.getString("name") ?: "分享文件").apply {
+                getActivity().startActivity(Intent.createChooser(intent, call.getString("name") ?: "分享文件").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
                 call.resolve(JSObject().put("ok", true))
@@ -293,9 +290,9 @@ class ChangshipinNativePlugin : Plugin() {
 
     @PluginMethod
     fun openDownloadsFolder(call: PluginCall) {
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
-                activity.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                getActivity().startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 })
                 call.resolve(JSObject().put("ok", true))
@@ -308,16 +305,16 @@ class ChangshipinNativePlugin : Plugin() {
     @PluginMethod
     fun installApk(call: PluginCall) {
         val raw = call.getString("path") ?: return call.reject("缺少 path")
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                    !activity.packageManager.canRequestPackageInstalls()
+                    !getActivity().packageManager.canRequestPackageInstalls()
                 ) {
                     val settings = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:${activity.packageName}")
+                        data = Uri.parse("package:${getActivity().packageName}")
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    activity.startActivity(settings)
+                    getActivity().startActivity(settings)
                     call.resolve(JSObject().put("ok", false).put("error", "请在系统设置里允许本应用安装未知来源应用，然后再次点击安装"))
                     return@runOnUiThread
                 }
@@ -327,7 +324,7 @@ class ChangshipinNativePlugin : Plugin() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                activity.startActivity(intent)
+                getActivity().startActivity(intent)
                 call.resolve(JSObject().put("ok", true))
             } catch (error: Exception) {
                 call.reject("打开安装器失败：${error.message}")
@@ -339,10 +336,10 @@ class ChangshipinNativePlugin : Plugin() {
     fun getInfo(call: PluginCall) {
         try {
             val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                activity.packageManager.getPackageInfo(activity.packageName, PackageManager.PackageInfoFlags.of(0))
+                getActivity().packageManager.getPackageInfo(getActivity().packageName, PackageManager.PackageInfoFlags.of(0))
             } else {
                 @Suppress("DEPRECATION")
-                activity.packageManager.getPackageInfo(activity.packageName, 0)
+                getActivity().packageManager.getPackageInfo(getActivity().packageName, 0)
             }
             val version = info.versionName ?: ""
             val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else info.versionCode.toLong()
@@ -362,7 +359,7 @@ class ChangshipinNativePlugin : Plugin() {
     fun notifySniffer(id: String, url: String) {
         val seen = snifferSeen[id] ?: return
         if (!seen.add(url)) return
-        activity.runOnUiThread {
+        getActivity().runOnUiThread {
             try {
                 notifyListeners("snifferMedia", JSObject().put("id", id).put("url", url))
             } catch (_: Exception) {
@@ -377,7 +374,7 @@ class ChangshipinNativePlugin : Plugin() {
 
     private fun publishToDownloads(source: File, name: String, mime: String): JSObject {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val resolver = activity.contentResolver
+            val resolver = getActivity().contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(MediaStore.MediaColumns.MIME_TYPE, mime)
@@ -409,31 +406,31 @@ class ChangshipinNativePlugin : Plugin() {
     }
 
     private fun publishToAppDownloads(source: File, name: String, mime: String): JSObject {
-        val dir = File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "长视频解析")
+        val dir = File(getActivity().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "长视频解析")
         dir.mkdirs()
         val target = File(dir, name)
         source.copyTo(target, overwrite = true)
-        val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", target)
+        val uri = FileProvider.getUriForFile(getActivity(), "${getActivity().packageName}.fileprovider", target)
         return JSObject()
             .put("ok", true)
             .put("uri", uri.toString())
-            .put("displayPath", "Android/data/${activity.packageName}/files/Download/长视频解析/$name")
+            .put("displayPath", "Android/data/${getActivity().packageName}/files/Download/长视频解析/$name")
     }
 
     private fun toContentUri(raw: String): Uri {
         if (raw.startsWith("content://")) return Uri.parse(raw)
         val file = File(Uri.parse(raw).path ?: return Uri.parse(raw))
-        return FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
+        return FileProvider.getUriForFile(getActivity(), "${getActivity().packageName}.fileprovider", file)
     }
 
     private fun openUriString(raw: String) {
         val uri = toContentUri(raw)
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, activity.contentResolver.getType(uri) ?: mimeOf(raw))
+            setDataAndType(uri, getActivity().contentResolver.getType(uri) ?: mimeOf(raw))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        activity.startActivity(intent)
+        getActivity().startActivity(intent)
     }
 
     private fun mimeOf(raw: String): String = when {
@@ -453,7 +450,7 @@ class ChangshipinNativePlugin : Plugin() {
         private val timeoutMs: Long,
         private val callback: (Any?) -> Unit,
     ) {
-        private val activity = plugin.activity
+        private val activity = plugin.getActivity()
         private var webView: WebView? = null
         private var finished = false
         private var startedAt = 0L
@@ -490,8 +487,8 @@ class ChangshipinNativePlugin : Plugin() {
                         if (request?.isForMainFrame == true) finish(null)
                     }
                 }
-                val container = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
-                val metrics = activity.resources.displayMetrics
+                val container = getActivity().findViewById<android.view.ViewGroup>(android.R.id.content)
+                val metrics = getActivity().resources.displayMetrics
                 container.addView(view, android.widget.FrameLayout.LayoutParams(metrics.widthPixels, metrics.heightPixels).apply {
                     leftMargin = -14000
                     topMargin = 0

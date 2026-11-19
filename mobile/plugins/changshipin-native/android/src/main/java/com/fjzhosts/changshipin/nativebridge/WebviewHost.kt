@@ -113,7 +113,7 @@ class WebviewHost(
         """
     }
 
-    private val activity: AppCompatActivity = plugin.activity
+    private val activity: AppCompatActivity = plugin.getActivity()
     private var webView: WebView? = null
     private var root: ViewGroup? = null
     private var fullscreenView: View? = null
