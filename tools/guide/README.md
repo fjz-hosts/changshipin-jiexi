@@ -36,6 +36,17 @@ python tools\guide\annotate.py
 检查 `.tmp/guide/out/` 里的预览图；确认后重新跑一遍 `desktop\verify.ps1`（自检会检查
 教程章节和 9 张图片都能加载）。
 
+## 导出 PDF
+
+```powershell
+python tools\guide\make_pdf.py
+```
+
+产物：`docs/长视频解析-图文使用教程.pdf`（A4，13 页，封面 + 目录 + 10 节）。
+
+原理：`make_pdf.py` 从应用内教程页面提取章节，换成打印版式；`print_pdf.js` 用 Electron 的
+`printToPDF` 输出，图片和中文字体都会嵌入。
+
 ## 说明
 
 - 演示数据（今天是太阳雨 / 折月亮等）只用于截图，不会出现在用户数据里。
