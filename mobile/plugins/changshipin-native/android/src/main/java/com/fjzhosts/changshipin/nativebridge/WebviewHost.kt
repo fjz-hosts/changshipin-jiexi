@@ -241,6 +241,7 @@ class WebviewHost(
 
             override fun onReceivedTitle(view: WebView?, title: String?) {
                 currentTitle = title ?: ""
+                emit("page-title-updated")
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
