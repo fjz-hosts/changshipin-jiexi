@@ -43,6 +43,13 @@
             </svg>
             使用教程
           </button>
+          <button class="ghost-btn" id="btn-auth">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7" />
+              <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+            </svg>
+            登录与限制
+          </button>
           <button class="ghost-btn" id="btn-lines">线路管理</button>
           <button class="ghost-btn" id="btn-settings">设置</button>
         </div>
@@ -57,7 +64,7 @@
           <div class="platform-card" data-platform="iqiyi" style="--brand: #00d95f; --brand-soft: rgba(0, 217, 95, 0.18)">
             <button class="card-main" data-action="open">
               <img class="logo" src="assets/platform-iqiyi.png" alt="" />
-              <span class="platform-meta"><b>爱奇艺</b><small>www.iqiyi.com</small></span>
+              <span class="platform-meta"><b>爱奇艺</b><small>www.iqiyi.com</small><em class="login-chip" data-auth="iqiyi">未检测</em></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
@@ -65,7 +72,7 @@
           <div class="platform-card" data-platform="qq" style="--brand: #2b8cff; --brand-soft: rgba(43, 140, 255, 0.18)">
             <button class="card-main" data-action="open">
               <img class="logo" src="assets/platform-qq.png" alt="" />
-              <span class="platform-meta"><b>腾讯视频</b><small>v.qq.com</small></span>
+              <span class="platform-meta"><b>腾讯视频</b><small>v.qq.com</small><em class="login-chip" data-auth="qq">未检测</em></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
@@ -73,7 +80,7 @@
           <div class="platform-card" data-platform="youku" style="--brand: #35a6ff; --brand-soft: rgba(53, 166, 255, 0.18)">
             <button class="card-main" data-action="open">
               <img class="logo" src="assets/platform-youku.png" alt="" />
-              <span class="platform-meta"><b>优酷</b><small>www.youku.com</small></span>
+              <span class="platform-meta"><b>优酷</b><small>www.youku.com</small><em class="login-chip" data-auth="youku">未检测</em></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
@@ -81,13 +88,21 @@
           <div class="platform-card" data-platform="mgtv" style="--brand: #ff8a1f; --brand-soft: rgba(255, 138, 31, 0.18)">
             <button class="card-main" data-action="open">
               <img class="logo" src="assets/platform-mgtv.png" alt="" />
-              <span class="platform-meta"><b>芒果TV</b><small>www.mgtv.com</small></span>
+              <span class="platform-meta"><b>芒果TV</b><small>www.mgtv.com</small><em class="login-chip" data-auth="mgtv">未检测</em></span>
               <span class="card-go">进入</span>
             </button>
             <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
           </div>
         </div>
       </section>
+
+      <div class="notice-inline long-only" id="long-notice">
+        <span class="notice-dot"></span>
+        <span class="notice-text">
+          VIP / 付费 / 云影院 / 超前点播一般只有试看；需在平台内置窗口登录或购买后到官网看完整版。芒果TV 需要中国大陆网络。
+        </span>
+        <button class="mini-btn" id="long-notice-more">完整说明</button>
+      </div>
 
       <section class="parse-row long-only">
         <div class="url-box" id="url-box">
@@ -118,6 +133,13 @@
             <small>抖音 · B站 · AcFun · 红果短剧 · 快手；单条视频直接下载 MP4，短剧支持一键下载全集</small>
           </div>
           <div class="short-platform-grid" id="short-platform-grid"></div>
+          <div class="notice-inline short-notice">
+            <span class="notice-dot"></span>
+            <span class="notice-text">
+              B站 720P 以上、红果完整分集、快手部分视频需要登录；点平台卡片登录后再解析。红果网页版仅开放前几集。
+            </span>
+            <button class="mini-btn" id="short-notice-more">完整说明</button>
+          </div>
         </div>
 
         <div class="short-parse-row">
@@ -465,6 +487,45 @@
       </div>
     </div>
 
+    <!-- 登录与限制说明 -->
+    <div class="modal-mask" id="auth-modal" hidden>
+      <div class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <header class="modal-head">
+          <div>
+            <h2 id="auth-title">登录与限制说明</h2>
+            <p class="auth-sub">登录状态会自动检测；点击「去登录」在内置窗口登录，回来即可重新解析。</p>
+          </div>
+          <button class="icon-btn" id="auth-close" title="关闭（Esc）">✕</button>
+        </header>
+        <div class="auth-body">
+          <section class="auth-section">
+            <h3>长视频</h3>
+            <div class="auth-list" id="auth-long-list"></div>
+            <ul class="auth-points">
+              <li><b>试看限制</b>：爱奇艺 / 腾讯 / 优酷的 VIP、付费、云影院、超前点播影片，免费线路通常只给几十秒到 5 分钟试看；完整版需要购买，或登录会员后到官网观看。</li>
+              <li><b>芒果TV</b>：默认用内置原生解析，需要中国大陆网络；境外网络会提示地区限制。VIP 内容要先在芒果内置窗口登录会员。</li>
+              <li><b>下载</b>：只有内置播放器拿到真实流时才能下载；第三方网页解析线路不支持下载；DRM / 会员加密内容不支持。</li>
+              <li><b>线路</b>：公开第三方线路可能随时失效，可以在「线路管理」里测速、换线或在线更新。</li>
+            </ul>
+          </section>
+
+          <section class="auth-section">
+            <h3>短视频</h3>
+            <div class="auth-list" id="auth-short-list"></div>
+            <ul class="auth-points">
+              <li><b>B站</b>：未登录最高 720P；1080P / 4K / 大会员画质需要登录，部分视频要登录后才返回播放地址。</li>
+              <li><b>红果短剧</b>：网页版只开放前 3 集，完整分集需要登录或使用红果 App；下载全集时，没有权限的分集会标记失败。</li>
+              <li><b>抖音</b>：部分作品和高画质需要登录；触发风控时先在内置窗口打开并登录，再回来解析。</li>
+              <li><b>快手</b>：网页有反爬，部分视频需要登录；程序会优先用隐藏窗口嗅探播放器直链。</li>
+              <li><b>AcFun</b>：高码率 / 会员视频可能需要登录；HLS 分片会自动转成 MP4。</li>
+            </ul>
+          </section>
+
+          <p class="auth-foot">登录只在内置窗口里进行，账号密码不会经过本程序；各平台登录状态分别保存在本机的独立分区，退出登录请到对应平台官网操作。</p>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-mask" id="modal" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <header class="modal-head">
@@ -759,6 +820,7 @@
                 <li><strong>关闭窗口时最小化到托盘</strong>：后台继续播放/下载，双击托盘图标恢复窗口。</li>
                 <li><strong>启动时自动测速线路</strong>：失效线路会被标记并排到最后，不阻塞播放。</li>
                 <li><strong>检查更新</strong>：设置 → 更新，可以手动检查新版本；软件启动时也会自动检查。</li>
+                <li><strong>登录与限制</strong>：右上角「登录与限制」列出所有平台的登录状态、试看 / 会员 / 地区限制和「去登录」入口，解析前也会提示。</li>
               </ul>
               <div class="faq">
                 <h4>常见问题</h4>
@@ -790,6 +852,7 @@
                 <li>解析成功后点清晰度下拉框选画质，再点「下载 MP4」；进度显示在右侧「下载队列」。</li>
                 <li>短剧 / 合集会出现分集列表：点「全选」→「一键下载全集」，会自动创建以剧名命名的文件夹，分集按集数命名保存。</li>
                 <li>B 站 720P 以上、红果短剧的完整分集需要登录：点平台卡片，在内置窗口登录一次，回来重新解析即可。</li>
+                <li>顶部「登录与限制」会列出每个平台的登录状态和限制，并可直接点「去登录」；解析前如果检测到未登录，也会先提醒一次。</li>
                 <li>解析失败时，可以先进入原平台页面确认视频能正常播放，再复制当前页面链接回来重试。</li>
               </ul>
               <div class="guide-tip">短视频和长视频共用「下载\视频解析」目录，但短视频按平台名保存、短剧单独放在剧名文件夹里，不会混在一起。</div>

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('desktop', {
   readClipboard: () => ipcRenderer.invoke('clipboard:read'),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   parse: (payload) => ipcRenderer.invoke('parse:run', payload),
+  authStatus: (keys) => ipcRenderer.invoke('auth:status', keys),
   shortPlatforms: () => ipcRenderer.invoke('short:platforms'),
   shortResolve: (payload) => ipcRenderer.invoke('short:resolve', payload),
   shortDownload: (payload) => ipcRenderer.invoke('short:download', payload),

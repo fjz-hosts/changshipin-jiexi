@@ -986,6 +986,36 @@ async function readPartitionCookie(partition, homeUrl) {
   }
 }
 
+// 各平台「登录后才会出现」的 Cookie，用来提前告诉用户当前是否已登录。
+// 只做提示，不参与解析鉴权；没有可靠 Cookie 的平台返回 null（显示「未知」）。
+const LOGIN_COOKIES = {
+  iqiyi: ['P00001'],
+  qq: ['vqq_vusession', 'vqq_access_token'],
+  // 优酷 / 芒果没有可靠的「仅登录后才出现」的 Cookie：不猜，状态返回未知
+  youku: [],
+  mgtv: [],
+  bilibili: ['SESSDATA'],
+  douyin: ['sessionid', 'sid_tt'],
+  kuaishou: ['kuaishou.web.cp.api_st', 'userId'],
+  acfun: ['acPasstoken', 'auth_key'],
+  hongguo: ['sessionid', 'sid_tt'],
+}
+
+async function readLoginState(platform) {
+  try {
+    const cookies = await session.fromPartition(platform.partition).cookies.get({})
+    const names = new Set(cookies.map((item) => item.name))
+    const loginNames = LOGIN_COOKIES[platform.key] || []
+    return {
+      key: platform.key,
+      loggedIn: loginNames.length ? loginNames.some((name) => names.has(name)) : null,
+      cookieCount: cookies.length,
+    }
+  } catch {
+    return { key: platform.key, loggedIn: null, cookieCount: 0 }
+  }
+}
+
 // 把短视频直链换成本地代理地址：<video> 没法自己带 Referer / Cookie
 function attachProxyUrls(result, cookie) {
   if (!proxy || !result) return result
@@ -1295,6 +1325,14 @@ function registerIpc() {
   // -------------------------------------------------------------------------
   // 短视频（与长视频完全独立）
   // -------------------------------------------------------------------------
+  ipcMain.handle('auth:status', async (_event, keys = []) => {
+    const wanted = new Set(Array.isArray(keys) ? keys : [])
+    const list = ALL_PLATFORMS.filter((item) => item.key !== 'browser')
+      .filter((item) => !wanted.size || wanted.has(item.key))
+    const entries = await Promise.all(list.map((item) => readLoginState(item)))
+    return Object.fromEntries(entries.map((item) => [item.key, item]))
+  })
+
   ipcMain.handle('short:platforms', () =>
     SHORT_PLATFORMS.map((item) => ({
       key: item.key,

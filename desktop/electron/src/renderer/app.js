@@ -35,6 +35,35 @@
     kuaishou: (q) => `https://www.kuaishou.com/search/video?searchKey=${encodeURIComponent(q)}`,
   }
 
+  // 各平台「需要登录 / 特殊限制」的提前说明；登录状态由主进程读 Cookie 判断
+  const LOGIN_NOTES = {
+    iqiyi: { name: '爱奇艺', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
+    qq: { name: '腾讯视频', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
+    youku: { name: '优酷', note: 'VIP / 付费内容需登录会员或购买；免费内容不受影响' },
+    mgtv: { name: '芒果TV', note: '需要中国大陆网络；VIP 需登录会员；境外网络会提示地区限制' },
+    bilibili: { name: '哔哩哔哩', note: '未登录最高 720P；1080P / 4K / 大会员画质需登录' },
+    douyin: { name: '抖音', note: '部分作品 / 高画质需登录；触发风控时先登录再解析' },
+    kuaishou: { name: '快手', note: '网页有反爬，部分视频需登录；优先用隐藏窗口嗅探直链' },
+    acfun: { name: 'AcFun', note: '高码率 / 会员视频可能需要登录；HLS 会自动转 MP4' },
+    hongguo: { name: '红果短剧', note: '网页版仅开放前 3 集；完整分集需登录或使用红果 App' },
+  }
+
+  const LOGIN_WARNINGS = {
+    long: {
+      iqiyi: '爱奇艺未登录：VIP / 付费 / 云影院内容可能只有试看；需要时先点平台卡片登录会员',
+      qq: '腾讯视频未登录：VIP / 付费 / 云影院内容可能只有试看；需要时先点平台卡片登录会员',
+      youku: '优酷未登录：VIP / 付费内容可能只有试看；需要时先点平台卡片登录会员',
+      mgtv: '芒果TV 未登录：VIP 内容会受限；另外需要中国大陆网络，境外会提示地区限制',
+    },
+    short: {
+      bilibili: 'B站未登录：最高 720P；登录后可下载 1080P / 大会员画质',
+      hongguo: '红果未登录：网页版只开放前 3 集；完整分集需要登录或使用红果 App',
+      douyin: '抖音未登录：部分作品 / 高画质可能拿不到；可先点平台卡片登录后再解析',
+      kuaishou: '快手未登录：部分视频可能解析失败；可先登录后再试',
+      acfun: 'AcFun 未登录：高码率 / 会员视频可能不可用',
+    },
+  }
+
   const icons = {
     play: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/></svg>',
   }
@@ -97,6 +126,9 @@
     shortActiveDownload: '',
     shortWaiters: new Map(),
     shortFinished: new Map(),
+    // ---------------- 登录状态提示 ----------------
+    authStatus: {},
+    loginHinted: new Set(),
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -627,6 +659,8 @@
         /* 忽略 */
       }
     }
+    // 刚从平台窗口出来：刷新一次登录状态，用户登录后卡片会立即变成「已登录」
+    refreshAuthStatus()
   }
 
   function currentBrowserUrl() {
@@ -1390,11 +1424,16 @@
         <div class="short-platform-card" data-platform="${platform.key}" style="--brand:${platform.color};--brand-soft:${hexToRgba(platform.color)}">
           <button class="card-main" data-action="open">
             <img class="logo" src="${platform.icon}" alt="" />
-            <span class="platform-meta"><b>${escapeHtml(platform.name)}</b><small>${escapeHtml(platform.hint)}</small></span>
+            <span class="platform-meta">
+              <b>${escapeHtml(platform.name)}</b>
+              <small>${escapeHtml(platform.hint)}</small>
+              <em class="login-chip" data-auth="${platform.key}">未检测</em>
+            </span>
             <span class="card-go">进入</span>
           </button>
         </div>`,
     ).join('')
+    renderAuthBadges()
   }
 
   function updateShortBadge() {
@@ -1405,6 +1444,96 @@
     badge.classList.toggle('known', Boolean(platform))
     if (platform) badge.style.setProperty('--brand', platform.color)
     else badge.style.removeProperty('--brand')
+  }
+
+  // ---------------------------------------------------------------------------
+  // 登录状态 / 特殊限制提示
+  // ---------------------------------------------------------------------------
+
+  async function refreshAuthStatus() {
+    try {
+      state.authStatus = (await window.desktop.authStatus([])) || {}
+    } catch {
+      return
+    }
+    renderAuthBadges()
+    if (!$('#auth-modal').hidden) renderAuthLists()
+  }
+
+  function renderAuthBadges() {
+    $$('.login-chip').forEach((chip) => {
+      const key = chip.dataset.auth
+      const status = state.authStatus[key]
+      if (!status) {
+        chip.hidden = true
+        return
+      }
+      chip.hidden = false
+      const stateText = status.loggedIn === null || status.loggedIn === undefined
+        ? '未知'
+        : status.loggedIn
+          ? '已登录'
+          : '未登录'
+      chip.textContent = stateText
+      chip.classList.toggle('on', status.loggedIn === true)
+      chip.classList.toggle('off', status.loggedIn === false)
+      chip.title = status.loggedIn === true
+        ? '检测到该平台的登录信息'
+        : status.loggedIn === false
+          ? '未检测到登录信息；需要高清 / 会员内容时，点平台卡片登录后再解析'
+          : '该平台没有可靠的登录检测方式，需要会员内容时请先登录'
+    })
+  }
+
+  function authRowHtml(key, name, note) {
+    const status = state.authStatus[key]
+    const chip = status
+      ? status.loggedIn === null || status.loggedIn === undefined
+        ? '<span class="login-chip">未知</span>'
+        : `<span class="login-chip ${status.loggedIn ? 'on' : 'off'}">${status.loggedIn ? '已登录' : '未登录'}</span>`
+      : '<span class="login-chip">未检测</span>'
+    return `<div class="auth-row">
+      <div class="auth-row-main"><b>${escapeHtml(name)}</b><span>${escapeHtml(note)}</span></div>
+      ${chip}
+      <button class="ghost-sm auth-login-btn" data-login="${key}">去登录</button>
+    </div>`
+  }
+
+  function renderAuthLists() {
+    const longBox = $('#auth-long-list')
+    const shortBox = $('#auth-short-list')
+    if (longBox) {
+      longBox.innerHTML = PLATFORMS.map((platform) =>
+        authRowHtml(platform.key, LOGIN_NOTES[platform.key].name, LOGIN_NOTES[platform.key].note),
+      ).join('')
+    }
+    if (shortBox) {
+      shortBox.innerHTML = SHORT_PLATFORMS.map((platform) =>
+        authRowHtml(platform.key, LOGIN_NOTES[platform.key].name, LOGIN_NOTES[platform.key].note),
+      ).join('')
+    }
+  }
+
+  async function openAuthModal() {
+    await refreshAuthStatus()
+    renderAuthLists()
+    $('#auth-modal').hidden = false
+  }
+
+  function closeAuthModal() {
+    $('#auth-modal').hidden = true
+  }
+
+  // 解析前提醒一次：用户至少知道这次可能拿不到高清 / 完整内容
+  function warnIfNeedsLogin(key, mode) {
+    if (!key) return
+    const status = state.authStatus[key]
+    if (!status || status.loggedIn !== false) return
+    const token = `${mode}:${key}`
+    if (state.loginHinted.has(token)) return
+    state.loginHinted.add(token)
+    const text = LOGIN_WARNINGS[mode]?.[key]
+    if (text) toast(text, 'warn', 7000)
   }
 
   function switchMode(mode, { force = false } = {}) {
@@ -1441,6 +1570,7 @@
       updateBadge()
       setStatus(`就绪 · 共 ${(state.config?.lines || []).filter((line) => line.enabled).length} 条可用线路`)
     }
+    refreshAuthStatus()
     updateLayoutMode()
   }
 
@@ -1496,8 +1626,13 @@
     select.value = String(Math.min(state.shortQualityIndex, Math.max(0, qualities.length - 1)))
     $('#short-download').disabled = !qualities.length
     $('#short-play').disabled = !qualities.length
-    $('#short-note').textContent = result.note || ''
-    $('#short-note').hidden = !result.note
+    let noteText = result.note || ''
+    const auth = state.authStatus[result.platformKey]
+    if (result.platformKey === 'bilibili' && auth && auth.loggedIn === false) {
+      noteText = `${noteText ? `${noteText}\n` : ''}当前未登录：最高 720P；登录后可下载 1080P / 大会员画质。`
+    }
+    $('#short-note').textContent = noteText
+    $('#short-note').hidden = !noteText
     playShortQuality()
     renderShortSeries()
     renderShortQueue()
@@ -1789,6 +1924,7 @@
     }
     if (state.mode !== 'short') switchMode('short')
     if (state.browserOpen) hideBrowser({ mute: true })
+    warnIfNeedsLogin(key, 'short')
     $('#short-url-input').value = target
     updateShortBadge()
     state.shortBusy = true
@@ -1931,6 +2067,7 @@
     renderEpisodeBar()
     const platform = platformInfo(detectPlatform(videoUrl))
     if (!platform) toast('未识别的平台，仍会尝试用线路解析', 'warn')
+    else warnIfNeedsLogin(platform.key, 'long')
 
     const lines = chain ? parseChain(lineId || state.currentLineId, videoUrl) : (state.config.lines.filter((l) => l.id === lineId))
     if (!lines.length) {
@@ -3134,6 +3271,23 @@
       renderShortQueue()
     })
     $('#short-open-folder').addEventListener('click', () => window.desktop.openDownloadFolder())
+
+    // 登录与限制说明
+    $('#btn-auth').addEventListener('click', () => openAuthModal())
+    $('#auth-close').addEventListener('click', () => closeAuthModal())
+    $('#long-notice-more').addEventListener('click', () => openAuthModal())
+    $('#short-notice-more').addEventListener('click', () => openAuthModal())
+    $('#auth-modal').addEventListener('click', (event) => {
+      const loginButton = event.target.closest('[data-login]')
+      if (loginButton) {
+        const key = loginButton.dataset.login
+        closeAuthModal()
+        openBrowser(key)
+        toast(`已打开${browserMeta(key)?.name || '平台'}：登录后回到界面，状态会自动更新`, 'ok', 5000)
+        return
+      }
+      if (event.target === $('#auth-modal')) closeAuthModal()
+    })
     // 主窗口内置浏览器工具栏
     $('#browser-back').addEventListener('click', () => {
       try {
@@ -3548,6 +3702,11 @@
         }
       }
       if (event.key !== 'Escape') return
+      if (!$('#auth-modal').hidden) {
+        event.preventDefault()
+        closeAuthModal()
+        return
+      }
       if (!$('#search-modal').hidden) {
         closeSearchModal()
         return
@@ -3747,6 +3906,7 @@
       renderShortQueue()
       switchMode(localStorage.getItem('csp.mode') === 'short' ? 'short' : 'long', { force: true })
       updateShortBadge()
+      refreshAuthStatus()
       setDownloadButton()
       updateNativeButton()
       backfillHistoryTitles()
