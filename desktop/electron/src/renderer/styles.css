@@ -3223,6 +3223,12 @@ body.cinema .video-view video {
   }
 }
 
+/* 短视频打开内置浏览器时：顶部平台卡片保留，只把下面区域让给浏览器（和长视频一致） */
+body.mode-short.browser-open .short-panel {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
 /* ---------------- 登录状态 / 特殊限制提示 ---------------- */
 
 .login-chip {

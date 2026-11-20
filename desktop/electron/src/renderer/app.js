@@ -9,18 +9,13 @@
     { key: 'mgtv', name: '芒果TV', color: '#ff8a1f', hosts: ['mgtv.com'], home: 'https://www.mgtv.com/', icon: 'assets/platform-mgtv.png' },
   ]
 
-  // 与主进程 shortvideo.js 保持一致；icon 用内联 SVG，避免再打包五张图片
-  const shortBadge = (text, color) =>
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="${color}"/><text x="24" y="31" font-size="20" font-family="Microsoft YaHei,sans-serif" font-weight="700" fill="#fff" text-anchor="middle">${text}</text></svg>`,
-    )}`
-
+  // 与主进程 shortvideo.js 保持一致；图标使用各平台官方 App 图标
   const SHORT_PLATFORMS = [
-    { key: 'douyin', name: '抖音', short: '抖', color: '#ff2d55', hosts: ['douyin.com', 'iesdouyin.com'], home: 'https://www.douyin.com/', partition: 'persist:short-douyin', hint: 'v.douyin.com/xxx', icon: shortBadge('抖', '#ff2d55') },
-    { key: 'bilibili', name: '哔哩哔哩', short: 'B', color: '#fb7299', hosts: ['bilibili.com', 'b23.tv', 'bili2233.cn'], home: 'https://www.bilibili.com/', partition: 'persist:short-bilibili', hint: 'b23.tv/xxx 或 BV号', icon: shortBadge('B', '#fb7299') },
-    { key: 'acfun', name: 'AcFun', short: 'A', color: '#fd4c5d', hosts: ['acfun.cn', 'aixifan.com'], home: 'https://www.acfun.cn/', partition: 'persist:short-acfun', hint: 'acfun.cn/v/acxxxxx', icon: shortBadge('A', '#fd4c5d') },
-    { key: 'hongguo', name: '红果短剧', short: '果', color: '#ff6a3d', hosts: ['hongguoduanju.com', 'novelquickapp.com'], home: 'https://hongguoduanju.com/', partition: 'persist:short-hongguo', hint: 'hongguoduanju.com/detail?series_id=', icon: shortBadge('果', '#ff6a3d') },
-    { key: 'kuaishou', name: '快手', short: '快', color: '#ff7700', hosts: ['kuaishou.com', 'kuaishouapp.com', 'gifshow.com'], home: 'https://www.kuaishou.com/', partition: 'persist:short-kuaishou', hint: 'v.kuaishou.com/xxx', icon: shortBadge('快', '#ff7700') },
+    { key: 'douyin', name: '抖音', short: '抖', color: '#ff2d55', hosts: ['douyin.com', 'iesdouyin.com'], home: 'https://www.douyin.com/', partition: 'persist:short-douyin', hint: 'v.douyin.com/xxx', icon: 'assets/platform-douyin.png' },
+    { key: 'bilibili', name: '哔哩哔哩', short: 'B', color: '#fb7299', hosts: ['bilibili.com', 'b23.tv', 'bili2233.cn'], home: 'https://www.bilibili.com/', partition: 'persist:short-bilibili', hint: 'b23.tv/xxx 或 BV号', icon: 'assets/platform-bilibili.png' },
+    { key: 'acfun', name: 'AcFun', short: 'A', color: '#fd4c5d', hosts: ['acfun.cn', 'aixifan.com'], home: 'https://www.acfun.cn/', partition: 'persist:short-acfun', hint: 'acfun.cn/v/acxxxxx', icon: 'assets/platform-acfun.png' },
+    { key: 'hongguo', name: '红果短剧', short: '果', color: '#ff6a3d', hosts: ['hongguoduanju.com', 'novelquickapp.com'], home: 'https://hongguoduanju.com/', partition: 'persist:short-hongguo', hint: 'hongguoduanju.com/detail?series_id=', icon: 'assets/platform-hongguo.png' },
+    { key: 'kuaishou', name: '快手', short: '快', color: '#ff7700', hosts: ['kuaishou.com', 'kuaishouapp.com', 'gifshow.com'], home: 'https://www.kuaishou.com/', partition: 'persist:short-kuaishou', hint: 'v.kuaishou.com/xxx', icon: 'assets/platform-kuaishou.png' },
   ]
 
   const SEARCH_URLS = {
@@ -170,9 +165,36 @@
     return SHORT_PLATFORMS.find((item) => item.key === key) || null
   }
 
+  // 只有真正的内容页才触发自动解析；平台首页 / 搜索页不算，否则一打开官网就会被弹回解析界面
+  function detectShortVideoUrl(rawUrl) {
+    let url = null
+    try {
+      url = new URL(String(rawUrl || ''))
+    } catch {
+      return null
+    }
+    const host = url.hostname.toLowerCase()
+    const path = url.pathname
+    if (host === 'v.douyin.com' || host.endsWith('.v.douyin.com')) return 'douyin'
+    if (host.endsWith('douyin.com') || host.endsWith('iesdouyin.com')) {
+      return /\/video\/\d+/.test(path) || /\/note\/\d+/.test(path) || url.searchParams.get('modal_id') ? 'douyin' : null
+    }
+    if (host === 'b23.tv' || host.endsWith('bili2233.cn')) return 'bilibili'
+    if (host.endsWith('bilibili.com')) {
+      return /\/video\/BV[0-9A-Za-z]{10}/.test(path) || /\/bangumi\/play\/(ep|ss)\d+/.test(path) ? 'bilibili' : null
+    }
+    if (host.endsWith('acfun.cn')) return /\/v\/ac\d+/.test(path) ? 'acfun' : null
+    if (host.endsWith('hongguoduanju.com') || host.endsWith('novelquickapp.com')) {
+      return (/\/detail/.test(path) && url.searchParams.get('series_id')) || /\/player\/\d+/.test(path) ? 'hongguo' : null
+    }
+    if (host === 'v.kuaishou.com' || host.endsWith('.v.kuaishou.com')) return 'kuaishou'
+    if (host.endsWith('kuaishou.com')) return /\/short-video\/|\/fw\/photo\//.test(path) ? 'kuaishou' : null
+    return null
+  }
+
   // 内置浏览器里既可能是长视频页，也可能是短视频页
   function detectBrowserVideo(rawUrl) {
-    return detectVideoPlatform(rawUrl) || detectShortPlatform(rawUrl)
+    return detectVideoPlatform(rawUrl) || detectShortVideoUrl(rawUrl)
   }
 
   function normalizeUrlText(raw) {
@@ -563,7 +585,7 @@
       if (!detectBrowserVideo(current)) return
       const title = webviewTitle(record.webview)
       hideBrowser({ mute: true })
-      if (detectShortPlatform(current)) {
+      if (detectShortVideoUrl(current)) {
         resolveShortFromUrl(current, { auto: true })
         toast('已自动送到短视频解析', 'ok', 5000)
         return
@@ -608,9 +630,15 @@
     } catch {
       /* 忽略 */
     }
+    document.body.classList.add('browser-open')
     $('#browser-panel').hidden = false
     if (state.mode === 'short') {
-      $('#short-panel').hidden = true
+      // 和长视频一致：保留顶部平台卡片，只把下面的解析区 / 工作区换成内置浏览器
+      $('#short-panel').hidden = false
+      const shortRow = document.querySelector('.short-parse-row')
+      const shortWorkspace = document.querySelector('.short-workspace')
+      if (shortRow) shortRow.hidden = true
+      if (shortWorkspace) shortWorkspace.hidden = true
     } else {
       document.querySelector('.parse-row').hidden = true
       document.querySelector('.workspace').hidden = true
@@ -642,9 +670,14 @@
     saveBrowserScroll(state.browsers.get(state.browserKey))
     state.browserOpen = false
     updateLayoutMode()
+    document.body.classList.remove('browser-open')
     $('#browser-panel').hidden = true
     if (state.mode === 'short') {
       $('#short-panel').hidden = false
+      const shortRow = document.querySelector('.short-parse-row')
+      const shortWorkspace = document.querySelector('.short-workspace')
+      if (shortRow) shortRow.hidden = false
+      if (shortWorkspace) shortWorkspace.hidden = false
     } else {
       document.querySelector('.parse-row').hidden = false
       document.querySelector('.workspace').hidden = false
@@ -1431,6 +1464,7 @@
             </span>
             <span class="card-go">进入</span>
           </button>
+          <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
         </div>`,
     ).join('')
     renderAuthBadges()
@@ -1556,9 +1590,16 @@
       button.classList.toggle('active', active)
       button.setAttribute('aria-selected', String(active))
     })
+    // 短视频没有解析线路，设置里隐藏「解析线路」页签，避免误以为要配线路
+    const linesTab = $('#modal-tabs button[data-tab="lines"]')
+    if (linesTab) {
+      linesTab.hidden = next === 'short'
+      if (next === 'short' && linesTab.classList.contains('active')) switchTab('play')
+    }
     if (next === 'short') {
       stopPlayback()
       updateShortBadge()
+      $('#status-hint').textContent = 'Enter 解析 / 点平台卡片登录 / 右侧队列查看下载'
       setStatus('短视频模式 · 支持抖音 / B站 / AcFun / 红果短剧 / 快手')
     } else {
       const video = $('#short-video')
@@ -1568,6 +1609,7 @@
         /* 忽略 */
       }
       updateBadge()
+      $('#status-hint').textContent = 'Enter 解析 / F11 全屏 / Ctrl+Shift+V 粘贴解析'
       setStatus(`就绪 · 共 ${(state.config?.lines || []).filter((line) => line.enabled).length} 条可用线路`)
     }
     refreshAuthStatus()
@@ -3200,6 +3242,10 @@
     $('#short-platform-grid').addEventListener('click', (event) => {
       const card = event.target.closest('.short-platform-card')
       if (!card) return
+      if (event.target.closest('.card-ext')) {
+        window.desktop.openPlatformSite(card.dataset.platform)
+        return
+      }
       openBrowser(card.dataset.platform)
     })
 
@@ -3355,8 +3401,12 @@
       const title = currentBrowserTitle()
       const record = state.browsers.get(state.browserKey)
       hideBrowser({ mute: true })
-      if (detectShortPlatform(url)) {
+      if (detectShortVideoUrl(url)) {
         resolveShortFromUrl(url, { auto: false })
+        return
+      }
+      if (detectShortPlatform(url)) {
+        toast('请先点开具体视频 / 短剧详情页，再点「解析本集」', 'warn')
         return
       }
       startParse({ url, title, episode: episodeOf(title) })
