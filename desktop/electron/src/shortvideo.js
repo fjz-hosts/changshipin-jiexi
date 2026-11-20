@@ -425,26 +425,63 @@ const BILI_QN_LABELS = {
   16: '流畅 360P',
 }
 
-function biliQualityLabel(qn, descriptions, accepted, index) {
-  if (index >= 0 && descriptions[index]) return descriptions[index]
-  return BILI_QN_LABELS[Number(qn)] || `${qn}P`
+// 接口没给 support_formats 时的兜底尝试顺序（1080P / 720P60 / 720P / 480P / 360P）
+const BILI_DEFAULT_QN = [80, 74, 64, 32, 16]
+
+// 请求播放地址：html5 平台参数返回的是可直接用 <video> 播放的 mp4 直链，最高能到 1080P；
+// 不带 html5 时 PC 端点默认只发低清 mp4（实测 360P），所以放在第二顺位兜底。
+function biliMp4Durl(json) {
+  const durl = json?.data?.durl?.[0]
+  if (!durl?.url) return false
+  return /\.mp4|mime_type=video_mp4/i.test(durl.url) || /\.mp4/i.test(durl.backup_url?.[0] || '')
 }
 
 async function biliPlayInfo({ bvid, aid, cid, qn = 80, cookie = '' }) {
-  const base = { ...(bvid ? { bvid } : { avid: aid }), cid, qn, fnval: 0, platform: 'html5', high_quality: 1 }
-  const query = new URLSearchParams(base).toString()
+  const base = { ...(bvid ? { bvid } : { avid: aid }), cid, qn, fnval: 1, fourk: 1 }
+  const variants = [{ ...base, platform: 'html5', high_quality: 1 }, base]
   const headers = biliHeaders(cookie)
-  let result = await fetchJson(`https://api.bilibili.com/x/player/playurl?${query}`, { headers })
-  if (!result.json || result.json.code !== 0) {
-    // 走 wbi 签名（部分账号 / 地区对未签名请求返回 412）
-    try {
-      const signed = await biliSignedQuery({ ...base })
-      result = await fetchJson(`https://api.bilibili.com/x/player/wbi/playurl?${signed}`, { headers })
-    } catch {
-      /* 保留原始失败原因 */
+  let last = null
+  for (const params of variants) {
+    const query = new URLSearchParams(
+      Object.entries(params).map(([key, value]) => [key, String(value)]),
+    ).toString()
+    let result = await fetchJson(`https://api.bilibili.com/x/player/playurl?${query}`, { headers })
+    if (!result.json || result.json.code !== 0) {
+      // 走 wbi 签名（部分账号 / 地区对未签名请求返回 412）
+      try {
+        const signed = await biliSignedQuery({ ...params })
+        result = await fetchJson(`https://api.bilibili.com/x/player/wbi/playurl?${signed}`, { headers })
+      } catch {
+        /* 保留原始失败原因 */
+      }
     }
+    const json = result.json
+    if (json?.code === 0) {
+      // 只有拿到 mp4 直链（或 DASH）才算成功；FLV 继续换一套参数再试
+      if (biliMp4Durl(json) || json?.data?.dash) return json
+      last = json
+      continue
+    }
+    last = json
   }
-  return result.json
+  return last
+}
+
+// 用 Cookie 查一次账号，避免把「Cookie 存在但已过期」当成已登录
+async function biliAccount(cookie = '') {
+  if (!cookie) return { login: false, vip: false, uname: '' }
+  try {
+    const nav = await fetchJson('https://api.bilibili.com/x/web-interface/nav', { headers: biliHeaders(cookie) })
+    const data = nav.json?.data
+    if (!data) return { login: true, vip: false, uname: '' }
+    return {
+      login: data.isLogin === true,
+      vip: Number(data.vipStatus) === 1,
+      uname: clean(data.uname || '', 40),
+    }
+  } catch {
+    return { login: true, vip: false, uname: '' }
+  }
 }
 
 async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
@@ -498,35 +535,72 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
   const current = pages[Math.min(pageParam - 1, pages.length - 1)] || pages[0]
   const cid = Number(current.cid) || Number(data.cid)
 
+  // html5 端点返回的 support_formats 就是当前账号能拿到的 mp4 档位（常见 1080P + 360P）。
+  // 先请求最高档拿列表和最高清直链，再按列表逐档补齐。
+  const first = await biliPlayInfo({ bvid, aid: data.aid, cid, qn: 127, cookie })
+  const formats = Array.isArray(first?.data?.support_formats) ? first.data.support_formats : []
+  const labelByQuality = new Map(
+    formats.map((format) => [
+      Number(format.quality),
+      clean(format.new_description || format.description || '', 30),
+    ]),
+  )
+  const ordered = [
+    ...new Set([
+      ...formats.map((format) => Number(format.quality)),
+      ...(Array.isArray(first?.data?.accept_quality) ? first.data.accept_quality.map(Number) : []),
+      ...(Array.isArray(data.accept_quality) ? data.accept_quality.map(Number) : []),
+    ]),
+  ]
+    .filter(Boolean)
+    .sort((left, right) => right - left)
+  const qnList = ordered.length ? ordered.slice(0, 8) : [...BILI_DEFAULT_QN]
+
   const qualities = []
-  const accepted = Array.isArray(data.accept_quality) && data.accept_quality.length
-    ? [...new Set(data.accept_quality)].slice(0, 5)
-    : [64, 32, 16]
-  const descriptions = Array.isArray(data.accept_description) ? data.accept_description : []
   const seenQuality = new Set()
-  for (const qn of accepted) {
+  const collectQuality = (play) => {
+    const durl = play?.data?.durl?.[0]
+    if (!durl?.url) return
+    const quality = Number(play.data.quality) || 0
+    if (!quality || seenQuality.has(quality)) return
+    if (!/\.mp4|mime_type=video_mp4/i.test(durl.url) && !/\.mp4/i.test(durl.backup_url?.[0] || '')) {
+      // 非 mp4 容器（多为 FLV），不放进「下载 MP4」列表
+      return
+    }
+    seenQuality.add(quality)
+    qualities.push({
+      label: labelByQuality.get(quality) || BILI_QN_LABELS[quality] || `${quality}P`,
+      quality: String(quality),
+      url: durl.url,
+      format: 'mp4',
+      size: Number(durl.size) || 0,
+    })
+  }
+  collectQuality(first)
+  for (const qn of qnList) {
+    if (seenQuality.has(qn)) continue
     try {
-      const play = await biliPlayInfo({ bvid, aid: data.aid, cid, qn: Number(qn), cookie })
-      const durl = play?.data?.durl?.[0]
-      const quality = Number(play?.data?.quality) || Number(qn)
-      if (!durl?.url) continue
-      if (seenQuality.has(quality)) continue
-      if (!/\.mp4|mime_type=video_mp4/i.test(durl.url) && !/\.mp4/i.test(durl.backup_url?.[0] || '')) {
-        // 非 mp4 容器（多为 FLV），不放进「下载 MP4」列表
-        continue
-      }
-      const index = descriptions.length === accepted.length ? accepted.indexOf(Number(qn)) : -1
-      seenQuality.add(quality)
-      qualities.push({
-        label: biliQualityLabel(quality, descriptions, accepted, index),
-        quality: String(quality),
-        url: durl.url,
-        format: 'mp4',
-        size: Number(durl.size) || 0,
-      })
+      const play = await biliPlayInfo({ bvid, aid: data.aid, cid, qn, cookie })
+      collectQuality(play)
     } catch {
       /* 单档失败不影响其它清晰度 */
     }
+  }
+  qualities.sort((left, right) => Number(right.quality) - Number(left.quality))
+
+  // 只有「接口说支持更高档、实际却只拿到 720P 以下」时才提示登录 / 权限问题
+  const bestQuality = Number(qualities[0]?.quality) || 0
+  const maxFormat = formats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), 0)
+  let login = Boolean(cookie)
+  let qualityNote = ''
+  if (bestQuality > 0 && bestQuality < 80 && maxFormat > bestQuality) {
+    const account = await biliAccount(cookie)
+    login = account.login
+    qualityNote = account.login
+      ? '这个视频的高清档需要大会员或更高账号权限，当前账号只能拿到这个清晰度。'
+      : cookie
+        ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能拿到更高清晰度。'
+        : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
   }
 
   const episodes = pages.map((page, index) => ({
@@ -561,7 +635,8 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
     qualities,
     episodes,
     seriesTitle: clean(data.title, 80),
-    note: '720P 及以上需要在内置窗口登录 B 站',
+    login,
+    note: qualityNote,
   }
 }
 

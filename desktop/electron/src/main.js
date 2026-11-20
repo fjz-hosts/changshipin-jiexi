@@ -823,10 +823,13 @@ function quitApp() {
   app.quit()
 }
 
-// 默认放「下载\视频解析」。部分机器开了 Defender 受控文件夹访问，
-// 直接往 Downloads 写会 EPERM，这里逐个候选目录做一次可写测试。
+// 默认放「程序安装目录同级的 视频解析下载」：安装包通常装在 D 盘等数据盘，不会像 Downloads 那样把系统盘塞满。
+// 不放在 $INSTDIR 里面，是因为 NSIS 更新 / 卸载会 RMDir /r $INSTDIR，那会把用户下载的视频一起删掉。
+// 安装目录同级不可写（例如装在 Program Files）或系统拦截写入时，再依次退回「下载\视频解析」等目录。
 function pickDownloadDir() {
+  const exeDir = path.dirname(app.getPath('exe'))
   const candidates = [
+    ...(app.isPackaged ? [path.join(path.dirname(exeDir), `${APP_NAME}下载`)] : []),
     path.join(app.getPath('downloads'), APP_NAME),
     path.join(app.getPath('videos'), APP_NAME),
     path.join(app.getPath('documents'), APP_NAME),

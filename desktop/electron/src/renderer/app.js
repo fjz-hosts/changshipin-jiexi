@@ -36,7 +36,7 @@
     qq: { name: '腾讯视频', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
     youku: { name: '优酷', note: 'VIP / 付费内容需登录会员或购买；免费内容不受影响' },
     mgtv: { name: '芒果TV', note: '需要中国大陆网络；VIP 需登录会员；境外网络会提示地区限制' },
-    bilibili: { name: '哔哩哔哩', note: '未登录最高 720P；1080P / 4K / 大会员画质需登录' },
+    bilibili: { name: '哔哩哔哩', note: '1080P MP4 一般可直接下载；1080P60 / 4K / HDR 需要大会员，且是音视频分离流，暂不支持' },
     douyin: { name: '抖音', note: '部分作品 / 高画质需登录；触发风控时先登录再解析' },
     kuaishou: { name: '快手', note: '网页有反爬，部分视频需登录；优先用隐藏窗口嗅探直链' },
     acfun: { name: 'AcFun', note: '高码率 / 会员视频可能需要登录；HLS 会自动转 MP4' },
@@ -51,7 +51,6 @@
       mgtv: '芒果TV 未登录：VIP 内容会受限；另外需要中国大陆网络，境外会提示地区限制',
     },
     short: {
-      bilibili: 'B站未登录：最高 720P；登录后可下载 1080P / 大会员画质',
       hongguo: '红果未登录：网页版只开放前 3 集；完整分集需要登录或使用红果 App',
       douyin: '抖音未登录：部分作品 / 高画质可能拿不到；可先点平台卡片登录后再解析',
       kuaishou: '快手未登录：部分视频可能解析失败；可先登录后再试',
@@ -1457,11 +1456,8 @@
         <div class="short-platform-card" data-platform="${platform.key}" style="--brand:${platform.color};--brand-soft:${hexToRgba(platform.color)}">
           <button class="card-main" data-action="open">
             <img class="logo" src="${platform.icon}" alt="" />
-            <span class="platform-meta">
-              <b>${escapeHtml(platform.name)}</b>
-              <small>${escapeHtml(platform.hint)}</small>
-              <em class="login-chip" data-auth="${platform.key}">未检测</em>
-            </span>
+            <span class="platform-meta"><b>${escapeHtml(platform.name)}</b></span>
+            <em class="login-chip" data-auth="${platform.key}">未检测</em>
             <span class="card-go">进入</span>
           </button>
           <button class="card-ext" data-action="browser" title="用系统浏览器打开">↗</button>
@@ -1519,17 +1515,14 @@
     })
   }
 
+  // 弹窗里不再单独放「已登录 / 未登录」：已登录时「去登录」直接置灰不可点
   function authRowHtml(key, name, note) {
-    const status = state.authStatus[key]
-    const chip = status
-      ? status.loggedIn === null || status.loggedIn === undefined
-        ? '<span class="login-chip">未知</span>'
-        : `<span class="login-chip ${status.loggedIn ? 'on' : 'off'}">${status.loggedIn ? '已登录' : '未登录'}</span>`
-      : '<span class="login-chip">未检测</span>'
-    return `<div class="auth-row">
+    const meta = browserMeta(key)
+    const loggedIn = state.authStatus[key]?.loggedIn === true
+    return `<div class="auth-row" style="--brand:${meta?.color || '#37e08b'}">
+      <img class="auth-logo" src="${meta?.icon || 'assets/app-icon.png'}" alt="" />
       <div class="auth-row-main"><b>${escapeHtml(name)}</b><span>${escapeHtml(note)}</span></div>
-      ${chip}
-      <button class="ghost-sm auth-login-btn" data-login="${key}">去登录</button>
+      <button class="ghost-sm auth-login-btn" data-login="${key}"${loggedIn ? ' disabled' : ''} title="${loggedIn ? '已检测到登录状态，无需重复登录' : '在内置窗口打开平台并登录'}">去登录</button>
     </div>`
   }
 
@@ -1622,6 +1615,9 @@
       if (node) node.hidden = id !== name
     }
     $('#short-panel')?.classList.toggle('has-result', name === 'result')
+    // 「重新解析」挪到解析栏、和「解析视频」并排；只有解析出结果后才出现
+    const reparse = $('#short-reparse')
+    if (reparse) reparse.hidden = name !== 'result'
   }
 
   function currentShortQuality() {
@@ -1668,11 +1664,12 @@
     select.value = String(Math.min(state.shortQualityIndex, Math.max(0, qualities.length - 1)))
     $('#short-download').disabled = !qualities.length
     $('#short-play').disabled = !qualities.length
-    let noteText = result.note || ''
-    const auth = state.authStatus[result.platformKey]
-    if (result.platformKey === 'bilibili' && auth && auth.loggedIn === false) {
-      noteText = `${noteText ? `${noteText}\n` : ''}当前未登录：最高 720P；登录后可下载 1080P / 大会员画质。`
+    // B 站 Cookie 过期时接口会明确返回未登录，这里把卡片状态一起纠正
+    if (result.platformKey === 'bilibili' && result.login === false && result.cookie) {
+      state.authStatus.bilibili = { ...(state.authStatus.bilibili || {}), loggedIn: false }
+      renderAuthBadges()
     }
+    const noteText = result.note || ''
     $('#short-note').textContent = noteText
     $('#short-note').hidden = !noteText
     playShortQuality()
@@ -3279,6 +3276,14 @@
       $('#short-url-input').focus()
     })
 
+    // 播放器按视频原始宽高比铺开：横屏铺满整行，竖屏按高度居中，不留大片黑边
+    const shortVideo = $('#short-video')
+    shortVideo.addEventListener('loadedmetadata', () => {
+      const ratio = shortVideo.videoWidth / shortVideo.videoHeight
+      if (!Number.isFinite(ratio) || ratio <= 0) return
+      $('#short-player')?.style.setProperty('--ratio', String(ratio))
+    })
+
     $('#short-quality').addEventListener('change', (event) => {
       state.shortQualityIndex = Math.max(0, Number(event.target.value) || 0)
       playShortQuality()
@@ -3321,8 +3326,6 @@
     // 登录与限制说明
     $('#btn-auth').addEventListener('click', () => openAuthModal())
     $('#auth-close').addEventListener('click', () => closeAuthModal())
-    $('#long-notice-more').addEventListener('click', () => openAuthModal())
-    $('#short-notice-more').addEventListener('click', () => openAuthModal())
     $('#auth-modal').addEventListener('click', (event) => {
       const loginButton = event.target.closest('[data-login]')
       if (loginButton) {
