@@ -1433,6 +1433,20 @@ app.whenReady().then(async () => {
   } catch (error) {
     log(`设置 UA 失败：${error?.message || error}`)
   }
+  // 第三方解析页最近开始挂广告脚本（789 的 o.js 会注入全屏广告并强制跳转到 *.lifestyle / *.coupons）。
+  // 只在解析页 session 里拦掉，不影响内置官网和短视频。
+  try {
+    const parseSession = session.fromPartition(PARSE_PARTITION)
+    parseSession.webRequest.onBeforeRequest(
+      { urls: ['*://*.trafficmanager.net/o.js*', '*://*.lifestyle/*', '*://*.coupons/*'] },
+      (details, callback) => {
+        log(`[解析页] 拦截广告脚本：${String(details.url).slice(0, 140)}`)
+        callback({ cancel: true })
+      },
+    )
+  } catch (error) {
+    log(`[解析页] 广告拦截设置失败：${error?.message || error}`)
+  }
   proxy = await new StreamProxy().start()
   log(`本地取流代理已启动：${proxy.base}`)
 

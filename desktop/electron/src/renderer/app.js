@@ -3964,9 +3964,34 @@
 
   function bindWebviewEvents() {
     const webview = $('#parse-view')
+    // 解析页被广告脚本强制跳转时兜底拦一下（主进程还会按 URL 拦广告资源）
+    const isAdHost = (rawUrl) => {
+      try {
+        const host = new URL(rawUrl).hostname.toLowerCase()
+        return /(^|\.)(trafficmanager\.net|lifestyle|coupons)$/.test(host)
+      } catch {
+        return false
+      }
+    }
     webview.addEventListener('did-finish-load', () => {
       if (state.webviewPending) state.webviewPending.finish(true)
       if ($('#view-webview').hidden === false) setView('webview')
+      // 解析站往页面里塞的全屏广告层（789 的 o.js 会插 id=gt*/gtq*/gf* 的遮罩），加载后清一次
+      setTimeout(() => {
+        try {
+          webview
+            .executeJavaScript(
+              `(() => {
+                document.querySelectorAll('[id^="gtq"],[id^="gt"],[id^="gf"]').forEach((el) => el.remove());
+                return true;
+              })()`,
+              true,
+            )
+            .catch(() => {})
+        } catch {
+          /* 忽略 */
+        }
+      }, 1200)
     })
     webview.addEventListener('did-fail-load', (event) => {
       if (!event.isMainFrame || event.errorCode === -3) return
@@ -3974,8 +3999,16 @@
         state.webviewPending.finish(false, event.errorDescription || `加载失败 ${event.errorCode}`)
       }
     })
-    webview.addEventListener('will-navigate', () => {
+    webview.addEventListener('will-navigate', (event) => {
+      if (isAdHost(event.url)) {
+        event.preventDefault()
+        toast('解析页被广告劫持，已拦截；画面不出来就点「换线路」', 'warn', 5600)
+        return
+      }
       if (!state.webviewPending) showLoading('正在打开解析页面…', '解析页发生跳转，请稍候。')
+    })
+    webview.addEventListener('will-redirect', (event) => {
+      if (isAdHost(event.url)) event.preventDefault()
     })
     webview.addEventListener('did-stop-loading', () => {
       if (state.webviewPending) return
