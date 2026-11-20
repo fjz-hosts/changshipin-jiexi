@@ -200,8 +200,15 @@ class DownloadManager {
     this.log(`[下载] ${job.state.status} ${job.state.percent}% ${job.state.title} ${job.state.error || ''}`)
   }
 
-  start({ url, referer = '', cookie = '', title = '', platform = '', lineName = '', subdir = '', extraHeaders = null, id: forcedId = '', mp4 = false }) {
-    const target = String(url || '')
+  start({ url, referer = '', cookie = '', title = '', platform = '', lineName = '', subdir = '', extraHeaders = null, id: forcedId = '', mp4 = false, dash = null }) {
+    const dashTarget =
+      dash &&
+      typeof dash === 'object' &&
+      /^https?:\/\//i.test(String(dash.videoUrl || '')) &&
+      /^https?:\/\//i.test(String(dash.audioUrl || ''))
+        ? { videoUrl: String(dash.videoUrl), audioUrl: String(dash.audioUrl) }
+        : null
+    const target = String(url || '') || (dashTarget ? dashTarget.videoUrl : '')
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: '当前画面没有可下载的流地址' }
     const id = String(forcedId || '') || `dl-${Date.now()}-${++this.counter}`
     const headers = {
@@ -234,6 +241,7 @@ class DownloadManager {
       referer: referer || target,
       cookie,
       mp4: Boolean(mp4),
+      dash: dashTarget,
       state: {
         id,
         status: 'running',
@@ -259,11 +267,15 @@ class DownloadManager {
   async _run(job) {
     try {
       fs.mkdirSync(job.dir, { recursive: true })
-      const looksHls = /\.m3u8([?#]|$)/i.test(job.target) || /\/m3u8\//i.test(job.target)
-      if (looksHls) {
-        if (job.mp4) await this._downloadHlsMp4(job, job.baseName)
-        else await this._downloadHls(job, job.baseName)
-      } else await this._downloadFile(job, job.baseName)
+      if (job.dash) {
+        await this._downloadDash(job, job.baseName)
+      } else {
+        const looksHls = /\.m3u8([?#]|$)/i.test(job.target) || /\/m3u8\//i.test(job.target)
+        if (looksHls) {
+          if (job.mp4) await this._downloadHlsMp4(job, job.baseName)
+          else await this._downloadHls(job, job.baseName)
+        } else await this._downloadFile(job, job.baseName)
+      }
       if (!job.cancelled) {
         job.state.status = 'done'
         this.emit(job)
@@ -361,6 +373,111 @@ class DownloadManager {
     job.state.percent = 100
     this.lastSavedPath = filePath
     this.emit(job)
+  }
+
+  // 短视频要求「下载成 mp4」：HLS 的 TS 分片先收集到内存，再用 mux.js 转成 fMP4。
+  // B 站 DASH：视频流和音频流是分开的两路，先分别下载，再用 ffmpeg -c copy 合并成一个 mp4（不重编码）
+  async _fetchToFile(job, url, file, from, to, kind) {
+    const response = await this._fetch(job, url, 180000)
+    if (!response.ok) throw new Error(`${kind}请求失败：HTTP ${response.status}`)
+    const total = Number(response.headers.get('content-length')) || 0
+    const stream = fs.createWriteStream(file)
+    let bytes = 0
+    const started = Date.now()
+    try {
+      for await (const chunk of response.body) {
+        if (job.cancelled) break
+        bytes += chunk.length
+        await new Promise((resolve, reject) => {
+          stream.write(chunk, (error) => (error ? reject(error) : resolve()))
+        })
+        this.emit(job, {
+          percent: total ? Math.min(to, Math.round(from + (to - from) * (bytes / total))) : from,
+          bytes,
+          totalBytes: 0,
+          speed: bytes / Math.max(0.3, (Date.now() - started) / 1000),
+          kind: 'dash',
+        })
+      }
+    } finally {
+      await new Promise((resolve) => stream.end(resolve))
+    }
+    if (job.cancelled) throw new Error('已取消')
+  }
+
+  _runFfmpeg(args, job) {
+    const { spawn } = require('node:child_process')
+    return new Promise((resolve, reject) => {
+      const child = spawn('ffmpeg', args, { windowsHide: true })
+      let stderr = ''
+      const onAbort = () => {
+        try {
+          child.kill()
+        } catch {
+          /* 忽略 */
+        }
+      }
+      job.controller?.signal?.addEventListener?.('abort', onAbort, { once: true })
+      child.stderr?.on('data', (chunk) => {
+        stderr = (stderr + chunk.toString()).slice(-4000)
+      })
+      child.on('error', (error) => reject(new Error(`ffmpeg 启动失败：${error.message}`)))
+      child.on('close', (code) => {
+        job.controller?.signal?.removeEventListener?.('abort', onAbort)
+        if (job.cancelled) return reject(new Error('已取消'))
+        if (code === 0) return resolve()
+        reject(new Error(`合并音视频失败（ffmpeg ${code}）：${stderr.slice(-160) || '未知错误'}`))
+      })
+    })
+  }
+
+  async _downloadDash(job, baseName) {
+    // 临时文件放在下载目录里（%TEMP% 在受控环境里可能写不进去）
+    const stamp = `._dash-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    const videoFile = path.join(job.dir, `${stamp}-v.mp4`)
+    const audioFile = path.join(job.dir, `${stamp}-a.mp4`)
+    const filePath = uniquePath(job.dir, baseName, '.mp4')
+    const partPath = `${filePath}.part`
+    job.partPath = partPath
+    try {
+      await this._fetchToFile(job, job.dash.videoUrl, videoFile, 0, 55, '视频流')
+      await this._fetchToFile(job, job.dash.audioUrl, audioFile, 55, 85, '音频流')
+      this.emit(job, { percent: 90, kind: 'dash' })
+      await this._runFfmpeg(
+        [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          videoFile,
+          '-i',
+          audioFile,
+          '-c',
+          'copy',
+          '-movflags',
+          '+faststart',
+          '-f',
+          'mp4',
+          partPath,
+        ],
+        job,
+      )
+      if (job.cancelled) return
+      fs.renameSync(partPath, filePath)
+      job.state.savedPath = filePath
+      job.state.percent = 100
+      this.lastSavedPath = filePath
+      this.emit(job)
+    } finally {
+      for (const file of [videoFile, audioFile]) {
+        try {
+          fs.rmSync(file, { force: true })
+        } catch {
+          /* 忽略 */
+        }
+      }
+    }
   }
 
   // 短视频要求「下载成 mp4」：HLS 的 TS 分片先收集到内存，再用 mux.js 转成 fMP4。

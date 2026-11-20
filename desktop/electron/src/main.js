@@ -1387,6 +1387,7 @@ function registerIpc() {
       extraHeaders: payload.headers && typeof payload.headers === 'object' ? payload.headers : null,
       id: String(payload.id || ''),
       mp4: payload.mp4 !== false,
+      dash: payload.dash && typeof payload.dash === 'object' ? payload.dash : null,
     })
     if (result.ok) log(`[短视频下载] 开始 ${payload.title || url}`)
     return result

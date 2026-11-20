@@ -36,7 +36,7 @@
     qq: { name: '腾讯视频', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
     youku: { name: '优酷', note: 'VIP / 付费内容需登录会员或购买；免费内容不受影响' },
     mgtv: { name: '芒果TV', note: '需要中国大陆网络；VIP 需登录会员；境外网络会提示地区限制' },
-    bilibili: { name: '哔哩哔哩', note: '1080P MP4 一般可直接下载；1080P60 / 4K / HDR 需要大会员，且是音视频分离流，暂不支持' },
+    bilibili: { name: '哔哩哔哩', note: '登录后通常可下 1080P（音视频分离流，下载时用本机 ffmpeg 合并；没装 ffmpeg 最高 720P）；1080P60 / 4K 暂不支持' },
     douyin: { name: '抖音', note: '部分作品 / 高画质需登录；触发风控时先登录再解析' },
     kuaishou: { name: '快手', note: '网页有反爬，部分视频需登录；优先用隐藏窗口嗅探直链' },
     acfun: { name: 'AcFun', note: '高码率 / 会员视频可能需要登录；HLS 会自动转 MP4' },
@@ -1695,11 +1695,32 @@
     renderShortQueue()
   }
 
+  let dashPreviewHinted = false
   function playShortQuality() {
     const quality = currentShortQuality()
     const video = $('#short-video')
     if (!quality || !video) return
-    const target = quality.playUrl || quality.url
+    let chosen = quality
+    if (quality.format === 'dash') {
+      // DASH 档位是音视频分离流，只能下载时合并；在线预览退回最好的 MP4 档
+      chosen =
+        (state.shortResult?.qualities || []).find(
+          (item) => item.format !== 'dash' && (item.playUrl || item.url),
+        ) || null
+      if (!chosen) {
+        toast('这个清晰度只支持下载，当前没有可预览的 MP4 档位', 'warn', 4600)
+        return
+      }
+      if (!dashPreviewHinted) {
+        dashPreviewHinted = true
+        toast(
+          `预览使用 ${chosen.label || 'MP4 档位'}；下载会保存选中的 ${quality.label || '更高清晰度'}`,
+          'ok',
+          5200,
+        )
+      }
+    }
+    const target = chosen.playUrl || chosen.url
     if (!target) return
     try {
       video.src = target
@@ -1794,6 +1815,7 @@
       key: `q-${Date.now()}-${state.shortQueue.length}`,
       title: item.title || '短视频',
       url: item.url,
+      dash: item.dash || null,
       referer: item.referer || '',
       cookie: item.cookie || '',
       subdir: item.subdir || '',
@@ -1852,6 +1874,7 @@
           response = await window.desktop.shortDownload({
             id: item.id,
             url: item.url,
+            dash: item.dash || null,
             referer: item.referer,
             cookie: item.cookie,
             title: item.title,
@@ -1895,6 +1918,18 @@
     }
   }
 
+  // DASH 清晰度没有单文件地址：把 videoUrl + audioUrl 交给主进程下载后合并
+  function shortDownloadPayload(quality) {
+    if (!quality) return { url: '', dash: null }
+    if (quality.format === 'dash') {
+      return {
+        url: quality.videoUrl || '',
+        dash: { videoUrl: quality.videoUrl, audioUrl: quality.audioUrl },
+      }
+    }
+    return { url: quality.originalUrl || quality.url || '', dash: null }
+  }
+
   function downloadShortCurrent() {
     const result = state.shortResult
     const quality = currentShortQuality()
@@ -1902,13 +1937,18 @@
       toast('没有可下载的清晰度', 'warn')
       return
     }
-    const target = quality.originalUrl || quality.url
+    const payload = shortDownloadPayload(quality)
+    if (!payload.url && !payload.dash) {
+      toast('没有可下载的地址', 'warn')
+      return
+    }
     const isSeries = Array.isArray(result.episodes) && result.episodes.length > 1
     const subdir = isSeries ? result.seriesTitle || result.title || '' : ''
     const episode = result.episodes?.[0]
     enqueueShortDownload({
       title: isSeries ? `${result.seriesTitle || result.title} ${episode?.label || ''}`.trim() : result.title,
-      url: target,
+      url: payload.url,
+      dash: payload.dash,
       referer: result.referer,
       cookie: result.cookie,
       subdir,
@@ -1965,9 +2005,11 @@
         })
         continue
       }
+      const payload = shortDownloadPayload(quality)
       enqueueShortDownload({
         title: `${subdir} ${episode.label || `第${index + 1}集`}`.trim(),
-        url: quality.originalUrl || quality.url,
+        url: payload.url,
+        dash: payload.dash,
         referer,
         cookie,
         subdir,

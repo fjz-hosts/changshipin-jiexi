@@ -441,7 +441,9 @@ async function biliPlayInfo({ bvid, aid, cid, qn = 80, cookie = '', variant = 'a
   const variants =
     variant === 'pc'
       ? [base]
-      : [{ ...base, platform: 'html5', high_quality: 1 }, base]
+      : variant === 'dash'
+        ? [{ ...base, qn: 0, fnval: 16, fourk: 1 }]
+        : [{ ...base, platform: 'html5', high_quality: 1 }, base]
   const headers = biliHeaders(cookie)
   let last = null
   for (const params of variants) {
@@ -485,6 +487,23 @@ async function biliAccount(cookie = '') {
   } catch {
     return { login: true, vip: false, uname: '' }
   }
+}
+
+// B 站 1080P 及以上基本只走 DASH（音视频分离），要本地合并成 MP4 就得有 ffmpeg。
+let ffmpegReady = null
+function hasFfmpeg() {
+  if (ffmpegReady !== null) return ffmpegReady
+  try {
+    require('node:child_process').execFileSync('ffmpeg', ['-version'], {
+      stdio: 'ignore',
+      timeout: 8000,
+      windowsHide: true,
+    })
+    ffmpegReady = true
+  } catch {
+    ffmpegReady = false
+  }
+  return ffmpegReady
 }
 
 async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
@@ -603,21 +622,77 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
   }
   qualities.sort((left, right) => Number(right.quality) - Number(left.quality))
 
-  // 只有「接口说支持更高档、实际却只拿到 720P 以下」时才提示登录 / 权限问题
+  // B 站 1080P 及以上基本只走 DASH（音视频分离）：本机有 ffmpeg 时，把两路下载到本地合并成 MP4，
+  // 登录账号就能下到 1080P；没有 ffmpeg 就不列这些档位，避免下回来一个坏文件。
+  const mp4Best = Number(qualities[0]?.quality) || 0
+  const canMerge = hasFfmpeg()
+  let videoMax = formats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), 0)
+  const dashQualities = []
+  try {
+    const dashJson = await biliPlayInfo({ bvid, aid: data.aid, cid, qn: 0, cookie, variant: 'dash' })
+    const dash = dashJson?.data?.dash
+    const dashFormats = Array.isArray(dashJson?.data?.support_formats) ? dashJson.data.support_formats : []
+    videoMax = dashFormats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), videoMax)
+    if (canMerge && dash) {
+      const videos = Array.isArray(dash.video) ? dash.video : []
+      const audios = Array.isArray(dash.audio) ? dash.audio : []
+      const audio = [...audios].sort(
+        (left, right) => (Number(right.bandwidth) || 0) - (Number(left.bandwidth) || 0),
+      )[0]
+      const audioUrl = audio?.baseUrl || audio?.base_url || ''
+      const seen = new Set()
+      // 同一清晰度可能同时有 AVC / HEVC 两路，优先 AVC（兼容性最好）
+      const byId = new Map()
+      for (const video of videos) {
+        const qn = Number(video.id) || 0
+        if (!qn) continue
+        const existing = byId.get(qn)
+        if (!existing || (Number(video.codecid) === 7 && Number(existing.codecid) !== 7)) {
+          byId.set(qn, video)
+        }
+      }
+      const sortedVideos = [...byId.values()].sort(
+        (left, right) => (Number(right.id) || 0) - (Number(left.id) || 0),
+      )
+      for (const video of sortedVideos) {
+        const qn = Number(video.id) || 0
+        const videoUrl = video.baseUrl || video.base_url || ''
+        if (!qn || !videoUrl || !audioUrl || seen.has(qn) || qn <= mp4Best) continue
+        seen.add(qn)
+        dashQualities.push({
+          label: `${labelByQuality.get(qn) || BILI_QN_LABELS[qn] || `${qn}P`}（音视频合并）`,
+          quality: String(qn),
+          format: 'dash',
+          videoUrl,
+          audioUrl,
+          size: 0,
+        })
+      }
+      qualities.push(...dashQualities)
+      qualities.sort((left, right) => Number(right.quality) - Number(left.quality))
+    }
+  } catch {
+    /* DASH 拿不到就只给 MP4 档位 */
+  }
+
   const bestQuality = Number(qualities[0]?.quality) || 0
-  const maxFormat = formats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), 0)
+  const bestLabel = qualities[0]?.label || `${bestQuality}P`
   let login = Boolean(cookie)
   let qualityNote = ''
-  if (bestQuality > 0 && bestQuality < 80 && maxFormat > bestQuality) {
+  if (dashQualities.length) {
+    qualityNote = `${bestLabel} 是 B 站的音视频分离流，下载时会在本机自动合并成一个 MP4（在线预览仍用 MP4 档位）。`
+  } else if (bestQuality > 0 && videoMax > bestQuality) {
     const account = await biliAccount(cookie)
     login = account.login
-    qualityNote = account.login
-      ? '这个视频的高清档需要大会员或更高账号权限，当前账号只能拿到这个清晰度。'
-      : cookie
-        ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能拿到更高清晰度。'
-        : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
-  } else if (maxFormat > 0 && bestQuality > 0 && bestQuality <= 64) {
-    qualityNote = `该视频在 B 站最高只提供 ${qualities[0]?.label || `${bestQuality}P`}（视频本身的上限，和是否登录无关）。`
+    qualityNote = !canMerge
+      ? `更高清晰度（1080P 及以上）是音视频分离的 DASH 流，本机没检测到 ffmpeg，暂时只能下载 ${bestLabel}；把 ffmpeg.exe 放进安装目录或 PATH 后重启即可解锁。`
+      : account.login
+        ? `当前账号在 B 站拿不到更高档位，单文件 MP4 最高 ${bestLabel}（1080P 高码率 / 4K 需要大会员）。`
+        : cookie
+          ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能解锁更高清晰度。'
+          : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
+  } else if (videoMax > 0 && bestQuality > 0 && bestQuality <= 64) {
+    qualityNote = `该视频在 B 站最高只提供 ${bestLabel}（视频本身的上限，和是否登录无关）。`
   }
 
   const episodes = pages.map((page, index) => ({
