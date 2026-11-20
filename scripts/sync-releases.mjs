@@ -290,6 +290,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`\n失败：${err?.message || err}`);
+  const cause = err?.cause?.message ? `（${err.cause.message}）` : '';
+  console.error(`\n失败：${err?.message || err}${cause}`);
   process.exitCode = 1;
 });
