@@ -980,6 +980,17 @@
     const playing = !$('#view-video').hidden || !$('#view-webview').hidden
     const enabled = playing && !state.browserOpen && !state.fullscreen
     document.body.classList.toggle('page-scroll', enabled)
+    updateShortScroll()
+  }
+
+  // 短视频出结果后同样整页滚动，避免视频区域出现自己的滚动条
+  function updateShortScroll() {
+    const resultVisible =
+      state.mode === 'short' && Boolean(state.shortResult) && !$('#short-result').hidden
+    document.body.classList.toggle(
+      'short-scroll',
+      resultVisible && !state.browserOpen && !state.fullscreen,
+    )
   }
 
   function activePlayerView() {
@@ -1618,6 +1629,7 @@
     // 「重新解析」挪到解析栏、和「解析视频」并排；只有解析出结果后才出现
     const reparse = $('#short-reparse')
     if (reparse) reparse.hidden = name !== 'result'
+    updateShortScroll()
   }
 
   function currentShortQuality() {

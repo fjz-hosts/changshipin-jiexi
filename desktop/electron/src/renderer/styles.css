@@ -124,6 +124,48 @@ body.page-scroll .statusbar {
   padding-bottom: 10px;
 }
 
+/* 短视频出结果后：也改成整页滚动（和长视频播放时一致），
+   播放器 / 结果区不再有自己的滚动条。 */
+body.short-scroll {
+  overflow-y: auto;
+}
+
+body.short-scroll .app {
+  height: auto;
+  min-height: 100vh;
+}
+
+body.short-scroll .short-panel {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+body.short-scroll .short-workspace {
+  flex: 0 0 auto;
+  min-height: 0;
+  align-items: start;
+}
+
+body.short-scroll .short-stage {
+  overflow: visible;
+}
+
+body.short-scroll .short-result {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+body.short-scroll .short-side {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+}
+
+body.short-scroll .statusbar {
+  padding-bottom: 10px;
+}
+
 /* ---------------- 顶栏 ---------------- */
 
 .topbar {
