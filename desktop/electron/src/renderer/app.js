@@ -2137,9 +2137,10 @@
     const isDead = (line) => state.lineHealth[line.id]?.ok === false
     // 体检失效的线路不删除，只排到最后：接口可能只是临时抽风，真到那一步还会再试。
     const ordered = [...enabled.filter((line) => !isDead(line)), ...enabled.filter(isDead)]
-    const matching = platformKey ? ordered.filter((line) => line.platform === platformKey) : []
-    // 平台专属线路（例如芒果TV 原生解析）优先，但尽量别从已失效的那条开始
-    const primary = matching[0] || ordered.find((line) => line.id === primaryId) || ordered[0]
+    // 只有芒果TV 默认用平台专属（原生）线路；爱奇艺 / 腾讯 / 优酷 一律从当前（默认 789）线路开始按顺序往下，
+    // 平台专属线路只作为后面的兜底，不再抢在 789 前面。
+    const mgtvNative = platformKey === 'mgtv' ? ordered.find((line) => line.platform === 'mgtv') : null
+    const primary = mgtvNative || ordered.find((line) => line.id === primaryId) || ordered[0]
     const chain = [primary, ...ordered.filter((line) => line.id !== primary.id)]
     return state.config?.autoFallback === false ? [primary] : chain
   }
@@ -2179,7 +2180,7 @@
     renderEpisodeBar()
     const platform = platformInfo(detectPlatform(videoUrl))
     if (!platform) toast('未识别的平台，仍会尝试用线路解析', 'warn')
-    else warnIfNeedsLogin(platform.key, 'long')
+    // 789 等网页线路不需要平台登录，不再弹「爱奇艺未登录 / 需要登录会员」这类误导提示（2026-11-20 用户要求）
 
     const lines = chain ? parseChain(lineId || state.currentLineId, videoUrl) : (state.config.lines.filter((l) => l.id === lineId))
     if (!lines.length) {

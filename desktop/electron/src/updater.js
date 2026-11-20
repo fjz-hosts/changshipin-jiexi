@@ -215,10 +215,30 @@ class UpdateManager {
     } catch {
       /* 清理失败也继续安装 */
     }
-    // isSilent=true：静默覆盖安装，不再弹出安装向导的下一步/目录选择；
-    // NSIS 会沿用原安装目录，配置在 %APPDATA% 不受影响，安装脚本会重建快捷方式。
-    // isForceRunAfter=true：装完自动拉起新版本。
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
+    this.deps.log(`[更新] 准备退出并安装 v${this.state.version || ''}`)
+    // 原生对话框刚关闭时立刻 app.quit 偶尔会被吞掉（表现为点了「立即重启安装」没反应，
+    // 重新打开后又要再点一次）。这里等 600ms 再拉起安装器，并给退出留一次兜底。
+    setTimeout(() => {
+      try {
+        // isSilent=true：静默覆盖安装，不再弹出安装向导的下一步/目录选择；
+        // NSIS 会沿用原安装目录，配置在 %APPDATA% 不受影响，安装脚本会重建快捷方式。
+        // isForceRunAfter=true：装完自动拉起新版本。
+        autoUpdater.quitAndInstall(true, true)
+      } catch (error) {
+        this.deps.log(`[更新] quitAndInstall 失败：${error?.message || error}`)
+        return
+      }
+      // 兜底：安装器已经拉起但进程 8 秒还没退（首次安装被杀软/对话框卡住时会出现），
+      // 强制退出，让等着的安装器继续，避免「点了立即重启没反应」。
+      setTimeout(() => {
+        try {
+          this.deps.log('[更新] 退出超时，强制关闭进程以便安装器继续')
+          app.exit(0)
+        } catch {
+          /* 忽略 */
+        }
+      }, 8000)
+    }, 600)
   }
 
   dispose() {

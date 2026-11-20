@@ -1415,9 +1415,23 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true
-  updater?.dispose()
-  proxy?.stop()
-  downloader?.cancelAll()
+  log('[退出] before-quit，开始清理资源')
+  // 清理失败绝不能挡住退出：否则更新安装器已经拉起、旧进程却还活着，会占着文件导致首次安装失败
+  try {
+    updater?.dispose()
+  } catch (error) {
+    log(`[退出] updater.dispose 失败：${error?.message || error}`)
+  }
+  try {
+    proxy?.stop()
+  } catch (error) {
+    log(`[退出] proxy.stop 失败：${error?.message || error}`)
+  }
+  try {
+    downloader?.cancelAll()
+  } catch (error) {
+    log(`[退出] downloader.cancelAll 失败：${error?.message || error}`)
+  }
 })
 
 app.on('activate', () => {
