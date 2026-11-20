@@ -646,7 +646,8 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
       for (const video of sortedVideos) {
         const qn = Number(video.id) || 0
         const videoUrl = video.baseUrl || video.base_url || ''
-        if (!qn || !videoUrl || !audioUrl || seen.has(qn) || qn <= mp4Best) continue
+        // 只合到 1080P（qn 80）：1080P60 / 4K / HDR 还是大会员 + 高内存，暂不提供
+        if (!qn || !videoUrl || !audioUrl || seen.has(qn) || qn <= mp4Best || qn > 80) continue
         seen.add(qn)
         dashQualities.push({
           label: `${labelByQuality.get(qn) || BILI_QN_LABELS[qn] || `${qn}P`}（音视频合并）`,
