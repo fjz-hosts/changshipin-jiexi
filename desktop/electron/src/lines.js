@@ -262,6 +262,82 @@ function extractStream(text) {
   return unique[0] || ''
 }
 
+// ---------------------------------------------------------------------------
+// 流时长测量：用来识别「只拿到试看」的情况
+//
+// 平台对 付费 / 云影院 影片只下发几十秒到 5 分钟的试看流，第三方线路拿到后
+// 也会原样返回。这里把 m3u8 的分片时长加起来，判断它是不是完整正片。
+// ---------------------------------------------------------------------------
+
+const PREVIEW_MAX_SECONDS = 600
+
+function pickBestVariant(text, baseUrl) {
+  const lines = String(text || '').split(/\r?\n/)
+  let best = ''
+  let bestBandwidth = -1
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+    if (!line.startsWith('#EXT-X-STREAM-INF')) continue
+    const bandwidth = Number((line.match(/BANDWIDTH=(\d+)/i) || [])[1]) || 0
+    let next = ''
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const candidate = lines[cursor].trim()
+      if (!candidate || candidate.startsWith('#')) continue
+      next = candidate
+      break
+    }
+    if (!next || bandwidth < bestBandwidth) continue
+    bestBandwidth = bandwidth
+    try {
+      best = new URL(next, baseUrl).href
+    } catch {
+      best = next
+    }
+  }
+  return best
+}
+
+async function measureStream(streamUrl, { referer = '', cookie = '', timeout = 8000 } = {}) {
+  const result = { duration: 0, segments: 0, drm: false, live: false }
+  if (!/\.m3u8([?#]|$)/i.test(streamUrl) && !/\/m3u8\//i.test(streamUrl)) return result
+  const headers = {
+    'user-agent': UA,
+    accept: '*/*',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
+  }
+  if (referer) headers.referer = referer
+  if (cookie) headers.cookie = cookie
+  const load = async (target) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout)
+    try {
+      // 用 Node 的 fetch：它允许手动带 Referer（Chromium 的 net 会拦掉）
+      const response = await fetch(target, { signal: controller.signal, redirect: 'follow', headers })
+      return { ok: response.ok, url: response.url || target, text: await response.text() }
+    } catch {
+      return { ok: false, url: target, text: '' }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  let playlist = await load(streamUrl)
+  if (!playlist.ok || !playlist.text.includes('#EXTM3U')) return result
+  if (/#EXT-X-STREAM-INF/i.test(playlist.text)) {
+    const variant = pickBestVariant(playlist.text, playlist.url)
+    if (variant) {
+      const child = await load(variant)
+      if (child.ok && child.text.includes('#EXTM3U')) playlist = child
+    }
+  }
+  const total = [...playlist.text.matchAll(/#EXTINF:\s*([\d.]+)/g)].reduce((sum, match) => sum + (Number(match[1]) || 0), 0)
+  result.duration = Math.round(total)
+  result.segments = (playlist.text.match(/#EXTINF:/g) || []).length
+  // 会员流常见 SAMPLE-AES / DRM，内置播放器解不了
+  result.drm = /#EXT-X-(?:SESSION-)?KEY:[^\n]*METHOD=(?!NONE|AES-128)/i.test(playlist.text)
+  result.live = !/#EXT-X-ENDLIST/i.test(playlist.text) && result.segments > 0 && result.duration < 60
+  return result
+}
+
 async function fetchText(target, timeout = 15000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
@@ -531,10 +607,12 @@ module.exports = {
   SAMPLE_URL,
   SAMPLE_URLS,
   DEFAULT_LINES,
+  PREVIEW_MAX_SECONDS,
   isHttpUrl,
   normalizeUrlText,
   buildLineUrl,
   extractStream,
+  measureStream,
   parseWithLine,
   testLine,
   fetchOnlineLines,

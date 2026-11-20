@@ -492,7 +492,9 @@ async function fetchMgtvEpisodes(url, { pageTitle = '', cookie = '' } = {}) {
   for (const item of list) {
     // isIntact=1 是完整正片；3 之类是看点/预告，会把选集塞满
     if (String(item.isIntact) !== '1') continue
-    if (!/^第\d+集$/.test(String(item.t4 || ''))) continue
+    // 电视剧是「第N集」，综艺是「第N期」，动漫/少儿常见「第N话」「第N回」，
+    // 只认「集」会把综艺和动漫整季都过滤掉。
+    if (!/^第\s*\d+\s*[集期话回]/.test(String(item.t4 || '').trim())) continue
     const episodeUrl = absUrl(item.url, 'https://www.mgtv.com/')
     if (!episodeUrl) continue
     const index = episodeIndex(item.t4, item.t1, episodes.length + 1)

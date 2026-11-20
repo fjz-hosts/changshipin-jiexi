@@ -40,6 +40,24 @@ function uniquePath(dir, base, ext) {
   return candidate
 }
 
+// TS → fMP4 转封装（不依赖 ffmpeg）。失败时返回 null，由调用方退回 .ts。
+function transmuxToMp4(tsBuffer) {
+  try {
+    const muxjs = require('mux.js')
+    const transmuxer = new muxjs.mp4.Transmuxer()
+    const chunks = []
+    transmuxer.on('data', (segment) => {
+      if (segment.initSegment) chunks.push(Buffer.from(segment.initSegment))
+      if (segment.data) chunks.push(Buffer.from(segment.data))
+    })
+    transmuxer.push(tsBuffer)
+    transmuxer.flush()
+    return chunks.length ? Buffer.concat(chunks) : null
+  } catch {
+    return null
+  }
+}
+
 function parseAttributes(text) {
   const out = {}
   const regex = /([A-Z0-9-]+)=("[^"]*"|[^,]*)/g
@@ -161,17 +179,19 @@ class DownloadManager {
     this.log(`[下载] ${job.state.status} ${job.state.percent}% ${job.state.title} ${job.state.error || ''}`)
   }
 
-  start({ url, referer = '', cookie = '', title = '', platform = '', lineName = '' }) {
+  start({ url, referer = '', cookie = '', title = '', platform = '', lineName = '', subdir = '', extraHeaders = null, id: forcedId = '', mp4 = false }) {
     const target = String(url || '')
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: '当前画面没有可下载的流地址' }
-    const id = `dl-${Date.now()}-${++this.counter}`
+    const id = String(forcedId || '') || `dl-${Date.now()}-${++this.counter}`
     const headers = {
       'user-agent': UA,
       referer: referer || target,
       accept: '*/*',
       'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
       ...(cookie ? { cookie } : {}),
+      ...(extraHeaders && typeof extraHeaders === 'object' ? extraHeaders : {}),
     }
+    const folder = subdir ? path.join(this.dir, sanitizeFileName(subdir, '短视频')) : this.dir
     const baseName = sanitizeFileName(
       `${platform ? `${platform} ` : ''}${title || '视频'}${lineName ? ` ${lineName}` : ''}`,
       '视频',
@@ -184,8 +204,10 @@ class DownloadManager {
       headers,
       target,
       baseName,
+      dir: folder,
       referer: referer || target,
       cookie,
+      mp4: Boolean(mp4),
       state: {
         id,
         status: 'running',
@@ -197,7 +219,7 @@ class DownloadManager {
         totalSegments: 0,
         speed: 0,
         savedPath: '',
-        dir: this.dir,
+        dir: folder,
         error: '',
         kind: '',
       },
@@ -210,10 +232,12 @@ class DownloadManager {
 
   async _run(job) {
     try {
-      fs.mkdirSync(this.dir, { recursive: true })
+      fs.mkdirSync(job.dir, { recursive: true })
       const looksHls = /\.m3u8([?#]|$)/i.test(job.target) || /\/m3u8\//i.test(job.target)
-      if (looksHls) await this._downloadHls(job, job.baseName)
-      else await this._downloadFile(job, job.baseName)
+      if (looksHls) {
+        if (job.mp4) await this._downloadHlsMp4(job, job.baseName)
+        else await this._downloadHls(job, job.baseName)
+      } else await this._downloadFile(job, job.baseName)
       if (!job.cancelled) {
         job.state.status = 'done'
         this.emit(job)
@@ -277,7 +301,7 @@ class DownloadManager {
     if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}`)
     const total = Number(response.headers.get('content-length')) || 0
     const ext = /\.mp4([?#]|$)/i.test(job.target) ? '.mp4' : '.ts'
-    const filePath = uniquePath(this.dir, baseName, ext)
+    const filePath = uniquePath(job.dir, baseName, ext)
     const partPath = `${filePath}.part`
     job.partPath = partPath
     const stream = fs.createWriteStream(partPath)
@@ -313,6 +337,92 @@ class DownloadManager {
     this.emit(job)
   }
 
+  // 短视频要求「下载成 mp4」：HLS 的 TS 分片先收集到内存，再用 mux.js 转成 fMP4。
+  // 只在 job.mp4 时走这里；长视频仍然按原来的流式写法直接落盘。
+  async _downloadHlsMp4(job, baseName) {
+    const topResponse = await this._fetch(job, job.target, 150000)
+    if (!topResponse.ok) throw new Error(`播放列表请求失败：HTTP ${topResponse.status}`)
+    let playlist = parsePlaylist(await readText(topResponse), job.target)
+    if (playlist.isMaster) {
+      const best = [...playlist.variants].sort((left, right) => right.bandwidth - left.bandwidth)[0]
+      if (!best?.uri) throw new Error('播放列表里没有可用的清晰度')
+      const response = await this._fetch(job, best.uri, 150000)
+      if (!response.ok) throw new Error(`清晰度播放列表请求失败：HTTP ${response.status}`)
+      playlist = parsePlaylist(await readText(response), best.uri)
+    }
+    if (playlist.encryptedUnsupported) {
+      throw new Error(`该视频使用 ${playlist.encryptedUnsupported} 加密（DRM），暂不支持下载`)
+    }
+    if (!playlist.segments.length) throw new Error('播放列表里没有分片')
+    const isFmp4 = Boolean(playlist.map) || /\.m4s([?#]|$)/i.test(playlist.segments[0])
+    const total = playlist.segments.length
+    const chunks = []
+    let bytes = 0
+    const started = Date.now()
+
+    if (playlist.map) {
+      const mapResponse = await this._fetch(job, playlist.map, 30000, true)
+      if (mapResponse.ok) {
+        const buffer = Buffer.from(await mapResponse.arrayBuffer())
+        bytes += buffer.length
+        chunks.push(buffer)
+      }
+    }
+    let keyBuffer = null
+    if (playlist.key) {
+      const keyResponse = await this._fetch(job, playlist.key.uri, 30000, true)
+      if (!keyResponse.ok) throw new Error('解密密钥获取失败')
+      keyBuffer = Buffer.from(await keyResponse.arrayBuffer())
+      if (keyBuffer.length !== 16) throw new Error('解密密钥长度异常')
+    }
+    for (let index = 0; index < total; index += 1) {
+      if (job.cancelled) break
+      const response = await this._fetch(job, playlist.segments[index], 30000, true)
+      if (!response.ok) throw new Error(`分片 ${index + 1} 下载失败：HTTP ${response.status}`)
+      let buffer = Buffer.from(await response.arrayBuffer())
+      if (keyBuffer) {
+        const iv = ivFromHex(playlist.key?.iv) || sequenceIv(playlist.mediaSequence + index)
+        const decipher = crypto.createDecipheriv('aes-128-cbc', keyBuffer, iv)
+        buffer = Buffer.concat([decipher.update(buffer), decipher.final()])
+      }
+      bytes += buffer.length
+      chunks.push(buffer)
+      const speed = bytes / Math.max(0.3, (Date.now() - started) / 1000)
+      this.emit(job, {
+        percent: Math.min(99, Math.round(((index + 1) / total) * 100)),
+        bytes,
+        segments: index + 1,
+        totalSegments: total,
+        speed,
+        kind: isFmp4 ? 'HLS/fMP4' : 'HLS/TS',
+      })
+    }
+    if (job.cancelled) return
+
+    let output = isFmp4 ? Buffer.concat(chunks) : transmuxToMp4(Buffer.concat(chunks))
+    if (!output) {
+      // 转封装失败时退回 .ts，至少文件能播
+      const fallback = uniquePath(job.dir, baseName, '.ts')
+      fs.writeFileSync(fallback, Buffer.concat(chunks))
+      job.state.savedPath = fallback
+      job.state.percent = 100
+      job.state.kind = 'HLS/TS'
+      this.lastSavedPath = fallback
+      this.emit(job)
+      return
+    }
+    const filePath = uniquePath(job.dir, baseName, '.mp4')
+    const partPath = `${filePath}.part`
+    job.partPath = partPath
+    fs.writeFileSync(partPath, output)
+    fs.renameSync(partPath, filePath)
+    job.state.savedPath = filePath
+    job.state.percent = 100
+    job.state.kind = 'mp4'
+    this.lastSavedPath = filePath
+    this.emit(job)
+  }
+
   async _downloadHls(job, baseName) {
         const topResponse = await this._fetch(job, job.target, 150000)
     if (!topResponse.ok) throw new Error(`播放列表请求失败：HTTP ${topResponse.status}`)
@@ -330,7 +440,7 @@ class DownloadManager {
     if (!playlist.segments.length) throw new Error('播放列表里没有分片')
     const isFmp4 = Boolean(playlist.map) || /\.m4s([?#]|$)/i.test(playlist.segments[0])
     const ext = isFmp4 ? '.mp4' : '.ts'
-    const filePath = uniquePath(this.dir, baseName, ext)
+    const filePath = uniquePath(job.dir, baseName, ext)
     const partPath = `${filePath}.part`
     job.partPath = partPath
     const stream = fs.createWriteStream(partPath)

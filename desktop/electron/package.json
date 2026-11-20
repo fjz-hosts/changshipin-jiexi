@@ -1,8 +1,8 @@
 {
   "name": "changshipin-jiexi",
-  "productName": "长视频解析",
-  "version": "1.1.6",
-  "description": "长视频解析 · 爱奇艺 / 腾讯视频 / 优酷 / 芒果TV 链接解析播放（Windows 桌面端）",
+  "productName": "视频解析",
+  "version": "1.2.0",
+  "description": "视频解析 · 长视频（爱奇艺 / 腾讯视频 / 优酷 / 芒果TV）与短视频（抖音 / B站 / AcFun / 红果短剧 / 快手）链接解析下载",
   "author": {
     "name": "fjz-hosts"
   },
@@ -15,7 +15,8 @@
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
-    "electron-updater": "6.8.11"
+    "electron-updater": "6.8.11",
+    "mux.js": "^6.3.0"
   },
   "devDependencies": {
     "electron": "44.7.0",
@@ -23,7 +24,7 @@
   },
   "build": {
     "appId": "com.fjzhosts.changshipin",
-    "productName": "长视频解析",
+    "productName": "视频解析",
     "copyright": "Copyright © 2026 fjz-hosts",
     "asar": true,
     "directories": {
@@ -68,7 +69,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "长视频解析",
+      "shortcutName": "视频解析",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "installerIcon": "build/icon.ico",

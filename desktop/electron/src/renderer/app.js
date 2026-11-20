@@ -9,11 +9,30 @@
     { key: 'mgtv', name: '芒果TV', color: '#ff8a1f', hosts: ['mgtv.com'], home: 'https://www.mgtv.com/', icon: 'assets/platform-mgtv.png' },
   ]
 
+  // 与主进程 shortvideo.js 保持一致；icon 用内联 SVG，避免再打包五张图片
+  const shortBadge = (text, color) =>
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="${color}"/><text x="24" y="31" font-size="20" font-family="Microsoft YaHei,sans-serif" font-weight="700" fill="#fff" text-anchor="middle">${text}</text></svg>`,
+    )}`
+
+  const SHORT_PLATFORMS = [
+    { key: 'douyin', name: '抖音', short: '抖', color: '#ff2d55', hosts: ['douyin.com', 'iesdouyin.com'], home: 'https://www.douyin.com/', partition: 'persist:short-douyin', hint: 'v.douyin.com/xxx', icon: shortBadge('抖', '#ff2d55') },
+    { key: 'bilibili', name: '哔哩哔哩', short: 'B', color: '#fb7299', hosts: ['bilibili.com', 'b23.tv', 'bili2233.cn'], home: 'https://www.bilibili.com/', partition: 'persist:short-bilibili', hint: 'b23.tv/xxx 或 BV号', icon: shortBadge('B', '#fb7299') },
+    { key: 'acfun', name: 'AcFun', short: 'A', color: '#fd4c5d', hosts: ['acfun.cn', 'aixifan.com'], home: 'https://www.acfun.cn/', partition: 'persist:short-acfun', hint: 'acfun.cn/v/acxxxxx', icon: shortBadge('A', '#fd4c5d') },
+    { key: 'hongguo', name: '红果短剧', short: '果', color: '#ff6a3d', hosts: ['hongguoduanju.com', 'novelquickapp.com'], home: 'https://hongguoduanju.com/', partition: 'persist:short-hongguo', hint: 'hongguoduanju.com/detail?series_id=', icon: shortBadge('果', '#ff6a3d') },
+    { key: 'kuaishou', name: '快手', short: '快', color: '#ff7700', hosts: ['kuaishou.com', 'kuaishouapp.com', 'gifshow.com'], home: 'https://www.kuaishou.com/', partition: 'persist:short-kuaishou', hint: 'v.kuaishou.com/xxx', icon: shortBadge('快', '#ff7700') },
+  ]
+
   const SEARCH_URLS = {
     iqiyi: (q) => `https://so.iqiyi.com/so/q_${encodeURIComponent(q)}`,
     qq: (q) => `https://v.qq.com/x/search/?q=${encodeURIComponent(q)}`,
     youku: (q) => `https://so.youku.com/search_video/q_${encodeURIComponent(q)}`,
     mgtv: (q) => `https://so.mgtv.com/so?k=${encodeURIComponent(q)}`,
+    douyin: (q) => `https://www.douyin.com/search/${encodeURIComponent(q)}?type=video`,
+    bilibili: (q) => `https://search.bilibili.com/all?keyword=${encodeURIComponent(q)}`,
+    acfun: (q) => `https://www.acfun.cn/search?keyword=${encodeURIComponent(q)}`,
+    hongguo: (q) => `https://hongguoduanju.com/search?query=${encodeURIComponent(q)}`,
+    kuaishou: (q) => `https://www.kuaishou.com/search/video?searchKey=${encodeURIComponent(q)}`,
   }
 
   const icons = {
@@ -66,6 +85,18 @@
     downloadRunning: false,
     downloadPercent: 0,
     finishedDownloads: new Map(),
+    trialTipFor: '',
+    // ---------------- 短视频 ----------------
+    mode: 'long',
+    shortResult: null,
+    shortBusy: false,
+    shortQualityIndex: 0,
+    shortQueue: [],
+    shortQueueRunning: false,
+    shortSelected: new Set(),
+    shortActiveDownload: '',
+    shortWaiters: new Map(),
+    shortFinished: new Map(),
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -88,6 +119,28 @@
 
   function platformInfo(key) {
     return PLATFORMS.find((item) => item.key === key) || null
+  }
+
+  function detectShortPlatform(rawUrl) {
+    let host = ''
+    try {
+      host = new URL(String(rawUrl).trim()).hostname.toLowerCase()
+    } catch {
+      return null
+    }
+    const platform = SHORT_PLATFORMS.find((item) =>
+      item.hosts.some((h) => host === h || host.endsWith(`.${h}`)),
+    )
+    return platform ? platform.key : null
+  }
+
+  function shortPlatformInfo(key) {
+    return SHORT_PLATFORMS.find((item) => item.key === key) || null
+  }
+
+  // 内置浏览器里既可能是长视频页，也可能是短视频页
+  function detectBrowserVideo(rawUrl) {
+    return detectVideoPlatform(rawUrl) || detectShortPlatform(rawUrl)
   }
 
   function normalizeUrlText(raw) {
@@ -166,6 +219,80 @@
     setTimeout(remove, timeout)
   }
 
+  function formatSeconds(value) {
+    const total = Math.max(0, Math.round(Number(value) || 0))
+    if (!total) return ''
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60)
+      return `${hours} 小时 ${minutes % 60} 分`
+    }
+    if (minutes) return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
+    return `${seconds} 秒`
+  }
+
+  // 试看提示：平台对 付费 / 云影院 影片只下发几十秒到 5 分钟的试看流，
+  // 第三方线路拿到后也会原样返回。这里明确告诉用户，并给出换线 / 官网观看入口。
+  function showTrialTip(seconds, lineName = '') {
+    const tip = $('#trial-tip')
+    if (!tip) return
+    const size = formatSeconds(seconds)
+    const prefix = lineName ? `「${lineName}」` : '当前线路'
+    $('#trial-text').textContent =
+      `${prefix}只拿到${size ? ` ${size}` : ''}试看。该片在平台上多半是「付费 / 云影院」内容，` +
+      '免费解析线路没有购买权限；VIP 会员影片一般可以完整播放，单片付费影片需要在平台购买，或登录会员后在官网页面观看。'
+    tip.hidden = false
+    state.trialTipFor = state.currentVideoUrl
+  }
+
+  function hideTrialTip() {
+    const tip = $('#trial-tip')
+    if (tip) tip.hidden = true
+    state.trialTipFor = ''
+  }
+
+  function openOfficialPage() {
+    const url = state.currentVideoUrl || normalizeUrlText($('#url-input').value)
+    if (!isHttpUrl(url)) {
+      toast('还没有可打开的链接', 'warn')
+      return
+    }
+    const key = detectPlatform(url)
+    if (key) {
+      // 关掉自动解析，避免刚打开官网又被送回解析页
+      state.browserAutoParse = false
+      const box = $('#browser-auto')
+      if (box) box.checked = false
+      openBrowser(key, { url })
+      toast('已打开平台官网页面；登录会员后可直接观看完整版', 'ok', 5600)
+    } else {
+      window.desktop.openExternal(url)
+    }
+  }
+
+  // 网页解析线路没法提前拿到时长，播放后再量一次；只提示，不打断正在播放的画面。
+  async function detectWebviewTrial(token, lineName) {
+    const started = Date.now()
+    while (Date.now() - started < 12000) {
+      if (token !== state.runToken || state.browserOpen) return
+      let snapshot = null
+      try {
+        snapshot = await window.desktop.playerState()
+      } catch {
+        /* 忽略 */
+      }
+      const duration = Number(snapshot?.video?.d) || 0
+      if (duration > 0) {
+        if (duration <= 600 && !state.series && state.currentVideoUrl !== state.trialTipFor) {
+          showTrialTip(duration, lineName)
+        }
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1800))
+    }
+  }
+
   const updateBadge = () => {
     const url = normalizeUrlText($('#url-input').value)
     const platform = platformInfo(detectPlatform(url))
@@ -213,7 +340,7 @@
   }
 
   function browserMeta(key) {
-    return PLATFORMS.find((item) => item.key === key) || null
+    return PLATFORMS.find((item) => item.key === key) || SHORT_PLATFORMS.find((item) => item.key === key) || null
   }
 
   function webviewTitle(webview) {
@@ -231,7 +358,7 @@
     if (!meta) return null
     const webview = document.createElement('webview')
     webview.className = 'browser-webview'
-    webview.setAttribute('partition', `persist:platform-${key}`)
+    webview.setAttribute('partition', meta.partition || `persist:platform-${key}`)
     webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no')
     webview.setAttribute('allowpopups', '')
     webview.src = meta.home
@@ -379,7 +506,7 @@
     } catch {
       /* 忽略 */
     }
-    const videoPlatform = detectVideoPlatform(url)
+    const videoPlatform = detectBrowserVideo(url)
     const badge = $('#browser-badge')
     badge.classList.toggle('video', Boolean(videoPlatform))
     badge.textContent = videoPlatform ? `视频页 · ${browserMeta(videoPlatform)?.name || ''} · 可解析` : '浏览中'
@@ -401,9 +528,14 @@
           return ''
         }
       })()
-      if (!detectVideoPlatform(current)) return
+      if (!detectBrowserVideo(current)) return
       const title = webviewTitle(record.webview)
       hideBrowser({ mute: true })
+      if (detectShortPlatform(current)) {
+        resolveShortFromUrl(current, { auto: true })
+        toast('已自动送到短视频解析', 'ok', 5000)
+        return
+      }
       startParse({ url: current, title, episode: episodeOf(title) })
       toast('已自动解析本集；播放器下方可以直接切换选集', 'ok', 5000)
       collectSeriesHint(record).then((hint) => requestSeries(current, { title, hint }))
@@ -445,9 +577,15 @@
       /* 忽略 */
     }
     $('#browser-panel').hidden = false
-    document.querySelector('.parse-row').hidden = true
-    document.querySelector('.workspace').hidden = true
-    $$('.platform-card').forEach((card) => card.classList.toggle('active', card.dataset.platform === key))
+    if (state.mode === 'short') {
+      $('#short-panel').hidden = true
+    } else {
+      document.querySelector('.parse-row').hidden = true
+      document.querySelector('.workspace').hidden = true
+    }
+    $$('.platform-card, .short-platform-card').forEach((card) =>
+      card.classList.toggle('active', card.dataset.platform === key),
+    )
     $('#browser-icon').src = meta.icon
     $('#browser-name').textContent = meta.name
     $('#browser-badge').textContent = '浏览中'
@@ -473,9 +611,13 @@
     state.browserOpen = false
     updateLayoutMode()
     $('#browser-panel').hidden = true
-    document.querySelector('.parse-row').hidden = false
-    document.querySelector('.workspace').hidden = false
-    $$('.platform-card').forEach((card) => card.classList.remove('active'))
+    if (state.mode === 'short') {
+      $('#short-panel').hidden = false
+    } else {
+      document.querySelector('.parse-row').hidden = false
+      document.querySelector('.workspace').hidden = false
+    }
+    $$('.platform-card, .short-platform-card').forEach((card) => card.classList.remove('active'))
     renderBrowserTabs()
     for (const record of state.browsers.values()) {
       if (!mute) continue
@@ -1191,7 +1333,16 @@
   }
 
   function onDownloadState(update) {
-    if (!update || (state.downloadId && update.id !== state.downloadId && update.status === 'running')) return
+    if (!update) return
+    // 短视频下载有自己的队列，不要混进长视频的「下载」按钮
+    if (update.id && state.shortQueue.some((item) => item.id === update.id)) {
+      applyShortDownloadState(update)
+      return
+    }
+    if (state.shortActiveDownload && update.id === state.shortActiveDownload) {
+      return
+    }
+    if (state.downloadId && update.id !== state.downloadId && update.status === 'running') return
     if (update.id && !state.downloadId && update.status === 'running') state.downloadId = update.id
     if (update.id !== state.downloadId) return
     if (update.status === 'running') {
@@ -1216,6 +1367,464 @@
       toast(`下载失败：${update.error || '未知原因'}`, 'error', 6000)
     }
     state.downloadId = ''
+  }
+
+  // ---------------------------------------------------------------------------
+  // 短视频（独立界面：解析 → 选清晰度 → 下载 mp4 / 短剧全集）
+  // ---------------------------------------------------------------------------
+
+  function hexToRgba(hex, alpha = 0.16) {
+    const value = String(hex || '').replace('#', '')
+    if (value.length !== 6) return `rgba(255,255,255,${alpha})`
+    const red = parseInt(value.slice(0, 2), 16)
+    const green = parseInt(value.slice(2, 4), 16)
+    const blue = parseInt(value.slice(4, 6), 16)
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+  }
+
+  function renderShortPlatforms() {
+    const grid = $('#short-platform-grid')
+    if (!grid) return
+    grid.innerHTML = SHORT_PLATFORMS.map(
+      (platform) => `
+        <div class="short-platform-card" data-platform="${platform.key}" style="--brand:${platform.color};--brand-soft:${hexToRgba(platform.color)}">
+          <button class="card-main" data-action="open">
+            <img class="logo" src="${platform.icon}" alt="" />
+            <span class="platform-meta"><b>${escapeHtml(platform.name)}</b><small>${escapeHtml(platform.hint)}</small></span>
+            <span class="card-go">进入</span>
+          </button>
+        </div>`,
+    ).join('')
+  }
+
+  function updateShortBadge() {
+    const badge = $('#short-platform-badge')
+    if (!badge) return
+    const platform = shortPlatformInfo(detectShortPlatform(normalizeUrlText($('#short-url-input').value)))
+    badge.textContent = platform ? platform.name : '未识别'
+    badge.classList.toggle('known', Boolean(platform))
+    if (platform) badge.style.setProperty('--brand', platform.color)
+    else badge.style.removeProperty('--brand')
+  }
+
+  function switchMode(mode, { force = false } = {}) {
+    const next = mode === 'short' ? 'short' : 'long'
+    if (state.mode === next && !force) return
+    state.mode = next
+    try {
+      localStorage.setItem('csp.mode', next)
+    } catch {
+      /* 忽略 */
+    }
+    if (state.browserOpen) hideBrowser({ mute: true })
+    document.body.classList.toggle('mode-short', next === 'short')
+    $$('.long-only').forEach((node) => {
+      node.hidden = next === 'short'
+    })
+    $('#short-panel').hidden = next !== 'short'
+    $$('#mode-switch button').forEach((button) => {
+      const active = button.dataset.mode === next
+      button.classList.toggle('active', active)
+      button.setAttribute('aria-selected', String(active))
+    })
+    if (next === 'short') {
+      stopPlayback()
+      updateShortBadge()
+      setStatus('短视频模式 · 支持抖音 / B站 / AcFun / 红果短剧 / 快手')
+    } else {
+      const video = $('#short-video')
+      try {
+        video.pause()
+      } catch {
+        /* 忽略 */
+      }
+      updateBadge()
+      setStatus(`就绪 · 共 ${(state.config?.lines || []).filter((line) => line.enabled).length} 条可用线路`)
+    }
+    updateLayoutMode()
+  }
+
+  function renderShortStage(name) {
+    for (const id of ['empty', 'loading', 'error', 'result']) {
+      const node = $(`#short-${id}`)
+      if (node) node.hidden = id !== name
+    }
+    $('#short-panel')?.classList.toggle('has-result', name === 'result')
+  }
+
+  function currentShortQuality() {
+    const result = state.shortResult
+    if (!result) return null
+    const list = result.qualities || []
+    return list[state.shortQualityIndex] || list[0] || null
+  }
+
+  function shortMetaText(result) {
+    const bits = []
+    if (result.platformName) bits.push(result.platformName)
+    if (result.author) bits.push(result.author)
+    if (result.duration) bits.push(formatSeconds(result.duration))
+    if (result.episodes && result.episodes.length > 1) bits.push(`共 ${result.episodes.length} 集`)
+    return bits.join(' · ')
+  }
+
+  function renderShortResult() {
+    const result = state.shortResult
+    if (!result) return
+    renderShortStage('result')
+    $('#short-title').textContent = result.title || '未命名视频'
+    $('#short-meta').textContent = shortMetaText(result) || '短视频'
+    const cover = $('#short-cover')
+    const image = $('#short-cover-img')
+    if (result.cover) {
+      image.src = result.cover
+      cover.hidden = false
+    } else {
+      image.removeAttribute('src')
+      cover.hidden = true
+    }
+    const select = $('#short-quality')
+    select.innerHTML = ''
+    const qualities = result.qualities || []
+    qualities.forEach((quality, index) => {
+      const option = document.createElement('option')
+      const size = Number(quality.size) > 0 ? ` · ${(Number(quality.size) / 1024 / 1024).toFixed(1)} MB` : ''
+      option.value = String(index)
+      option.textContent = `${quality.label || quality.quality || '默认'}${size}`
+      select.appendChild(option)
+    })
+    select.value = String(Math.min(state.shortQualityIndex, Math.max(0, qualities.length - 1)))
+    $('#short-download').disabled = !qualities.length
+    $('#short-play').disabled = !qualities.length
+    $('#short-note').textContent = result.note || ''
+    $('#short-note').hidden = !result.note
+    playShortQuality()
+    renderShortSeries()
+    renderShortQueue()
+  }
+
+  function playShortQuality() {
+    const quality = currentShortQuality()
+    const video = $('#short-video')
+    if (!quality || !video) return
+    const target = quality.playUrl || quality.url
+    if (!target) return
+    try {
+      video.src = target
+      video.load()
+      video.play().catch(() => {})
+      $('#short-cover').hidden = true
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  function renderShortSeries() {
+    const result = state.shortResult
+    const box = $('#short-series')
+    const list = $('#short-episodes')
+    if (!result || !Array.isArray(result.episodes) || result.episodes.length <= 1) {
+      box.hidden = true
+      list.innerHTML = ''
+      return
+    }
+    box.hidden = false
+    const total = result.total || result.episodes.length
+    $('#short-series-title').textContent = result.seriesTitle || result.title || '短剧全集'
+    $('#short-series-count').textContent =
+      `${result.episodes.length} 集` + (total > result.episodes.length ? ` / 共 ${total} 集` : '')
+    list.innerHTML = result.episodes
+      .map((episode, index) => {
+        const selected = state.shortSelected.has(index)
+        const label = episode.label || `第${index + 1}集`
+        const extra = episode.title && episode.title !== label ? episode.title : ''
+        return `
+          <button class="short-episode${selected ? ' on' : ''}" data-index="${index}" title="${escapeHtml(episode.title || '')}">
+            <span class="ep-check">${selected ? '✓' : ''}</span>
+            <span class="ep-label">${escapeHtml(label)}</span>
+            ${extra ? `<span class="ep-title">${escapeHtml(extra)}</span>` : ''}
+          </button>`
+      })
+      .join('')
+  }
+
+  function toggleShortEpisode(index) {
+    if (!Number.isInteger(index)) return
+    if (state.shortSelected.has(index)) state.shortSelected.delete(index)
+    else state.shortSelected.add(index)
+    renderShortSeries()
+  }
+
+  function selectAllShortEpisodes(flag) {
+    const result = state.shortResult
+    if (!result?.episodes) return
+    state.shortSelected = flag ? new Set(result.episodes.map((_, index) => index)) : new Set()
+    renderShortSeries()
+  }
+
+  function renderShortQueue() {
+    const list = $('#short-queue-list')
+    if (!list) return
+    if (!state.shortQueue.length) {
+      list.innerHTML = '<li class="short-queue-empty">还没有下载任务</li>'
+      $('#short-queue-legend').textContent = ''
+      return
+    }
+    list.innerHTML = state.shortQueue
+      .map((item) => {
+        const label =
+          item.status === 'running'
+            ? `下载中 ${Number(item.percent) || 0}%`
+            : item.status === 'done'
+              ? '已完成'
+              : item.status === 'failed'
+                ? `失败${item.error ? `：${escapeHtml(item.error)}` : ''}`
+                : item.status === 'cancelled'
+                  ? '已取消'
+                  : '等待中'
+        return `<li class="short-queue-item ${item.status}" title="${escapeHtml(item.savedPath || '')}">
+          <span class="q-name">${escapeHtml(item.title)}</span>
+          <span class="q-state">${label}</span>
+        </li>`
+      })
+      .join('')
+    const done = state.shortQueue.filter((item) => item.status === 'done').length
+    const failed = state.shortQueue.filter((item) => item.status === 'failed').length
+    $('#short-queue-legend').textContent = `${done}/${state.shortQueue.length}${failed ? ` · 失败 ${failed}` : ''}`
+  }
+
+  function enqueueShortDownload(item) {
+    if (!item?.url) return false
+    const id = item.id || `short-${Date.now()}-${state.shortQueue.length}-${Math.random().toString(16).slice(2, 6)}`
+    state.shortQueue.push({
+      key: `q-${Date.now()}-${state.shortQueue.length}`,
+      title: item.title || '短视频',
+      url: item.url,
+      referer: item.referer || '',
+      cookie: item.cookie || '',
+      subdir: item.subdir || '',
+      platform: item.platform || '短视频',
+      status: 'queued',
+      percent: 0,
+      id,
+      error: '',
+      savedPath: '',
+    })
+    renderShortQueue()
+    return true
+  }
+
+  function applyShortDownloadState(update) {
+    if (!update?.id) return false
+    const item = state.shortQueue.find((entry) => entry.id === update.id)
+    if (!item) return false
+    item.status = update.status
+    item.percent = Number(update.percent) || item.percent
+    if (update.savedPath) item.savedPath = update.savedPath
+    if (update.error) item.error = update.error
+    renderShortQueue()
+    if (update.status !== 'running') {
+      const waiter = state.shortWaiters.get(update.id)
+      if (waiter) {
+        state.shortWaiters.delete(update.id)
+        waiter()
+      } else {
+        state.shortFinished.set(update.id, update.status)
+      }
+    }
+    return true
+  }
+
+  function waitForShortDownload(id) {
+    if (state.shortFinished.has(id)) return Promise.resolve()
+    return new Promise((resolve) => {
+      state.shortWaiters.set(id, resolve)
+    })
+  }
+
+  async function processShortQueue() {
+    if (state.shortQueueRunning) return
+    state.shortQueueRunning = true
+    try {
+      for (;;) {
+        const item = state.shortQueue.find((entry) => entry.status === 'queued')
+        if (!item) break
+        item.status = 'running'
+        item.percent = 0
+        renderShortQueue()
+        let response = null
+        try {
+          response = await window.desktop.shortDownload({
+            id: item.id,
+            url: item.url,
+            referer: item.referer,
+            cookie: item.cookie,
+            title: item.title,
+            subdir: item.subdir,
+            platform: item.platform,
+          })
+        } catch (error) {
+          response = { ok: false, error: String(error?.message || error) }
+        }
+        if (!response?.ok) {
+          item.status = 'failed'
+          item.error = response?.error || '启动下载失败'
+          renderShortQueue()
+          continue
+        }
+        item.id = response.id || item.id
+        state.shortActiveDownload = item.id
+        let snapshot = null
+        try {
+          snapshot = await window.desktop.downloadSnapshot(response.id)
+        } catch {
+          snapshot = null
+        }
+        if (snapshot && snapshot.status !== 'running') applyShortDownloadState(snapshot)
+        else await waitForShortDownload(response.id)
+        state.shortActiveDownload = ''
+      }
+    } finally {
+      state.shortQueueRunning = false
+      renderShortQueue()
+    }
+  }
+
+  function downloadShortCurrent() {
+    const result = state.shortResult
+    const quality = currentShortQuality()
+    if (!result || !quality) {
+      toast('没有可下载的清晰度', 'warn')
+      return
+    }
+    const target = quality.originalUrl || quality.url
+    const isSeries = Array.isArray(result.episodes) && result.episodes.length > 1
+    const subdir = isSeries ? result.seriesTitle || result.title || '' : ''
+    const episode = result.episodes?.[0]
+    enqueueShortDownload({
+      title: isSeries ? `${result.seriesTitle || result.title} ${episode?.label || ''}`.trim() : result.title,
+      url: target,
+      referer: result.referer,
+      cookie: result.cookie,
+      subdir,
+      platform: result.platformName,
+    })
+    toast(isSeries ? '已加入下载队列，保存到剧名文件夹' : '已加入下载队列', 'ok')
+    processShortQueue()
+  }
+
+  async function downloadShortSeries() {
+    const result = state.shortResult
+    if (!result?.episodes?.length) return
+    const indexes = [...state.shortSelected].sort((left, right) => left - right)
+    if (!indexes.length) {
+      toast('先勾选要下载的分集', 'warn')
+      return
+    }
+    const subdir = result.seriesTitle || result.title || '短剧'
+    let added = 0
+    for (const index of indexes) {
+      const episode = result.episodes[index]
+      if (!episode) continue
+      let quality = (episode.qualities || [])[0]
+      let referer = result.referer
+      let cookie = result.cookie
+      if (!quality) {
+        setStatus(`正在解析 ${episode.label || `第${index + 1}集`}…`)
+        let single = null
+        try {
+          single = await window.desktop.shortResolve({ url: episode.url })
+        } catch {
+          single = null
+        }
+        if (single?.ok && single.qualities?.length) {
+          quality = single.qualities[0]
+          referer = single.referer || referer
+          cookie = single.cookie || cookie
+        }
+      }
+      if (!quality) {
+        state.shortQueue.push({
+          key: `q-${Date.now()}-${state.shortQueue.length}`,
+          title: `${subdir} ${episode.label || `第${index + 1}集`}`,
+          url: '',
+          referer: '',
+          cookie: '',
+          subdir,
+          platform: result.platformName,
+          status: 'failed',
+          percent: 0,
+          id: '',
+          error: '没有拿到清晰度',
+          savedPath: '',
+        })
+        continue
+      }
+      enqueueShortDownload({
+        title: `${subdir} ${episode.label || `第${index + 1}集`}`.trim(),
+        url: quality.originalUrl || quality.url,
+        referer,
+        cookie,
+        subdir,
+        platform: result.platformName,
+      })
+      added += 1
+    }
+    setStatus(`已加入 ${added} 集下载任务`)
+    toast(added ? `已加入 ${added} 集，开始下载到「${subdir}」文件夹` : '没有可下载的分集', added ? 'ok' : 'warn')
+    renderShortQueue()
+    processShortQueue()
+  }
+
+  async function resolveShortFromUrl(url, { auto = false } = {}) {
+    const target = normalizeUrlText(url)
+    if (!isHttpUrl(target)) {
+      toast('请先粘贴完整的短视频链接', 'warn')
+      return
+    }
+    const key = detectShortPlatform(target)
+    if (!key) {
+      toast('未识别的短视频平台，支持抖音 / B站 / AcFun / 红果短剧 / 快手', 'warn')
+      return
+    }
+    if (state.mode !== 'short') switchMode('short')
+    if (state.browserOpen) hideBrowser({ mute: true })
+    $('#short-url-input').value = target
+    updateShortBadge()
+    state.shortBusy = true
+    state.shortResult = null
+    state.shortSelected = new Set()
+    renderShortStage('loading')
+    $('#short-loading-title').textContent = `正在解析${shortPlatformInfo(key)?.name || '短视频'}…`
+    $('#short-loading-detail').textContent =
+      key === 'kuaishou' ? '快手需要打开隐藏窗口抓取播放地址，通常 10–25 秒。' : '部分平台需要隐藏窗口兜底，通常 3–20 秒。'
+    setStatus('正在解析短视频…')
+    let result = null
+    try {
+      result = await window.desktop.shortResolve({ url: target })
+    } catch (error) {
+      result = { ok: false, error: String(error?.message || error) }
+    }
+    state.shortBusy = false
+    if (!result?.ok) {
+      const message = result?.error || '没有拿到可下载地址'
+      renderShortStage('error')
+      $('#short-error-detail').textContent =
+        `${message}\n\n可以先点平台卡片进入原平台页面，登录后再回来重试。`
+      setStatus(`短视频解析失败：${message}`)
+      toast(message, 'error', 6000)
+      return
+    }
+    state.shortResult = result
+    state.shortQualityIndex = 0
+    state.shortSelected = new Set((result.episodes || []).map((_, index) => index))
+    renderShortResult()
+    setStatus(`解析成功：${result.title}`)
+    if (!auto) toast(`已解析：${result.title}`, 'ok', 4200)
+  }
+
+  function resolveShortVideo() {
+    return resolveShortFromUrl($('#short-url-input').value, { auto: false })
   }
 
   // ---------------------------------------------------------------------------
@@ -1332,6 +1941,7 @@
     const token = ++state.runToken
     state.running = true
     stopPlayback()
+    hideTrialTip()
     state.lastResult = null
     setDownloadButton()
     updateNativeButton()
@@ -1350,6 +1960,8 @@
     setStatus('正在解析…')
 
     const failures = []
+    // 只拿到试看的线路先记下来：优先继续试下一条，所有线路都不行时再播放最长的那条试看。
+    let bestTrial = null
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index]
       if (token !== state.runToken) return
@@ -1390,8 +2002,19 @@
 
       state.lastResult = result
       if (result.kind === 'stream') {
+        const seconds = Number(result.duration) || 0
+        // 已知选集的情况下不按短时长判试看，避免误伤 3~5 分钟的短动漫 / 短视频；
+        // 电影 / 单片没有选集，时长明显短于正片时基本就是平台试看流。
+        const looksTrial = result.trial === true || (seconds > 0 && seconds <= 600 && !state.series)
+        if (looksTrial) {
+          failures.push(`${line.name}：只有 ${formatSeconds(seconds) || '短暂'} 试看`)
+          if (!bestTrial || seconds > bestTrial.seconds) bestTrial = { result, line, seconds }
+          // 还有线路就继续换，别让用户以为整部电影只有几分钟
+          if (index < lines.length - 1) continue
+        }
         playStream(result)
         onParseSuccess(line)
+        if (looksTrial) showTrialTip(seconds, line.name)
         return
       }
 
@@ -1404,6 +2027,54 @@
       setView('webview')
       $('#live-dot').classList.add('playing')
       onParseSuccess(line)
+      detectWebviewTrial(token, line.name)
+      return
+    }
+
+    // 最后兜底：只有芒果TV 需要「平台原生解析」。
+    // 爱奇艺 / 腾讯 / 优酷 保持原来的第三方线路顺序（默认从 789 解析开始），
+    // 不再自动改用原生取流。
+    if (chain && platform && platform.key === 'mgtv') {
+      const nativeId = `builtin-${platform.key}-native`
+      const nativeLine = (state.config.lines || []).find((item) => item.id === nativeId && item.enabled !== false)
+      if (nativeLine) {
+        showLoading('正在用平台自己的播放器取流…', '网页线路都没成功，正在尝试平台原生播放；登录会员后效果更好。')
+        let nativeResult = null
+        try {
+          nativeResult = await window.desktop.parse({ url: videoUrl, lineId: nativeId })
+        } catch {
+          /* 原生取流失败就走后面的报错 */
+        }
+        if (token !== state.runToken) return
+        if (nativeResult?.ok && nativeResult.kind === 'stream') {
+          const seconds = Number(nativeResult.duration) || 0
+          const looksTrial = nativeResult.trial === true || (seconds > 0 && seconds <= 600 && !state.series)
+          if (!looksTrial) {
+            state.lastResult = nativeResult
+            playStream(nativeResult)
+            onParseSuccess(nativeLine)
+            hideTrialTip()
+            toast('网页线路失败，已改用平台原生取流', 'ok', 5200)
+            return
+          }
+          failures.push(`${nativeLine.name}：只有 ${formatSeconds(seconds) || '短暂'} 试看`)
+          if (!bestTrial || seconds > bestTrial.seconds) bestTrial = { result: nativeResult, line: nativeLine, seconds }
+        } else if (nativeResult?.error) {
+          failures.push(`${nativeLine.name}：${nativeResult.error}`)
+        }
+      }
+    }
+
+    // 所有线路都没有正片：如果拿到过试看，播放最长的那条并明确提示；
+    // 否则才显示解析失败。这样用户至少能看试看，也知道为什么只有几分钟。
+    if (bestTrial) {
+      state.running = false
+      clearRunWatchdog()
+      state.lastResult = bestTrial.result
+      playStream(bestTrial.result)
+      onParseSuccess(bestTrial.line)
+      showTrialTip(bestTrial.seconds, bestTrial.line.name)
+      toast('所有线路都只拿到试看；换线或登录会员后可在官网看完整版', 'warn', 6500)
       return
     }
 
@@ -1411,7 +2082,9 @@
     clearRunWatchdog()
     showError(
       '所有线路都没能解析成功',
-      `已按顺序尝试 ${failures.length} 条线路：\n${failures.slice(0, 4).join('\n')}\n\n请检查链接是否有效，或在「线路管理」里更换线路。`,
+      `已按顺序尝试 ${failures.length} 条线路：\n${failures.slice(0, 4).join('\n')}\n\n` +
+        '「付费 / 云影院」影片免费线路只能拿到试看；短剧、漫剧等新类别接口也可能暂不支持。' +
+        '可以点「官网观看」，登录会员后直接在平台页面看完整版。',
     )
   }
 
@@ -2379,6 +3052,88 @@
         window.desktop.openPlatformSite(key)
       })
     })
+
+    // ---------------- 短视频 ----------------
+    $('#mode-switch').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-mode]')
+      if (!button) return
+      switchMode(button.dataset.mode)
+    })
+
+    $('#short-platform-grid').addEventListener('click', (event) => {
+      const card = event.target.closest('.short-platform-card')
+      if (!card) return
+      openBrowser(card.dataset.platform)
+    })
+
+    $('#short-url-input').addEventListener('input', updateShortBadge)
+    $('#short-url-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        resolveShortVideo()
+      }
+    })
+    $('#short-parse-btn').addEventListener('click', () => resolveShortVideo())
+    $('#short-paste').addEventListener('click', async () => {
+      try {
+        const text = await window.desktop.readClipboard()
+        const url = normalizeUrlText(text)
+        if (!url) {
+          toast('剪贴板里没有链接', 'warn')
+          return
+        }
+        $('#short-url-input').value = url
+        updateShortBadge()
+        toast('已粘贴剪贴板链接')
+        $('#short-url-input').focus()
+      } catch {
+        toast('读取剪贴板失败', 'error')
+      }
+    })
+    $('#short-clear').addEventListener('click', () => {
+      $('#short-url-input').value = ''
+      updateShortBadge()
+      $('#short-url-input').focus()
+    })
+
+    $('#short-quality').addEventListener('change', (event) => {
+      state.shortQualityIndex = Math.max(0, Number(event.target.value) || 0)
+      playShortQuality()
+    })
+    $('#short-play').addEventListener('click', () => playShortQuality())
+    $('#short-download').addEventListener('click', () => downloadShortCurrent())
+    $('#short-open').addEventListener('click', () => {
+      const url = state.shortResult?.pageUrl || normalizeUrlText($('#short-url-input').value)
+      if (!isHttpUrl(url)) return
+      const key = detectShortPlatform(url)
+      if (key) openBrowser(key, { url })
+      else window.desktop.openExternal(url)
+    })
+    $('#short-reparse').addEventListener('click', () => resolveShortVideo())
+    $('#short-error-retry').addEventListener('click', () => resolveShortVideo())
+    $('#short-error-open').addEventListener('click', () => {
+      const url = normalizeUrlText($('#short-url-input').value)
+      const key = detectShortPlatform(url)
+      if (key) openBrowser(key, { url })
+      else toast('还没有可打开的链接', 'warn')
+    })
+
+    $('#short-select-all').addEventListener('click', () => selectAllShortEpisodes(true))
+    $('#short-select-none').addEventListener('click', () => selectAllShortEpisodes(false))
+    $('#short-download-all').addEventListener('click', () => downloadShortSeries())
+    $('#short-episodes').addEventListener('click', (event) => {
+      const item = event.target.closest('.short-episode')
+      if (!item) return
+      toggleShortEpisode(Number(item.dataset.index))
+    })
+
+    $('#short-queue-clear').addEventListener('click', () => {
+      state.shortQueue = state.shortQueue.filter(
+        (item) => item.status === 'queued' || item.status === 'running',
+      )
+      renderShortQueue()
+    })
+    $('#short-open-folder').addEventListener('click', () => window.desktop.openDownloadFolder())
     // 主窗口内置浏览器工具栏
     $('#browser-back').addEventListener('click', () => {
       try {
@@ -2430,7 +3185,7 @@
     })
     $('#browser-copy').addEventListener('click', async () => {
       const url = currentBrowserUrl()
-      if (!detectVideoPlatform(url)) {
+      if (!detectBrowserVideo(url)) {
         toast('请先点开具体某一集，再复制链接', 'warn')
         return
       }
@@ -2446,6 +3201,10 @@
       const title = currentBrowserTitle()
       const record = state.browsers.get(state.browserKey)
       hideBrowser({ mute: true })
+      if (detectShortPlatform(url)) {
+        resolveShortFromUrl(url, { auto: false })
+        return
+      }
       startParse({ url, title, episode: episodeOf(title) })
       collectSeriesHint(record).then((hint) => requestSeries(url, { title, hint }))
     })
@@ -2469,6 +3228,12 @@
     })
 
     $('#btn-next-line').addEventListener('click', () => nextLine())
+    $('#trial-next').addEventListener('click', () => {
+      hideTrialTip()
+      nextLine()
+    })
+    $('#trial-official').addEventListener('click', () => openOfficialPage())
+    $('#trial-close').addEventListener('click', () => hideTrialTip())
     $('#btn-native').addEventListener('click', () => tryNative())
     $('#btn-download').addEventListener('click', () => toggleDownload())
     $('#btn-open-downloads').addEventListener('click', () => window.desktop.openDownloadFolder())
@@ -2533,6 +3298,7 @@
       startParse({ lineId: state.currentLineId, url: state.currentVideoUrl || $('#url-input').value, chain: false })
     })
     $('#btn-error-next').addEventListener('click', () => nextLine())
+    $('#btn-error-official').addEventListener('click', () => openOfficialPage())
     $('#btn-error-lines').addEventListener('click', () => openModal('lines'))
 
     // 侧栏
@@ -2849,6 +3615,13 @@
 
     window.desktop.onExternalParse((payload = {}) => {
       if (!payload.url) return
+      if (detectShortPlatform(payload.url)) {
+        $('#short-url-input').value = payload.url
+        updateShortBadge()
+        if (payload.auto !== false) resolveShortFromUrl(payload.url, { auto: true })
+        else toast('已填入短视频链接，点击「解析视频」开始')
+        return
+      }
       $('#url-input').value = payload.url
       updateBadge()
       if (payload.auto !== false) {
@@ -2970,6 +3743,10 @@
       renderLineSelect()
       renderLineList()
       renderHistory()
+      renderShortPlatforms()
+      renderShortQueue()
+      switchMode(localStorage.getItem('csp.mode') === 'short' ? 'short' : 'long', { force: true })
+      updateShortBadge()
       setDownloadButton()
       updateNativeButton()
       backfillHistoryTitles()
@@ -3001,6 +3778,9 @@
         requestSeries,
         setDownloadButton,
         updateNativeButton,
+        switchMode,
+        resolveShortFromUrl,
+        getShortResult: () => state.shortResult,
       }
     } catch (error) {
       console.error(error)

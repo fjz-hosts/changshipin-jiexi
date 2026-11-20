@@ -36,17 +36,23 @@ const {
   fetchOnlineLines,
   normalizeUrlText,
   isHttpUrl,
+  measureStream,
+  PREVIEW_MAX_SECONDS,
   SAMPLE_URL,
 } = require('./lines')
 const { resolveSeries } = require('./series')
 const { DownloadManager } = require('./download')
 const { PLATFORMS, detectPlatformByUrl, platformByKey } = require('./platforms')
+const { SHORT_PLATFORMS, resolveShort, detectShortPlatform } = require('./shortvideo')
 
 const APP_ID = 'com.fjzhosts.changshipin'
-const APP_NAME = '长视频解析'
-const APP_SUBTITLE = '四平台链接解析播放'
+const APP_NAME = '视频解析'
+const APP_SUBTITLE = '长视频 · 短视频链接解析'
+const OLD_APP_NAME = '长视频解析'
 const REPO_URL = 'https://github.com/fjz-hosts/changshipin-jiexi'
 const IS_SMOKE = process.argv.includes('--smoke-test')
+// 长视频 + 短视频的平台清单：内置窗口 / 登录弹窗 / 快捷键都要按分区识别
+const ALL_PLATFORMS = [...PLATFORMS, ...SHORT_PLATFORMS]
 
 app.setAppUserModelId(APP_ID)
 app.setName(APP_NAME)
@@ -56,6 +62,17 @@ app.userAgentFallback = UA
 
 const userDataDir =
   process.env.CHANGSPIN_USERDATA || path.join(app.getPath('appData'), APP_NAME)
+// 改名后沿用旧版本的配置 / 历史 / 登录态，避免升级后设置全丢
+try {
+  if (!process.env.CHANGSPIN_USERDATA) {
+    const oldDir = path.join(app.getPath('appData'), OLD_APP_NAME)
+    if (!fs.existsSync(path.join(userDataDir, 'config.json')) && fs.existsSync(oldDir)) {
+      fs.cpSync(oldDir, userDataDir, { recursive: true, force: false })
+    }
+  }
+} catch {
+  /* 迁移失败不影响启动 */
+}
 app.setPath('userData', userDataDir)
 
 const LOG_DIR = path.join(userDataDir, 'logs')
@@ -524,7 +541,7 @@ app.on('web-contents-created', (_event, contents) => {
       const parentWindow = BrowserWindow.fromWebContents(host)
       if (!parentWindow || parentWindow.isDestroyed()) return { action: 'deny' }
       // 主窗口里的内置浏览器：登录弹窗单独开，其余链接留在当前 webview 内
-      const webviewPlatform = PLATFORMS.find(
+      const webviewPlatform = ALL_PLATFORMS.find(
         (item) => session.fromPartition(item.partition) === contents.session,
       )
       if (parentWindow === mainWindow && webviewPlatform && /^https?:\/\//i.test(url)) {
@@ -625,7 +642,7 @@ app.on('web-contents-created', (_event, contents) => {
 
   // 平台 webview 里也有键盘：Alt+←/→ 后退/前进、Esc 返回主界面、Ctrl+W 关闭当前标签页。
   // 主窗口的 document keydown 拿不到 webview 内的按键，所以必须在主进程拦截。
-  const platformForContents = PLATFORMS.find((item) => session.fromPartition(item.partition) === contents.session)
+  const platformForContents = ALL_PLATFORMS.find((item) => session.fromPartition(item.partition) === contents.session)
   if (platformForContents) {
     contents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return
@@ -704,7 +721,7 @@ function buildMenu() {
           click: () => {
             const result = createDesktopShortcut()
             if (result.ok) {
-              dialog.showMessageBox({ type: 'info', title: '快捷方式', message: '已在桌面重新创建「长视频解析」快捷方式', buttons: ['好'], noLink: true })
+              dialog.showMessageBox({ type: 'info', title: '快捷方式', message: `已在桌面重新创建「${APP_NAME}」快捷方式`, buttons: ['好'], noLink: true })
             } else {
               dialog.showMessageBox({ type: 'warning', title: '快捷方式', message: '创建失败', detail: result.error || '', buttons: ['好'], noLink: true })
             }
@@ -762,7 +779,7 @@ function buildMenu() {
         },
         { label: 'GitHub 项目主页', click: () => safeOpenExternal(REPO_URL) },
         { type: 'separator' },
-        { label: '关于长视频解析', click: () => showAbout() },
+        { label: `关于${APP_NAME}`, click: () => showAbout() },
       ],
     },
   ]
@@ -806,7 +823,7 @@ function quitApp() {
   app.quit()
 }
 
-// 默认放「下载\长视频解析」。部分机器开了 Defender 受控文件夹访问，
+// 默认放「下载\视频解析」。部分机器开了 Defender 受控文件夹访问，
 // 直接往 Downloads 写会 EPERM，这里逐个候选目录做一次可写测试。
 function pickDownloadDir() {
   const candidates = [
@@ -834,13 +851,13 @@ function createDesktopShortcut() {  if (!app.isPackaged) {
     return { ok: false, error: '开发模式下不创建快捷方式' }
   }
   try {
-    const shortcutPath = path.join(app.getPath('desktop'), '长视频解析.lnk')
+    const shortcutPath = path.join(app.getPath('desktop'), `${APP_NAME}.lnk`)
     const ok = shell.writeShortcutLink(shortcutPath, 'create', {
       target: process.execPath,
       cwd: path.dirname(process.execPath),
       icon: iconPath(),
       iconIndex: 0,
-      description: '长视频解析 · 四平台链接解析播放',
+      description: `${APP_NAME} · ${APP_SUBTITLE}`,
     })
     log(`重建桌面快捷方式：${shortcutPath} ok=${ok}`)
     return { ok, path: shortcutPath }
@@ -853,10 +870,11 @@ function createDesktopShortcut() {  if (!app.isPackaged) {
 function showAbout() {
   const options = {
     type: 'info',
-    title: '关于长视频解析',
-    message: `长视频解析 v${app.getVersion()}`,
+    title: `关于${APP_NAME}`,
+    message: `${APP_NAME} v${app.getVersion()}`,
     detail:
-      '把爱奇艺、腾讯视频、优酷、芒果TV 的链接粘贴进来，选择解析线路后直接在内置播放器里播放。\n\n' +
+      '长视频：把爱奇艺、腾讯视频、优酷、芒果TV 的链接粘贴进来，选择解析线路后直接在内置播放器里播放。\n' +
+      '短视频：支持抖音、B站、AcFun、红果短剧、快手，选清晰度下载 MP4，短剧可一键下载全集。\n\n' +
       '解析线路来自互联网公开的第三方接口，程序本身不提供、不存储任何视频内容；' +
       '线路随时可能失效，可在「线路管理」里更换或添加。请只在合法范围内使用。\n\n' +
       `项目地址：${REPO_URL}`,
@@ -958,6 +976,36 @@ async function resolvePageTitle(rawUrl) {
   return cleaned
 }
 
+// 短视频平台的内置窗口登录态：解析高清 / 会员内容时需要带上这些 Cookie
+async function readPartitionCookie(partition, homeUrl) {
+  try {
+    const cookies = await session.fromPartition(partition).cookies.get({ url: homeUrl })
+    return cookies.map((item) => `${item.name}=${item.value}`).join('; ')
+  } catch {
+    return ''
+  }
+}
+
+// 把短视频直链换成本地代理地址：<video> 没法自己带 Referer / Cookie
+function attachProxyUrls(result, cookie) {
+  if (!proxy || !result) return result
+  const referer = result.referer || ''
+  const withProxy = (item) =>
+    item && item.url
+      ? { ...item, originalUrl: item.url, playUrl: proxy.resourceUrl(item.url, referer, cookie) }
+      : item
+  return {
+    ...result,
+    qualities: Array.isArray(result.qualities) ? result.qualities.map(withProxy) : [],
+    episodes: Array.isArray(result.episodes)
+      ? result.episodes.map((episode) => ({
+          ...episode,
+          qualities: Array.isArray(episode.qualities) ? episode.qualities.map(withProxy) : episode.qualities,
+        }))
+      : [],
+  }
+}
+
 function registerIpc() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -1054,6 +1102,17 @@ function registerIpc() {
       if (result.kind === 'stream') {
         const platform = detectPlatformByUrl(url)
         const referer = result.referer || platform?.home || url
+        // 第三方线路经常把平台的「试看流」原样返回：付费 / 云影院影片只有几十秒到 5 分钟。
+        // 先量一下时长，渲染层据此决定是否继续换线，避免用户以为整部电影只有 5 分钟。
+        let media = { duration: 0, segments: 0, drm: false, live: false }
+        try {
+          media = await measureStream(result.streamUrl, { referer, cookie: cookieHeader })
+        } catch {
+          /* 量不出来不影响播放 */
+        }
+        const titleText = String(result.title || '')
+        const previewText = /试看|预告|花絮|片段|速看|抢先|片花/.test(titleText)
+        const trial = previewText || (Number(media.duration) > 0 && Number(media.duration) <= PREVIEW_MAX_SECONDS)
         const playUrl = proxy.resourceUrl(result.streamUrl, referer, cookieHeader)
         lastStream = {
           url: result.streamUrl,
@@ -1063,14 +1122,18 @@ function registerIpc() {
           platform: platform?.name || '',
           lineName: line.name,
           videoUrl: url,
+          duration: Number(media.duration) || 0,
         }
-        log(`解析 ${line.name} → 流地址 ${result.streamUrl}`)
+        log(`解析 ${line.name} → 流地址 ${result.streamUrl}（${media.duration || '?'} 秒${trial ? ' · 试看' : ''}）`)
         return {
           ok: true,
           kind: 'stream',
           playUrl,
           original: result.streamUrl,
           title: result.title || '',
+          duration: Number(media.duration) || 0,
+          segments: Number(media.segments) || 0,
+          trial,
           line: publicLine(line),
           platform: platform?.name || '未知',
         }
@@ -1102,6 +1165,7 @@ function registerIpc() {
   })
 
   ipcMain.handle('download:cancel', (_event, id) => downloader?.cancel(String(id || '')) || false)
+  ipcMain.handle('download:snapshot', (_event, id) => downloader?.snapshot(String(id || '')) || null)
   ipcMain.handle('download:folder', () => {
     const folder = downloader?.folder || ''
     if (!folder) return false
@@ -1227,6 +1291,65 @@ function registerIpc() {
     })
     return { ok: true }
   })
+
+  // -------------------------------------------------------------------------
+  // 短视频（与长视频完全独立）
+  // -------------------------------------------------------------------------
+  ipcMain.handle('short:platforms', () =>
+    SHORT_PLATFORMS.map((item) => ({
+      key: item.key,
+      name: item.name,
+      home: item.home,
+      color: item.color,
+      partition: item.partition,
+      hint: item.hint,
+    })),
+  )
+
+  ipcMain.handle('short:resolve', async (_event, payload = {}) => {
+    const url = normalizeUrlText(payload.url)
+    if (!isHttpUrl(url)) return { ok: false, error: '链接格式不正确，请粘贴完整的 http(s) 短视频链接' }
+    const platform = detectShortPlatform(url)
+    if (!platform) return { ok: false, error: '不是受支持的短视频平台链接（抖音 / B站 / AcFun / 红果短剧 / 快手）' }
+    const started = Date.now()
+    try {
+      const cookie = String(payload.cookie || '') || (await readPartitionCookie(platform.partition, platform.home))
+      const result = await resolveShort({ url, cookie, platform: platform.key })
+      if (result.ok) {
+        const proxied = attachProxyUrls(result, cookie)
+        log(
+          `[短视频] ${platform.name} 解析成功：${proxied.title}，${proxied.qualities.length} 个清晰度，` +
+            `${proxied.episodes?.length || 0} 集，${Date.now() - started}ms`,
+        )
+        return proxied
+      }
+      log(`[短视频] ${platform.name} 解析失败：${result.error || '未知错误'}，${Date.now() - started}ms`)
+      return result
+    } catch (error) {
+      log(`[短视频] ${platform.name} 解析异常：${error?.stack || error}`)
+      return { ok: false, error: String(error?.message || error).slice(0, 160) }
+    }
+  })
+
+  ipcMain.handle('short:download', (_event, payload = {}) => {
+    if (!downloader) return { ok: false, error: '下载器还没准备好' }
+    const url = String(payload.url || '')
+    if (!/^https?:\/\//i.test(url)) return { ok: false, error: '没有可下载的直链' }
+    const platform = detectShortPlatform(payload.pageUrl || payload.referer || url)
+    const result = downloader.start({
+      url,
+      referer: String(payload.referer || '') || platform?.home || '',
+      cookie: String(payload.cookie || ''),
+      title: String(payload.title || '短视频'),
+      platform: String(payload.platform || platform?.name || '短视频'),
+      subdir: String(payload.subdir || ''),
+      extraHeaders: payload.headers && typeof payload.headers === 'object' ? payload.headers : null,
+      id: String(payload.id || ''),
+      mp4: payload.mp4 !== false,
+    })
+    if (result.ok) log(`[短视频下载] 开始 ${payload.title || url}`)
+    return result
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1264,7 +1387,7 @@ app.whenReady().then(async () => {
   // 解析页 / 官网窗口都使用普通浏览器 UA
   try {
     session.fromPartition('persist:parse').setUserAgent(UA)
-    for (const platform of PLATFORMS) session.fromPartition(platform.partition).setUserAgent(UA)
+    for (const platform of ALL_PLATFORMS) session.fromPartition(platform.partition).setUserAgent(UA)
   } catch (error) {
     log(`设置 UA 失败：${error?.message || error}`)
   }

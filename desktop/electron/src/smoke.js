@@ -43,7 +43,7 @@ async function runSmoke({ app, window, proxy, store }) {
   check('渲染进程初始化（window.desktop + window.__app）', ready)
 
   const title = await window.webContents.executeJavaScript('document.title')
-  check('窗口标题', String(title).includes('长视频解析'), title)
+  check('窗口标题', String(title).includes('视频解析'), title)
 
   const cards = await window.webContents.executeJavaScript('document.querySelectorAll(".platform-card[data-platform]").length')
   check('四个平台快捷入口', cards === 4, String(cards))
@@ -195,7 +195,7 @@ async function runSmoke({ app, window, proxy, store }) {
   const tempDir = path.join(app.getPath('userData'), `smoke-store-${process.pid}`)
   let migrationCheck = {}
   try {
-    fs.rmSync(tempDir, { recursive: true, force: true })
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
     fs.mkdirSync(tempDir, { recursive: true })
     fs.writeFileSync(
       path.join(tempDir, 'config.json'),
@@ -215,7 +215,11 @@ async function runSmoke({ app, window, proxy, store }) {
       progress: history[0] && history[0].progress,
     }
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true })
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+    } catch {
+      // 打包版首次运行可能被杀软占用，清理失败不影响自检结论
+    }
   }
   check(
     '观看历史：旧配置按集记录自动合并',

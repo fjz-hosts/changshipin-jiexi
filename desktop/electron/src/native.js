@@ -12,7 +12,9 @@
 const { BrowserWindow, session } = require('electron')
 const { UA } = require('./lines')
 
-const PARTITION = (key) => `persist:native-${key}`
+// 复用「内置浏览器」的平台分区：用户在里面登录会员后，隐藏窗口取流也能带上登录态，
+// 会员 / 高清内容才有机会拿到正片流（云影院等单片付费内容仍需购买）。
+const PARTITION = (key) => `persist:platform-${key}`
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
