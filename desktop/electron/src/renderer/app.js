@@ -36,7 +36,7 @@
     qq: { name: '腾讯视频', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
     youku: { name: '优酷', note: 'VIP / 付费内容需登录会员或购买；免费内容不受影响' },
     mgtv: { name: '芒果TV', note: '需要中国大陆网络；VIP 需登录会员；境外网络会提示地区限制' },
-    bilibili: { name: '哔哩哔哩', note: '登录后通常可下 1080P（音视频分离流，下载时用本机 ffmpeg 合并；没装 ffmpeg 最高 720P）；1080P60 / 4K 暂不支持' },
+    bilibili: { name: '哔哩哔哩', note: '登录后通常可下 1080P（音视频分离流，下载时自动合并成 MP4，不需要 ffmpeg）；1080P60 / 4K 暂不支持' },
     douyin: { name: '抖音', note: '部分作品 / 高画质需登录；触发风控时先登录再解析' },
     kuaishou: { name: '快手', note: '网页有反爬，部分视频需登录；优先用隐藏窗口嗅探直链' },
     acfun: { name: 'AcFun', note: '高码率 / 会员视频可能需要登录；HLS 会自动转 MP4' },

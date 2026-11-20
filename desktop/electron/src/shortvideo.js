@@ -489,22 +489,7 @@ async function biliAccount(cookie = '') {
   }
 }
 
-// B 站 1080P 及以上基本只走 DASH（音视频分离），要本地合并成 MP4 就得有 ffmpeg。
-let ffmpegReady = null
-function hasFfmpeg() {
-  if (ffmpegReady !== null) return ffmpegReady
-  try {
-    require('node:child_process').execFileSync('ffmpeg', ['-version'], {
-      stdio: 'ignore',
-      timeout: 8000,
-      windowsHide: true,
-    })
-    ffmpegReady = true
-  } catch {
-    ffmpegReady = false
-  }
-  return ffmpegReady
-}
+// B 站 1080P 及以上基本只走 DASH（音视频分离），下载时用纯 JS 把两路合并成 MP4（不需要 ffmpeg）。
 
 async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
   const finalUrl = await resolveFinalUrl(rawUrl, cookie ? { cookie } : {})
@@ -622,10 +607,12 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
   }
   qualities.sort((left, right) => Number(right.quality) - Number(left.quality))
 
-  // B 站 1080P 及以上基本只走 DASH（音视频分离）：本机有 ffmpeg 时，把两路下载到本地合并成 MP4，
-  // 登录账号就能下到 1080P；没有 ffmpeg 就不列这些档位，避免下回来一个坏文件。
+  // B 站 1080P 及以上基本只走 DASH（音视频分离）：把两路下载到本地后用纯 JS 合并成 MP4，
+  // 登录账号就能下到 1080P。合并逻辑在 dashmerge.js，不依赖 ffmpeg。
+  // 超长视频（默认 45 分钟以上）合并时内存占用太大，这里不列 DASH 档，避免把别人机器搞崩。
+  const durationSec = Number(data.duration) || 0
+  const dashTooLong = durationSec > 2700
   const mp4Best = Number(qualities[0]?.quality) || 0
-  const canMerge = hasFfmpeg()
   let videoMax = formats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), 0)
   const dashQualities = []
   try {
@@ -633,10 +620,12 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
     const dash = dashJson?.data?.dash
     const dashFormats = Array.isArray(dashJson?.data?.support_formats) ? dashJson.data.support_formats : []
     videoMax = dashFormats.reduce((max, format) => Math.max(max, Number(format.quality) || 0), videoMax)
-    if (canMerge && dash) {
+    if (dash && !dashTooLong) {
       const videos = Array.isArray(dash.video) ? dash.video : []
       const audios = Array.isArray(dash.audio) ? dash.audio : []
-      const audio = [...audios].sort(
+      // 合并器只吃 AAC / Opus；优先挑 AAC 音轨，避免拿到杜比（ec-3）音轨合不了
+      const aacAudios = audios.filter((item) => /mp4a|aac/i.test(`${item.codecs || ''} ${item.codec || ''} ${item.mimeType || ''}`))
+      const audio = [...(aacAudios.length ? aacAudios : audios)].sort(
         (left, right) => (Number(right.bandwidth) || 0) - (Number(left.bandwidth) || 0),
       )[0]
       const audioUrl = audio?.baseUrl || audio?.base_url || ''
@@ -680,17 +669,17 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
   let login = Boolean(cookie)
   let qualityNote = ''
   if (dashQualities.length) {
-    qualityNote = `${bestLabel} 是 B 站的音视频分离流，下载时会在本机自动合并成一个 MP4（在线预览仍用 MP4 档位）。`
+    qualityNote = `${bestLabel} 是 B 站的音视频分离流，下载时会自动合并成一个 MP4（不需要 ffmpeg，在线预览仍用 MP4 档位）。`
+  } else if (dashTooLong && videoMax > bestQuality) {
+    qualityNote = `视频约 ${Math.round(durationSec / 60)} 分钟，1080P 音视频合并内存占用较大，暂不提供；可以下载 ${bestLabel} 或更短的视频。`
   } else if (bestQuality > 0 && videoMax > bestQuality) {
     const account = await biliAccount(cookie)
     login = account.login
-    qualityNote = !canMerge
-      ? `更高清晰度（1080P 及以上）是音视频分离的 DASH 流，本机没检测到 ffmpeg，暂时只能下载 ${bestLabel}；把 ffmpeg.exe 放进安装目录或 PATH 后重启即可解锁。`
-      : account.login
-        ? `当前账号在 B 站拿不到更高档位，单文件 MP4 最高 ${bestLabel}（1080P 高码率 / 4K 需要大会员）。`
-        : cookie
-          ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能解锁更高清晰度。'
-          : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
+    qualityNote = account.login
+      ? `当前账号在 B 站拿不到更高档位，单文件 MP4 最高 ${bestLabel}（1080P 高码率 / 4K 需要大会员）。`
+      : cookie
+        ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能解锁更高清晰度。'
+        : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
   } else if (videoMax > 0 && bestQuality > 0 && bestQuality <= 64) {
     qualityNote = `该视频在 B 站最高只提供 ${bestLabel}（视频本身的上限，和是否登录无关）。`
   }
