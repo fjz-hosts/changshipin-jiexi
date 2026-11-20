@@ -436,9 +436,12 @@ function biliMp4Durl(json) {
   return /\.mp4|mime_type=video_mp4/i.test(durl.url) || /\.mp4/i.test(durl.backup_url?.[0] || '')
 }
 
-async function biliPlayInfo({ bvid, aid, cid, qn = 80, cookie = '' }) {
+async function biliPlayInfo({ bvid, aid, cid, qn = 80, cookie = '', variant = 'auto' }) {
   const base = { ...(bvid ? { bvid } : { avid: aid }), cid, qn, fnval: 1, fourk: 1 }
-  const variants = [{ ...base, platform: 'html5', high_quality: 1 }, base]
+  const variants =
+    variant === 'pc'
+      ? [base]
+      : [{ ...base, platform: 'html5', high_quality: 1 }, base]
   const headers = biliHeaders(cookie)
   let last = null
   for (const params of variants) {
@@ -586,6 +589,18 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
       /* 单档失败不影响其它清晰度 */
     }
   }
+  // html5 端点通常只发 1080P / 360P 两档；登录后再走 PC 端点补一次 720P 等中间档
+  if (cookie) {
+    for (const qn of [80, 74, 64]) {
+      if (seenQuality.has(qn)) continue
+      try {
+        const play = await biliPlayInfo({ bvid, aid: data.aid, cid, qn, cookie, variant: 'pc' })
+        collectQuality(play)
+      } catch {
+        /* 补档失败无所谓 */
+      }
+    }
+  }
   qualities.sort((left, right) => Number(right.quality) - Number(left.quality))
 
   // 只有「接口说支持更高档、实际却只拿到 720P 以下」时才提示登录 / 权限问题
@@ -601,6 +616,8 @@ async function resolveBilibili(rawUrl, { cookie = '' } = {}) {
       : cookie
         ? 'B 站没识别到当前登录状态（Cookie 可能已过期），重新登录后再解析可能拿到更高清晰度。'
         : '更高清晰度需要登录 B 站账号：点平台卡片登录后再解析。'
+  } else if (maxFormat > 0 && bestQuality > 0 && bestQuality <= 64) {
+    qualityNote = `该视频在 B 站最高只提供 ${qualities[0]?.label || `${bestQuality}P`}（视频本身的上限，和是否登录无关）。`
   }
 
   const episodes = pages.map((page, index) => ({
@@ -773,7 +790,22 @@ async function resolveHongguo(rawUrl, { cookie = '' } = {}) {
     },
   ]
 
-  let episodes = vids.map((videoId, index) => ({
+  const total = Number(detail.episode_cnt) || vids.length
+  // 红果网页版只给前 N 集公开 mp4：第 N+1 集起播放页直接 404（登录也不放开）。
+  // 之前把 586 集全列出来，点「一键下载全集」会一串 404，所以只列真正能下载的集。
+  const accessible = Math.max(
+    1,
+    Math.min(Number(detail.accessible_episode_cnt) || vids.length, vids.length),
+  )
+  const wantedIndex = vid ? vids.findIndex((item) => String(item) === String(vid)) : -1
+  if (vid && wantedIndex >= accessible) {
+    return {
+      ok: false,
+      error: `第 ${wantedIndex + 1} 集在红果网页版没有开放（网页端只提供前 ${accessible} 集），完整剧集需要用红果 App 观看`,
+    }
+  }
+
+  let episodes = vids.slice(0, accessible).map((videoId, index) => ({
     index: index + 1,
     label: `第${index + 1}集`,
     title: `第${index + 1}集`,
@@ -799,9 +831,12 @@ async function resolveHongguo(rawUrl, { cookie = '' } = {}) {
     qualities: current?.qualities || [],
     episodes,
     seriesTitle: clean(detail.series_name, 80),
-    total: Number(detail.episode_cnt) || episodes.length,
-    accessible: Number(detail.accessible_episode_cnt) || episodes.length,
-    note: `共 ${Number(detail.episode_cnt) || episodes.length} 集，网页版官方只开放前 ${Number(detail.accessible_episode_cnt) || episodes.length} 集免费播放；其余分集可能需要登录或 App 内观看`,
+    total,
+    accessible,
+    note:
+      accessible < vids.length
+        ? `共 ${total} 集，红果网页版当前只开放前 ${accessible} 集（第 ${accessible + 1} 集起平台播放页直接 404）；已只列出能下载的集数，完整剧集需要红果 App。`
+        : `共 ${total} 集，全部可下载`,
   }
 }
 

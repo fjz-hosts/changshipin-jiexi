@@ -36,6 +36,21 @@ for n in range(1, 17):
 EP5 = EPISODES[4]['url']
 SERIES = {'platform': 'mgtv', 'title': '今天是太阳雨', 'seriesKey': 'demo:sunrain', 'episodes': EPISODES}
 
+# 短视频教程用的演示结果（不联网，视频用本地 poster.mp4）
+SHORT_DEMO = {
+    'platformKey': 'bilibili',
+    'platformName': '哔哩哔哩',
+    'title': '为了解《我相信》的最低音，做了全曲音高标注',
+    'author': 'Minecraft明沫',
+    'duration': 245,
+    'qualities': [
+        {'label': '1080P 高清 · 109.8 MB'},
+        {'label': '720P 准高清 · 42.4 MB'},
+        {'label': '360P 流畅 · 15.7 MB'},
+    ],
+    'note': '',
+}
+
 HISTORY = [
     # (url, title, episode, progress, duration)
     ('https://www.iqiyi.com/v_b13ju3xx7s.html', '庆余年 第二季 第18集', '第18集', 2500, 2700),
@@ -566,6 +581,58 @@ def main():
         ] if b]
         capture(c, '09-settings')
         shots['settings'] = {'raw': '09-settings.png', 'boxes': set_boxes, 'dim': 0.2}
+
+        # 10. 短视频（演示结果，视频用本地 poster.mp4）
+        c.ev("document.querySelector('#modal-close')?.click(); true")
+        time.sleep(0.5)
+        c.ev("window.__app.switchMode('short', { force: true }); true")
+        time.sleep(0.8)
+        c.ev(f"""(() => {{
+          const demo = {json.dumps(SHORT_DEMO, ensure_ascii=False)};
+          const s = window.__app.getState();
+          s.shortResult = demo;
+          document.querySelector('#short-empty').hidden = true;
+          document.querySelector('#short-loading').hidden = true;
+          document.querySelector('#short-error').hidden = true;
+          document.querySelector('#short-result').hidden = false;
+          document.querySelector('#short-reparse').hidden = false;
+          const input = document.querySelector('#short-url-input');
+          input.value = 'https://www.bilibili.com/video/BV1y7411Q7Eq';
+          const badge = document.querySelector('#short-platform-badge');
+          badge.textContent = '哔哩哔哩';
+          badge.classList.add('known');
+          badge.style.setProperty('--brand', '#fb7299');
+          document.querySelector('#short-title').textContent = demo.title;
+          document.querySelector('#short-meta').textContent = '哔哩哔哩 · Minecraft明沫 · 4:05';
+          const sel = document.querySelector('#short-quality');
+          sel.innerHTML = '';
+          demo.qualities.forEach((q, i) => {{
+            const option = document.createElement('option');
+            option.value = String(i);
+            option.textContent = q.label;
+            sel.appendChild(option);
+          }});
+          const v = document.querySelector('#short-video');
+          v.muted = true;
+          v.src = 'http://127.0.0.1:{http_port}/poster.mp4';
+          v.play().catch(() => {{}});
+          document.querySelector('#short-cover').hidden = true;
+          document.body.classList.add('short-scroll');
+          window.scrollTo(0, 0);
+          return true;
+        }})()""")
+        time.sleep(2.2)
+        # 短视频结果是整页滚动的，往下滚一点让「清晰度 / 下载」那排也进画面
+        c.ev('window.scrollTo(0, 48); true')
+        time.sleep(0.6)
+        short_boxes = [b for b in [
+            box(c, '.short-platform-grid', 1),
+            box(c, '.short-parse-row', 2),
+            box(c, '.short-actions', 3),
+            box(c, '.short-queue-panel', 4),
+        ] if b]
+        capture(c, '10-short')
+        shots['short'] = {'raw': '10-short.png', 'boxes': short_boxes, 'dim': 0.36}
 
         with open(os.path.join(GUIDE_DIR, 'shots.json'), 'w', encoding='utf-8') as f:
             json.dump({'viewport': [vw, vh], 'shots': shots}, f, ensure_ascii=False, indent=2)

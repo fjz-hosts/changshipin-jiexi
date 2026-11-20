@@ -143,3 +143,31 @@ node tools\cdp-test9.mjs
   导致 NSIS 安装器没有 `TEMP`/`PATH`，报临时文件错误。该补丁只作为本地诊断，**不是发版依赖**；
   重装 node_modules 会丢，别再为它反复折腾本机打包，直接用 CI。
 - 本机出现过 `2tX9W8.exe` / `XPSPLOG.dll` 反复崩溃、SmartScreen 卡住未签名安装器的情况；遇到就改用 CI 产物或隔离目录验证。
+
+## 6. 界面改动必须同步更新图文教程
+
+改界面（布局、按钮、平台卡片、弹窗、提示条、文案）之后，**同一版必须重新生成「使用教程 · 图文版」的截图和 PDF**，
+不能只改代码。用户明确要求过这一条：界面已经改了、教程里还是旧界面，算没做完。
+
+```powershell
+cd F:\Desktop\长视频解析
+
+# 1. 没有演示视频时先生成（需要 ffmpeg 和 Pillow）
+python tools\guide\make_poster.py
+
+# 2. 真实启动开发版抓图（01–09 长视频 + 10 短视频），输出 .tmp\guide\raw\*.png 和 shots.json
+python tools\guide\capture.py
+
+# 3. 加红框 / 编号，写回 desktop\electron\src\renderer\assets\guide\guide-*.webp
+python tools\guide\annotate.py
+
+# 4. 重新导出 docs\长视频解析-图文使用教程.pdf
+python tools\guide\make_pdf.py
+```
+
+- 应用内教程正文在 `desktop/electron/src/renderer/index.html` 的 `guide-*` 区块；截图里的编号 ①②③ 必须和正文对得上，
+  界面元素挪了位置就顺手把 alt / figcaption / 列表说明一起改。
+- 新增一张教程截图：在 `tools\guide\capture.py` 里加一段截屏 + `shots[...]` 配置（`raw`、`boxes`、`dim`），
+  再到 `tools\guide\annotate.py` 的 `SHOT_NAMES` / `TARGET_WIDTH` 里登记，才会生成对应的 `guide-XX-*.webp`。
+- `capture.py` 用 `.tmp\guide\userdata` 和本地 `poster.mp4` 演示，不碰正式安装目录；短视频那张是注入的演示结果，不联网。
+- 发版前 `desktop\verify.ps1` 会检查教程章节和图片能加载；截图没更新就当作没改完，别发版。

@@ -30,6 +30,7 @@ SHOT_NAMES = {
     'download': 'guide-07-download',
     'fullscreen': 'guide-08-fullscreen',
     'settings': 'guide-09-settings',
+    'short': 'guide-10-short',
 }
 
 TARGET_WIDTH = {
@@ -42,6 +43,7 @@ TARGET_WIDTH = {
     'download': 1600,
     'fullscreen': 1600,
     'settings': 1500,
+    'short': 1600,
 }
 
 

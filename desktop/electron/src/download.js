@@ -30,6 +30,8 @@ function sanitizeFileName(raw, fallback = '视频') {
   return cleaned || fallback
 }
 
+const MEDIA_EXT_RE = /\.(?:mp4|ts|m4v|flv|webm|mkv)$/i
+
 function uniquePath(dir, base, ext) {
   let candidate = path.join(dir, `${base}${ext}`)
   let index = 1
@@ -38,6 +40,25 @@ function uniquePath(dir, base, ext) {
     index += 1
   }
   return candidate
+}
+
+// 之前下过同名文件就不再重复下载，避免点两次出现「标题 (1).mp4」
+function findDownloadedFile(dir, base) {
+  let names = []
+  try {
+    names = fs.readdirSync(dir)
+  } catch {
+    return ''
+  }
+  for (const name of names) {
+    const match = name.match(MEDIA_EXT_RE)
+    if (!match) continue
+    const stem = name.slice(0, name.length - match[0].length)
+    const suffix = stem.slice(base.length)
+    const isSame = stem === base || (stem.startsWith(base) && /^ \(\d+\)$/.test(suffix))
+    if (isSame) return path.join(dir, name)
+  }
+  return ''
 }
 
 // TS → fMP4 转封装（不依赖 ffmpeg）。失败时返回 null，由调用方退回 .ts。
@@ -196,6 +217,11 @@ class DownloadManager {
       `${platform ? `${platform} ` : ''}${title || '视频'}${lineName ? ` ${lineName}` : ''}`,
       '视频',
     )
+    const existing = findDownloadedFile(folder, baseName)
+    if (existing) {
+      this.log(`[下载] 已存在，跳过：${existing}`)
+      return { ok: false, exists: true, savedPath: existing, title: title || baseName }
+    }
     const job = {
       id,
       controller: new AbortController(),

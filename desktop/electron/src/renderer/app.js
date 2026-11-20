@@ -1393,6 +1393,12 @@
       (state.series?.title ? `${state.series.title} ${state.currentEpisode || ''}`.trim() : '') ||
       ''
     const result = await window.desktop.downloadCurrent({ title })
+    if (result?.exists) {
+      const name = String(result.savedPath || '').split(/[\\/]/).pop()
+      toast(`之前已经下载过${name ? `：${name}` : ''}，已跳过`, 'ok', 5200)
+      setDownloadButton()
+      return
+    }
     if (!result?.ok) {
       toast(`下载失败：${result?.error || '未知原因'}`, 'error', 5200)
       return
@@ -1762,7 +1768,9 @@
           item.status === 'running'
             ? `下载中 ${Number(item.percent) || 0}%`
             : item.status === 'done'
-              ? '已完成'
+              ? item.existed
+                ? '已存在，跳过'
+                : '已完成'
               : item.status === 'failed'
                 ? `失败${item.error ? `：${escapeHtml(item.error)}` : ''}`
                 : item.status === 'cancelled'
@@ -1831,6 +1839,7 @@
   async function processShortQueue() {
     if (state.shortQueueRunning) return
     state.shortQueueRunning = true
+    let skipped = 0
     try {
       for (;;) {
         const item = state.shortQueue.find((entry) => entry.status === 'queued')
@@ -1851,6 +1860,15 @@
           })
         } catch (error) {
           response = { ok: false, error: String(error?.message || error) }
+        }
+        if (response?.exists) {
+          // 同名文件已经下过，直接跳过，不再生成「标题 (1).mp4」
+          item.status = 'done'
+          item.existed = true
+          item.savedPath = response.savedPath || ''
+          skipped += 1
+          renderShortQueue()
+          continue
         }
         if (!response?.ok) {
           item.status = 'failed'
@@ -1873,6 +1891,7 @@
     } finally {
       state.shortQueueRunning = false
       renderShortQueue()
+      if (skipped > 0) toast(`有 ${skipped} 个文件之前已经下载过，已跳过`, 'ok', 4600)
     }
   }
 

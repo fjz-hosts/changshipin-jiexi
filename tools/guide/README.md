@@ -1,11 +1,14 @@
 # 图文教程截图生成
 
-应用里的「使用教程 · 图文版」用到的 9 张截图，都从这个目录的脚本生成。截图是真实运行
-开发版后抓的，再用 Pillow 加红框 / 聚光灯 / 编号。
+应用里的「使用教程 · 图文版」用到的 10 张截图（01–09 长视频 + 10 短视频），都从这个目录的脚本生成。
+截图是真实运行开发版后抓的，再用 Pillow 加红框 / 聚光灯 / 编号。
+
+**界面改了就一定要重新跑一遍**（这是项目规则 AGENTS.md 第 6 节）：布局、按钮、平台卡片、弹窗、提示条变了，
+教程里还是旧界面，用户会当成 bug。
 
 ## 产物
 
-- 应用内图片：`desktop/electron/src/renderer/assets/guide/guide-0*.webp`
+- 应用内图片：`desktop/electron/src/renderer/assets/guide/guide-0*.webp`（10 张，含 guide-10-short）
 - 原始截图 / 中间产物：`.tmp/guide/`（不进 git）
 - 预览图：`.tmp/guide/out/*.png`
 
