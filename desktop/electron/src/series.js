@@ -236,6 +236,7 @@ async function fetchIqiyiEpisodes(url, { tvid = '', pageTitle = '', cookie = '' 
   if (!albumId) return { ok: false, error: `爱奇艺没有返回专辑 ID（tvid=${resolvedTvid}）` }
 
   const episodes = []
+  const now = Date.now()
   for (let page = 1; page <= 5; page += 1) {
     const response = await fetchJson(`https://pcw-api.iqiyi.com/albums/album/avlistinfo?aid=${encodeURIComponent(albumId)}&page=${page}&size=100`, {
       headers,
@@ -247,6 +248,10 @@ async function fetchIqiyiEpisodes(url, { tvid = '', pageTitle = '', cookie = '' 
       const playUrl = absUrl(item.playUrl, 'https://www.iqiyi.com/')
       if (!playUrl) continue
       const index = episodeIndex(item.name, item.order, episodes.length + 1)
+      // 还没到播出时间 / 已下线：显示成灰色不可点，避免点进去解析失败
+      const issueAt = Number(item.issueTime) || 0
+      const notAired = issueAt > now + 2 * 60 * 1000
+      const disabled = item.effective === false || notAired
       episodes.push({
         label: episodeLabel(item.name, index, ''),
         title: clean(item.name, 100),
@@ -254,6 +259,7 @@ async function fetchIqiyiEpisodes(url, { tvid = '', pageTitle = '', cookie = '' 
         url: playUrl.replace(/^http:\/\//i, 'https://'),
         index,
         vip: Number(item.payMark) > 0,
+        disabled,
       })
     }
     if (!data.hasMore) break

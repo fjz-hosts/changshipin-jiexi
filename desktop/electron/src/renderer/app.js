@@ -817,11 +817,15 @@
       const button = document.createElement('button')
       button.type = 'button'
       button.className = 'episode-item'
-      if (episode.vip) button.classList.add('vip')
-      if (sameVideoUrl(episode.url, state.currentVideoUrl)) button.classList.add('active')
       const label = episode.label || `第${episode.index || ''}集`
-      button.title = [episode.title || label, episode.subtitle].filter(Boolean).join(' · ') + (episode.vip ? '（VIP）' : '')
-      button.innerHTML = `<span>${escapeHtml(label)}</span>${episode.vip ? '<i class="episode-vip">VIP</i>' : ''}`
+      if (episode.disabled) {
+        button.classList.add('disabled')
+        button.disabled = true
+      }
+      if (sameVideoUrl(episode.url, state.currentVideoUrl)) button.classList.add('active')
+      const tip = [episode.title || label, episode.subtitle].filter(Boolean).join(' · ')
+      button.title = episode.disabled ? `${tip}（还没有更新）` : tip
+      button.innerHTML = `<span>${escapeHtml(label)}</span>`
       button.addEventListener('click', () => switchEpisode(episode))
       list.appendChild(button)
     }
@@ -872,6 +876,10 @@
 
   function switchEpisode(episode) {
     if (!episode || !episode.url) return
+    if (episode.disabled) {
+      toast('这一集还没有更新，等更新后再看', 'warn', 4200)
+      return
+    }
     if (sameVideoUrl(episode.url, state.currentVideoUrl) && state.lastResult) {
       toast('已经是这一集了')
       return
@@ -898,9 +906,17 @@
       return
     }
     const index = seriesCurrentIndex(series, state.currentVideoUrl)
-    const target = index < 0 ? series.episodes[delta > 0 ? 0 : series.episodes.length - 1] : series.episodes[index + delta]
+    const step = delta > 0 ? 1 : -1
+    const start = index < 0 ? (step > 0 ? -1 : series.episodes.length) : index
+    let target = null
+    for (let i = start + step; i >= 0 && i < series.episodes.length; i += step) {
+      if (!series.episodes[i].disabled) {
+        target = series.episodes[i]
+        break
+      }
+    }
     if (!target) {
-      toast(delta > 0 ? '已经是最后一集了' : '已经是第一集了', 'warn')
+      toast(delta > 0 ? '后面没有可播放的集了' : '前面没有可播放的集了', 'warn')
       return
     }
     switchEpisode(target)
