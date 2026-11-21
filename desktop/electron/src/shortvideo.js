@@ -27,7 +27,7 @@ const SHORT_PLATFORMS = [
     hosts: ['douyin.com', 'iesdouyin.com'],
     color: '#ff2d55',
     partition: 'persist:short-douyin',
-    hint: 'v.douyin.com/xxx 或 douyin.com/video/xxx',
+    hint: 'v.douyin.com/xxx、douyin.com/video/xxx 或 douyin.com/collection/xxx',
   },
   {
     key: 'bilibili',
@@ -228,6 +228,21 @@ function douyinIdFromUrl(url) {
   return ''
 }
 
+// 抖音合集 / 短剧：/collection/<id>、/mix/detail/<id>、?mix_id=<id>
+function douyinMixIdFromUrl(url) {
+  const patterns = [
+    /\/collection\/(\d{10,25})/,
+    /\/mix\/detail\/(\d{10,25})/,
+    /[?&]mix_id=(\d{10,25})/,
+    /\/share\/mix\/(\d{10,25})/,
+  ]
+  for (const pattern of patterns) {
+    const match = String(url || '').match(pattern)
+    if (match) return match[1]
+  }
+  return ''
+}
+
 function findDeep(node, predicate, depth = 0) {
   if (!node || typeof node !== 'object' || depth > 8) return null
   if (predicate(node)) return node
@@ -283,10 +298,113 @@ function douyinCover(item) {
   return (cover.url_list || [])[0] || item?.cover || ''
 }
 
+// 抖音合集 / 短剧：mix/detail 拿剧名，mix/item/list 分页拿全部剧集。
+// 这两个接口不需要签名，短剧在抖音里通常就是一个 mix（合集）。
+async function douyinMixItems(mixId, { cookie = '' } = {}) {
+  const headers = {
+    referer: `https://www.iesdouyin.com/share/mix/detail/${mixId}`,
+    'accept-language': 'zh-CN,zh;q=0.9',
+    ...(cookie ? { cookie } : {}),
+  }
+  let detail = null
+  try {
+    const response = await fetchJson(`https://www.iesdouyin.com/web/api/mix/detail/?mix_id=${mixId}`, {
+      headers,
+      ua: MOBILE_UA,
+    })
+    detail = response.json?.mix_info || null
+  } catch {
+    /* 剧名拿不到不影响剧集 */
+  }
+
+  const items = []
+  const seen = new Set()
+  let cursor = 0
+  let hasMore = true
+  for (let page = 0; page < 10 && hasMore; page += 1) {
+    let data = null
+    try {
+      const response = await fetchJson(
+        `https://www.iesdouyin.com/web/api/mix/item/list/?mix_id=${mixId}&count=20&cursor=${cursor}`,
+        { headers, ua: MOBILE_UA },
+      )
+      data = response.json
+    } catch {
+      break
+    }
+    if (data?.status_code !== 0) break
+    const list = Array.isArray(data.aweme_list) ? data.aweme_list : []
+    for (const item of list) {
+      const id = String(item?.aweme_id || item?.awemeId || '')
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      items.push(item)
+    }
+    hasMore = Boolean(data.has_more) && list.length > 0
+    const next = Number(data.cursor)
+    if (!Number.isFinite(next) || next <= cursor) break
+    cursor = next
+  }
+  return { mix: detail, items }
+}
+
+async function resolveDouyinMix(mixId, { cookie = '', pageUrl = '', currentAwemeId = '' } = {}) {
+  const { mix, items } = await douyinMixItems(mixId, { cookie })
+  if (!items.length) return { ok: false, error: '抖音合集没有返回剧集（可能需要登录，或该合集不是公开的）' }
+
+  const seriesTitle = clean(mix?.mix_name || mix?.desc || items[0]?.desc || '抖音合集', 120)
+  const episodes = []
+  for (const item of items) {
+    const index = episodes.length + 1
+    const title = clean(item.desc || item.item_title || '', 120)
+    const qualities = douyinQualities(item.video)
+    episodes.push({
+      index,
+      label: `第${index}集`,
+      title: title || `第${index}集`,
+      url: `https://www.douyin.com/video/${item.aweme_id}`,
+      qualities,
+    })
+  }
+  const currentIndex = currentAwemeId
+    ? episodes.findIndex((episode) => episode.url.endsWith(`/${currentAwemeId}`))
+    : -1
+
+  const firstQuality = episodes.find((episode) => episode.qualities.length)?.qualities || []
+  const charge = mix?.charge_episodes
+  const chargeCount = Array.isArray(charge) ? charge.length : Number(charge) || 0
+  const paid = chargeCount > 0 || Number(mix?.ban_episode_count) > 0
+  return {
+    ok: true,
+    platform: 'douyin',
+    kind: 'series',
+    title: seriesTitle,
+    seriesTitle,
+    author: clean(mix?.author?.nickname || '', 40),
+    cover: (mix?.cover_url?.url_list || [])[0] || douyinCover(items[0]),
+    duration: 0,
+    pageUrl: pageUrl || `https://www.douyin.com/collection/${mixId}`,
+    referer: 'https://www.douyin.com/',
+    cookie,
+    itemId: mixId,
+    qualities: firstQuality,
+    episodes,
+    total: episodes.length,
+    currentIndex: currentIndex >= 0 ? currentIndex : 0,
+    note: paid
+      ? `共 ${episodes.length} 集，其中部分集数可能需要付费/登录才能看完整版`
+      : `共 ${episodes.length} 集，可直接下载全部剧集`,
+  }
+}
+
 async function resolveDouyin(rawUrl, { cookie = '' } = {}) {
   const finalUrl = await resolveFinalUrl(rawUrl, cookie ? { cookie } : {})
+  // 直接粘贴合集 / 短剧链接：不需要先找单个作品，直接按 mix 拉全集
+  const mixIdInUrl = douyinMixIdFromUrl(finalUrl) || douyinMixIdFromUrl(rawUrl)
+  if (mixIdInUrl) return await resolveDouyinMix(mixIdInUrl, { cookie, pageUrl: finalUrl || rawUrl })
+
   const awemeId = douyinIdFromUrl(finalUrl) || douyinIdFromUrl(rawUrl)
-  if (!awemeId) return { ok: false, error: '没有从链接里识别出抖音作品 ID，请复制单个视频的分享链接' }
+  if (!awemeId) return { ok: false, error: '没有从链接里识别出抖音作品 ID，请复制单个视频或合集链接' }
 
   const headers = { referer: 'https://www.douyin.com/', ...(cookie ? { cookie } : {}) }
   const pages = [
@@ -324,6 +442,21 @@ async function resolveDouyin(rawUrl, { cookie = '' } = {}) {
     }
   }
   if (!item) return { ok: false, error: '抖音页面没有返回作品信息（可能需要登录或触发了风控），可稍后重试' }
+
+  // 当前视频属于某个合集 / 短剧：返回整部剧，而不是只返回当前这一集
+  const mixId = String(item.mix_info?.mix_id || item.mix_info?.mixId || item.mixInfo?.mixId || '')
+  if (mixId) {
+    try {
+      const series = await resolveDouyinMix(mixId, {
+        cookie,
+        pageUrl: `https://www.douyin.com/video/${awemeId}`,
+        currentAwemeId: awemeId,
+      })
+      if (series.ok && series.episodes?.length > 1) return series
+    } catch {
+      /* 合集接口失败时退回单集 */
+    }
+  }
 
   const video = item.video || {}
   const qualities = douyinQualities(video)

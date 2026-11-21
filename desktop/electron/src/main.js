@@ -1023,9 +1023,12 @@ async function readLoginState(platform) {
 function attachProxyUrls(result, cookie) {
   if (!proxy || !result) return result
   const referer = result.referer || ''
+  // 抖音的 Cookie 经常很大，塞进本地代理的 X-Proxy-Cookie 会让 CDN 返回 431；
+  // 直链本身是签名地址，预览/下载都不需要整份登录 Cookie。
+  const proxyCookie = result.platform === 'douyin' ? '' : cookie
   const withProxy = (item) =>
     item && item.url
-      ? { ...item, originalUrl: item.url, playUrl: proxy.resourceUrl(item.url, referer, cookie) }
+      ? { ...item, originalUrl: item.url, playUrl: proxy.resourceUrl(item.url, referer, proxyCookie) }
       : item
   return {
     ...result,
@@ -1116,15 +1119,20 @@ function registerIpc() {
     if (!line) return { ok: false, error: '没有可用的解析线路，请先在「线路管理」里启用一条线路' }
     try {
       let cookieHeader = ''
-      if (line.kind === 'mgtv') {
-        try {
-          const cookies = await session
-            .fromPartition('persist:platform-mgtv')
-            .cookies.get({ domain: 'mgtv.com' })
-          cookieHeader = cookies.map((item) => `${item.name}=${item.value}`).join('; ')
-          log(`芒果TV 原生解析：携带 ${cookies.length} 条登录 Cookie`)
-        } catch {
-          /* 没有登录也没关系 */
+      if (line.kind === 'mgtv' || line.kind === 'native') {
+        const platformKey = line.platform || detectPlatformByUrl(url)?.key || ''
+        const cookieDomain = { mgtv: 'mgtv.com', qq: 'qq.com', iqiyi: 'iqiyi.com', youku: 'youku.com' }[platformKey] || ''
+        const platformName = { mgtv: '芒果TV', qq: '腾讯视频', iqiyi: '爱奇艺', youku: '优酷' }[platformKey] || platformKey
+        if (cookieDomain) {
+          try {
+            const cookies = await session
+              .fromPartition(`persist:platform-${platformKey}`)
+              .cookies.get({ domain: cookieDomain })
+            cookieHeader = cookies.map((item) => `${item.name}=${item.value}`).join('; ')
+            log(`${platformName} 原生解析：携带 ${cookies.length} 条登录 Cookie`)
+          } catch {
+            /* 没有登录也没关系 */
+          }
         }
       }
       const result = await parseWithLine({ videoUrl: url, line, cookieHeader })
@@ -1377,10 +1385,12 @@ function registerIpc() {
     const url = String(payload.url || '')
     if (!/^https?:\/\//i.test(url)) return { ok: false, error: '没有可下载的直链' }
     const platform = detectShortPlatform(payload.pageUrl || payload.referer || url)
+    // 抖音 CDN 对超大的 Cookie 请求头会直接返回 431；直链已签名，下载时只带 Referer/UA。
+    const cookie = platform?.key === 'douyin' ? '' : String(payload.cookie || '')
     const result = downloader.start({
       url,
       referer: String(payload.referer || '') || platform?.home || '',
-      cookie: String(payload.cookie || ''),
+      cookie,
       title: String(payload.title || '短视频'),
       platform: String(payload.platform || platform?.name || '短视频'),
       subdir: String(payload.subdir || ''),

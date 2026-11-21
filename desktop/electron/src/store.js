@@ -147,6 +147,7 @@ class Store {
   _defaults() {
     return {
       version: CONFIG_VERSION,
+      nativeParseVersion: 2,
       lines: DEFAULT_LINES.map((line, index) => normalizeLine(line, index)),
       defaultLineId: DEFAULT_LINES[0]?.id || '',
       history: [],
@@ -165,11 +166,35 @@ class Store {
       const raw = fs.readFileSync(this.file, 'utf8')
       const data = JSON.parse(raw)
       const lines = Array.isArray(data.lines) ? data.lines.map(normalizeLine).filter(Boolean) : []
+      const migrateNative = (Number(data.nativeParseVersion) || 0) < 2
       for (const line of lines) {
         if (line.id === 'builtin-mgtv-native') {
           line.kind = 'mgtv'
           line.url = 'mgtv://auto'
           line.platform = 'mgtv'
+        }
+        // v1.2.12：原生取流实验改名为「原生解析」。腾讯视频按 yt-dlp 流程接好，
+        // 但只作为第三方线路失败后的备用，不再抢 789 的首位；爱奇艺 / 优酷的
+        // yt-dlp 解析器目前失效，保持关闭。
+        // 只迁移一次：之后用户手动调整启用状态，不会被下一次启动覆盖。
+        if (migrateNative && line.kind === 'native') {
+          line.url = 'native://auto'
+          if (line.id === 'builtin-qq-native') {
+            line.name = '腾讯视频 原生解析'
+            line.platform = 'qq'
+            line.note = '备用线路：第三方线路都失败后才尝试。腾讯视频官方接口（按 yt-dlp 流程），电影 / 电视剧 / 动漫通用；免费内容 720P，付费电影通常只给试听'
+            line.enabled = true
+          } else if (line.id === 'builtin-iqiyi-native') {
+            line.name = '爱奇艺 原生解析'
+            line.platform = 'iqiyi'
+            line.note = 'yt-dlp 当前无法解析新版爱奇艺页面（播放地址由 cmd5x 签名接口下发，旧接口已失效），暂不启用；失败会自动用第三方线路'
+            line.enabled = false
+          } else if (line.id === 'builtin-youku-native') {
+            line.name = '优酷 原生解析'
+            line.platform = 'youku'
+            line.note = 'yt-dlp 的 ups.youku.com 接口对匿名设备返回 -6004（限制播放），暂不启用；失败会自动用第三方线路'
+            line.enabled = false
+          }
         }
       }
       // 升级时把新版本新增的内置线路补进旧配置（例如芒果TV 原生解析），
@@ -185,6 +210,7 @@ class Store {
         ...defaults,
         ...data,
         version: CONFIG_VERSION,
+        nativeParseVersion: 2,
         lines: lines.length ? lines : defaults.lines,
         history: normalizeHistory(data.history),
         lineHealth: normalizeHealth(data.lineHealth),

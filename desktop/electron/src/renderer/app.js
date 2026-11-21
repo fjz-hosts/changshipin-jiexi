@@ -176,7 +176,13 @@
     const path = url.pathname
     if (host === 'v.douyin.com' || host.endsWith('.v.douyin.com')) return 'douyin'
     if (host.endsWith('douyin.com') || host.endsWith('iesdouyin.com')) {
-      return /\/video\/\d+/.test(path) || /\/note\/\d+/.test(path) || url.searchParams.get('modal_id') ? 'douyin' : null
+      return /\/video\/\d+/.test(path) ||
+        /\/note\/\d+/.test(path) ||
+        /\/collection\/\d+/.test(path) ||
+        /\/mix\/detail\/\d+/.test(path) ||
+        url.searchParams.get('modal_id')
+        ? 'douyin'
+        : null
     }
     if (host === 'b23.tv' || host.endsWith('bili2233.cn')) return 'bilibili'
     if (host.endsWith('bilibili.com')) {
@@ -1199,6 +1205,14 @@
         enableWorker: false,
         lowLatencyMode: false,
         backBufferLength: 30,
+        // 腾讯 / 芒果的原生播放列表在部分网络下要几十秒才回来，HLS.js 默认 10 秒就放弃，
+        // 这里放宽到 90 秒，避免「已经解析成功却一直黑屏」。
+        manifestLoadingTimeOut: 90000,
+        levelLoadingTimeOut: 90000,
+        fragLoadingTimeOut: 60000,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
+        fragLoadingMaxRetry: 3,
       })
       state.hls = hls
       hls.on(window.Hls.Events.ERROR, (_event, data) => {
@@ -1960,7 +1974,8 @@
     }
     const isSeries = Array.isArray(result.episodes) && result.episodes.length > 1
     const subdir = isSeries ? result.seriesTitle || result.title || '' : ''
-    const episode = result.episodes?.[0]
+    const currentIndex = Number.isInteger(result.currentIndex) ? result.currentIndex : 0
+    const episode = result.episodes?.[currentIndex] || result.episodes?.[0]
     enqueueShortDownload({
       title: isSeries ? `${result.seriesTitle || result.title} ${episode?.label || ''}`.trim() : result.title,
       url: payload.url,
@@ -1990,6 +2005,25 @@
       let quality = (episode.qualities || [])[0]
       let referer = result.referer
       let cookie = result.cookie
+      if (!quality && (result.platformKey === 'douyin' || result.platform === 'douyin')) {
+        // 抖音合集里没拿到直链的集数（付费 / 风控 / 已下架）不要再按单集解析，
+        // 否则会重新解析成整部合集，拿错成第一集的清晰度。
+        state.shortQueue.push({
+          key: `q-${Date.now()}-${state.shortQueue.length}`,
+          title: `${subdir} ${episode.label || `第${index + 1}集`}`,
+          url: '',
+          referer: '',
+          cookie: '',
+          subdir,
+          platform: result.platformName,
+          status: 'failed',
+          percent: 0,
+          id: '',
+          error: '该集没有返回直链（可能需要登录/付费）',
+          savedPath: '',
+        })
+        continue
+      }
       if (!quality) {
         setStatus(`正在解析 ${episode.label || `第${index + 1}集`}…`)
         let single = null
@@ -2092,7 +2126,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // 平台原生取流（实验）
+  // 平台原生解析（按 yt-dlp 的官方接口流程）
   // ---------------------------------------------------------------------------
 
   function nativeLineFor(url) {
@@ -2106,21 +2140,21 @@
     const button = $('#btn-native')
     if (!button) return
     const line = nativeLineFor(state.currentVideoUrl)
-    // 实验功能：只有在「线路管理」里启用了原生取流线路才显示按钮，避免普通用户误点
+    // 只有在「线路管理」里启用了原生解析线路才显示按钮，避免普通用户误点
     button.hidden = !line || line.enabled === false
     button.disabled = !line || state.running
     button.title = line
-      ? `用「${line.name}」打开平台原片页，抓它自己的播放流；免费内容可用，会员 DRM 内容会自动失败`
+      ? `用「${line.name}」直接调用平台官方接口（按 yt-dlp 流程）；免费内容可用，会员 / DRM 内容会自动失败`
       : ''
   }
 
   async function tryNative() {
     const line = nativeLineFor(state.currentVideoUrl)
     if (!line) {
-      toast('这个平台还没有原生取流线路', 'warn')
+      toast('这个平台还没有原生解析线路', 'warn')
       return
     }
-    toast('正在平台原片页里抓真实播放流，通常需要 5–15 秒…', 'ok', 4200)
+    toast('正在调用平台官方接口解析，通常需要 2–10 秒…', 'ok', 4200)
     startParse({
       url: state.currentVideoUrl,
       lineId: line.id,
@@ -2153,10 +2187,14 @@
     const isDead = (line) => state.lineHealth[line.id]?.ok === false
     // 体检失效的线路不删除，只排到最后：接口可能只是临时抽风，真到那一步还会再试。
     const ordered = [...enabled.filter((line) => !isDead(line)), ...enabled.filter(isDead)]
-    // 只有芒果TV 默认用平台专属（原生）线路；爱奇艺 / 腾讯 / 优酷 一律从当前（默认 789）线路开始按顺序往下，
-    // 平台专属线路只作为后面的兜底，不再抢在 789 前面。
-    const mgtvNative = platformKey === 'mgtv' ? ordered.find((line) => line.platform === 'mgtv') : null
-    const primary = mgtvNative || ordered.find((line) => line.id === primaryId) || ordered[0]
+    // 只有芒果TV 默认用平台原生解析；腾讯视频的原生解析作为「备用」，
+    // 不抢在 789 等第三方线路前面，第三方线路都失败后才会被尝试。
+    const nativePlatforms = new Set(['mgtv'])
+    const platformNative =
+      platformKey && nativePlatforms.has(platformKey)
+        ? ordered.find((line) => line.platform === platformKey && (line.kind === 'mgtv' || line.kind === 'native'))
+        : null
+    const primary = platformNative || ordered.find((line) => line.id === primaryId) || ordered[0]
     const chain = [primary, ...ordered.filter((line) => line.id !== primary.id)]
     return state.config?.autoFallback === false ? [primary] : chain
   }
@@ -2298,18 +2336,18 @@
     }
 
     // 最后兜底：只有芒果TV 需要「平台原生解析」。
-    // 爱奇艺 / 腾讯 / 优酷 保持原来的第三方线路顺序（默认从 789 解析开始），
-    // 不再自动改用原生取流。
+    // 腾讯视频的原生解析已经作为普通线路排在换线链末尾（启用时），不在这里重复尝试。
     if (chain && platform && platform.key === 'mgtv') {
       const nativeId = `builtin-${platform.key}-native`
       const nativeLine = (state.config.lines || []).find((item) => item.id === nativeId && item.enabled !== false)
-      if (nativeLine) {
-        showLoading('正在用平台自己的播放器取流…', '网页线路都没成功，正在尝试平台原生播放；登录会员后效果更好。')
+      const alreadyTried = lines.some((item) => item.id === nativeId)
+      if (nativeLine && !alreadyTried) {
+        showLoading('正在用平台官方接口解析…', '网页线路都没成功，正在尝试平台原生解析；登录会员后效果更好。')
         let nativeResult = null
         try {
           nativeResult = await window.desktop.parse({ url: videoUrl, lineId: nativeId })
         } catch {
-          /* 原生取流失败就走后面的报错 */
+          /* 原生解析失败就走后面的报错 */
         }
         if (token !== state.runToken) return
         if (nativeResult?.ok && nativeResult.kind === 'stream') {
@@ -2320,7 +2358,7 @@
             playStream(nativeResult)
             onParseSuccess(nativeLine)
             hideTrialTip()
-            toast('网页线路失败，已改用平台原生取流', 'ok', 5200)
+            toast('网页线路失败，已改用平台原生解析', 'ok', 5200)
             return
           }
           failures.push(`${nativeLine.name}：只有 ${formatSeconds(seconds) || '短暂'} 试看`)
@@ -2868,7 +2906,7 @@
     { value: 'page', label: '网页' },
     { value: 'api', label: '接口' },
     { value: 'mgtv', label: '芒果内置' },
-    { value: 'native', label: '原生取流' },
+    { value: 'native', label: '原生解析' },
     { value: 'direct', label: '直连' },
   ]
 

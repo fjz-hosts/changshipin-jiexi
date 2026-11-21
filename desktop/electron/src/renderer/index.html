@@ -298,7 +298,7 @@
             <div class="stage-tools">
               <button class="tool-btn" id="btn-reload" title="重新加载当前画面">刷新</button>
               <button class="tool-btn" id="btn-next-line" title="换一条解析线路">换线路</button>
-              <button class="tool-btn" id="btn-native" title="用平台自己的播放器取流（免费内容可用，能记录进度）" hidden>原生播放</button>
+              <button class="tool-btn" id="btn-native" title="用平台官方接口解析（按 yt-dlp 流程，免费内容可用，能记录进度）" hidden>原生解析</button>
               <button class="tool-btn" id="btn-download" title="下载本集（仅内置播放器可用）" disabled>下载</button>
               <button class="tool-btn" id="btn-open-web" title="用系统浏览器打开当前链接">浏览器打开</button>
               <button class="tool-btn" id="btn-fullscreen" title="全屏（F11）">全屏</button>
@@ -500,6 +500,8 @@
               <ul class="auth-points">
                 <li><b>试看限制</b>：爱奇艺 / 腾讯 / 优酷的 VIP、付费、云影院、超前点播影片，免费线路通常只给几十秒到 5 分钟试看；完整版需要购买，或登录会员后到官网观看。</li>
                 <li><b>芒果TV</b>：默认用内置原生解析，需要中国大陆网络；境外网络会提示地区限制。VIP 内容要先在芒果内置窗口登录会员。</li>
+                <li><b>腾讯视频</b>：默认仍走 789 等第三方线路；第三方线路都失败后才用内置原生解析（备用，按 yt-dlp 的官方接口流程）。电影 / 电视剧 / 动漫通用，免费内容一般 720P，付费 / 云影院内容通常只给试听。</li>
+                <li><b>爱奇艺 / 优酷</b>：yt-dlp 当前无法原生解析这两家的新版播放页（爱奇艺走 cmd5x 签名接口，优酷 ups 接口对匿名设备返回 -6004），所以仍从第三方线路开始，失败会自动换线。</li>
                 <li><b>下载</b>：只有内置播放器拿到真实流时才能下载；第三方网页解析线路不支持下载；DRM / 会员加密内容不支持。</li>
                 <li><b>线路</b>：公开第三方线路可能随时失效，可以在「线路管理」里测速、换线或在线更新。</li>
               </ul>

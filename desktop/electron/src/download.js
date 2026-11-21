@@ -320,7 +320,7 @@ class DownloadManager {
     for (const id of this.jobs.keys()) this.cancel(id)
   }
 
-  async _fetch(job, url, timeoutMs = 30000, viaProxy = false) {
+  async _fetch(job, url, timeoutMs = 30000, viaProxy = false, headers = job.headers) {
     const target = viaProxy && this.proxify ? this.proxify(url, job) : url
     const timeout = AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : null
     const signal =
@@ -328,17 +328,42 @@ class DownloadManager {
         ? AbortSignal.any([job.controller.signal, timeout])
         : job.controller?.signal || timeout || undefined
     return fetch(target, {
-      headers: job.headers,
+      headers,
       redirect: 'follow',
       signal,
     })
   }
 
+  // 抖音等平台把整份登录 Cookie 塞进请求头时，CDN 会返回 431（Request Header Fields Too Large）。
+  // 直链本身是签名地址，去掉 Cookie / 自定义头再直连一次通常就能下。
+  async _fetchWithFallback(job, url, timeoutMs = 30000, viaProxy = false) {
+    let response = await this._fetch(job, url, timeoutMs, viaProxy)
+    if (response.status !== 431 && response.status !== 400) return response
+    try {
+      await response.body?.cancel()
+    } catch {
+      /* 忽略 */
+    }
+    const minimal = {
+      'user-agent': UA,
+      referer: job.referer || url,
+      accept: '*/*',
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
+    }
+    this.log(`[下载] HTTP ${response.status}（请求头过大），去掉 Cookie 后重试`)
+    response = await this._fetch(job, url, timeoutMs, false, minimal)
+    return response
+  }
+
   async _downloadFile(job, baseName) {
-    const response = await this._fetch(job, job.target, 30000, true)
+    const response = await this._fetchWithFallback(job, job.target, 30000, true)
     if (!response.ok) throw new Error(`下载失败：HTTP ${response.status}`)
     const total = Number(response.headers.get('content-length')) || 0
-    const ext = /\.mp4([?#]|$)/i.test(job.target) ? '.mp4' : '.ts'
+    const contentType = String(response.headers.get('content-type') || '')
+    // 抖音等平台的直链路径里不一定带 .mp4 后缀，但 Content-Type 是 video/mp4；
+    // 短视频下载要求保存成 mp4，这里按 Content-Type 兜底。
+    const ext =
+      /\.mp4([?#]|$)/i.test(job.target) || (job.mp4 && /video\/mp4/i.test(contentType)) ? '.mp4' : '.ts'
     const filePath = uniquePath(job.dir, baseName, ext)
     const partPath = `${filePath}.part`
     job.partPath = partPath
@@ -460,7 +485,7 @@ class DownloadManager {
     }
     for (let index = 0; index < total; index += 1) {
       if (job.cancelled) break
-      const response = await this._fetch(job, playlist.segments[index], 30000, true)
+      const response = await this._fetchWithFallback(job, playlist.segments[index], 30000, true)
       if (!response.ok) throw new Error(`分片 ${index + 1} 下载失败：HTTP ${response.status}`)
       let buffer = Buffer.from(await response.arrayBuffer())
       if (keyBuffer) {
@@ -553,7 +578,7 @@ class DownloadManager {
       for (let index = 0; index < total; index += 1) {
         if (job.cancelled) break
         const segmentUrl = playlist.segments[index]
-        const response = await this._fetch(job, segmentUrl, 30000, true)
+        const response = await this._fetchWithFallback(job, segmentUrl, 30000, true)
         if (!response.ok) throw new Error(`分片 ${index + 1} 下载失败：HTTP ${response.status}`)
         let buffer = Buffer.from(await response.arrayBuffer())
         if (keyBuffer) {

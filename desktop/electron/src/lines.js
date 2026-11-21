@@ -15,8 +15,8 @@ const SAMPLE_URLS = {
   mgtv: 'https://www.mgtv.com/b/817372/24773914.html',
 }
 
-// 内置线路：全部来自互联网上公开的第三方解析服务。
-// 这类服务变动非常频繁，所以程序支持「线路管理 / 在线更新线路」，
+// 内置线路：第三方解析服务 + 平台原生解析（芒果TV / 腾讯视频）。
+// 第三方服务变动非常频繁，所以程序支持「线路管理 / 在线更新线路」，
 // 失效时请换一条线路，或在设置里填入你自己可用的接口。
 const DEFAULT_LINES = [
   {
@@ -121,33 +121,33 @@ const DEFAULT_LINES = [
   },
   {
     id: 'builtin-iqiyi-native',
-    name: '爱奇艺 原生取流（实验）',
+    name: '爱奇艺 原生解析',
     kind: 'native',
     url: 'native://auto',
     enabled: false,
     builtin: true,
     platform: 'iqiyi',
-    note: '隐藏窗口里让爱奇艺页面自己播放，抓真实 m3u8/mp4；免费内容可用，DRM/会员内容失败会自动换线',
+    note: 'yt-dlp 当前无法解析新版爱奇艺页面（播放地址由 cmd5x 签名接口下发，旧接口已失效），暂不启用；失败会自动用第三方线路',
   },
   {
     id: 'builtin-qq-native',
-    name: '腾讯视频 原生取流（实验）',
+    name: '腾讯视频 原生解析',
     kind: 'native',
     url: 'native://auto',
-    enabled: false,
+    enabled: true,
     builtin: true,
     platform: 'qq',
-    note: '隐藏窗口嗅探腾讯视频自己的播放流；免费内容可用，会员/DRM 内容失败会自动换线',
+    note: '备用线路：第三方线路都失败后才尝试。腾讯视频官方接口（按 yt-dlp 流程），电影 / 电视剧 / 动漫通用；免费内容 720P，付费电影通常只给试听',
   },
   {
     id: 'builtin-youku-native',
-    name: '优酷 原生取流（实验）',
+    name: '优酷 原生解析',
     kind: 'native',
     url: 'native://auto',
     enabled: false,
     builtin: true,
     platform: 'youku',
-    note: '隐藏窗口嗅探优酷自己的播放流；免费内容可用，会员/DRM 内容失败会自动换线',
+    note: 'yt-dlp 的 ups.youku.com 接口对匿名设备返回 -6004（限制播放），暂不启用；失败会自动用第三方线路',
   },
   {
     id: 'builtin-direct',
@@ -514,8 +514,8 @@ async function parseWithLine({ videoUrl, line, cookieHeader = '' }) {
   if (line.kind === 'direct') return { kind: 'page', url: videoUrl, note: '官网页面模式' }
   if (line.kind === 'mgtv') return await extractMango(videoUrl, cookieHeader)
   if (line.kind === 'native') {
-    const { sniffNative } = require('./native')
-    return await sniffNative({ url: videoUrl, platform: line.platform })
+    const { parseNative } = require('./nativeparse')
+    return await parseNative({ url: videoUrl, platform: line.platform, cookie: cookieHeader })
   }
   const target = buildLineUrl(line.url, videoUrl)
   if (line.kind === 'page') return { kind: 'page', url: target }
@@ -558,8 +558,8 @@ async function testLine(line, sampleUrl = SAMPLE_URL) {
     if (line.kind === 'native') {
       const result = await parseWithLine({ videoUrl: sampleUrl, line })
       const ms = Date.now() - started
-      if (result.kind === 'stream') return { ok: true, ms, note: `原生流可用（${result.note || '已嗅探'}）` }
-      return { ok: false, ms, note: result.error || '原生取流失败' }
+      if (result.kind === 'stream') return { ok: true, ms, note: `原生解析可用（${result.note || '已解析'}）` }
+      return { ok: false, ms, note: result.error || '原生解析失败' }
     }
     const target = buildLineUrl(line.url, sampleUrl)
     const response = await fetchText(target, 12000)

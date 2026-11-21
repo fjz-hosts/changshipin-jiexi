@@ -129,7 +129,7 @@ class StreamProxy {
     response.end(message)
   }
 
-  _request(target, headers) {
+  _request(target, headers, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
       const request = net.request({
         method: 'GET',
@@ -154,7 +154,7 @@ class StreamProxy {
           /* 忽略 */
         }
         reject(new Error('上游取流超时'))
-      }, 30000)
+      }, timeoutMs)
       request.on('response', (upstream) => {
         clearTimeout(timer)
         if (settled) {
@@ -208,7 +208,7 @@ class StreamProxy {
     if (cookie) headers['X-Proxy-Cookie'] = cookie.replace(/[\r\n]/g, '')
     if (request.headers.range) headers.range = request.headers.range
 
-    const upstream = await this._request(target, headers)
+    const upstream = await this._request(target, headers, /m3u8/i.test(target) ? 90000 : 30000)
     const status = upstream.statusCode || 200
     const contentType = String(upstream.headers['content-type'] || '')
     const isPlaylist = /mpegurl/i.test(contentType) || /\.m3u8/i.test(target) || /\/m3u8\//i.test(target)

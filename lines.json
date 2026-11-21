@@ -1,6 +1,6 @@
 {
-    "version":  6,
-    "updatedAt":  "2026-11-17",
+    "version":  8,
+    "updatedAt":  "2026-11-21",
     "note":  "在线线路清单：程序「设置 → 解析线路 → 在线更新线路」会拉取本文件；id 保持不变可沿用本地的启用/停用状态。",
     "lines":  [
                   {
@@ -38,29 +38,29 @@
                   },
                   {
                       "id":  "builtin-iqiyi-native",
-                      "name":  "爱奇艺 原生取流（实验）",
+                      "name":  "爱奇艺 原生解析",
                       "kind":  "native",
                       "url":  "native://auto",
                       "enabled":  false,
-                      "note":  "隐藏窗口嗅探爱奇艺页面自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "note":  "yt-dlp 当前无法解析新版爱奇艺页面（播放地址由 cmd5x 签名接口下发，旧接口已失效），暂不启用；失败会自动用第三方线路",
                       "platform":  "iqiyi"
                   },
                   {
                       "id":  "builtin-qq-native",
-                      "name":  "腾讯视频 原生取流（实验）",
+                      "name":  "腾讯视频 原生解析",
                       "kind":  "native",
                       "url":  "native://auto",
-                      "enabled":  false,
-                      "note":  "隐藏窗口嗅探腾讯视频自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "enabled":  true,
+                      "note":  "备用线路：第三方线路都失败后才尝试。腾讯视频官方接口（按 yt-dlp 流程），电影 / 电视剧 / 动漫通用；免费内容 720P，付费电影通常只给试听",
                       "platform":  "qq"
                   },
                   {
                       "id":  "builtin-youku-native",
-                      "name":  "优酷 原生取流（实验）",
+                      "name":  "优酷 原生解析",
                       "kind":  "native",
                       "url":  "native://auto",
                       "enabled":  false,
-                      "note":  "隐藏窗口嗅探优酷自己的播放流；免费内容可用，会员/DRM 内容会自动失败并换线",
+                      "note":  "yt-dlp 的 ups.youku.com 接口对匿名设备返回 -6004（限制播放），暂不启用；失败会自动用第三方线路",
                       "platform":  "youku"
                   },
                   {
