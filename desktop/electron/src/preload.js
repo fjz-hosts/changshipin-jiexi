@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld('desktop', {
   castStop: () => ipcRenderer.invoke('cast:stop'),
   castState: () => ipcRenderer.invoke('cast:state'),
   castPage: (payload) => ipcRenderer.invoke('cast:page', payload),
+  castSniff: (payload) => ipcRenderer.invoke('cast:sniff', payload),
+  castQr: (payload) => ipcRenderer.invoke('cast:qr', payload),
   onCastState: (callback) => on('cast:state', callback),
   onReady: (callback) => on('app:ready', callback),
   onPasteParse: (callback) => on('app:paste-parse', callback),

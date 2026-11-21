@@ -261,8 +261,60 @@ function parseWebviewContents() {
   }
 }
 
-function parseFrames(contents) {
+// 解析页（第三方网页线路）里播放器发出的真实媒体请求。投屏拿不到 lastStream 时，
+// 从这里挑一条抓到的最长 m3u8/mp4 推给电视；网页播放器自己也会带 Referer/Cookie。
+const parseMediaCandidates = []
+const MAX_PARSE_MEDIA = 30
+
+function parseMediaKind(rawUrl) {
+  const url = String(rawUrl || '')
+  if (!/^https?:\/\//i.test(url)) return ''
+  if (/\.(ts|m4s|jpg|jpeg|png|webp|avif|gif|vtt|srt)(\?|#|$)/i.test(url)) return ''
+  if (/\.m3u8(\?|#|$)/i.test(url) || /\/m3u8\//i.test(url)) return 'hls'
+  if (/\.mp4(\?|#|$)/i.test(url)) return 'mp4'
+  if (/\.flv(\?|#|$)/i.test(url)) return 'flv'
+  return ''
+}
+
+function headerValue(headers, name) {
+  const key = Object.keys(headers || {}).find((item) => item.toLowerCase() === name)
+  return key ? String(headers[key] || '') : ''
+}
+
+function rememberParseMedia(details) {
+  const url = String(details?.url || '')
+  const kind = parseMediaKind(url)
+  if (!kind) return
+  // net.request（本地代理上游）没有 webContentsId；只记录解析页 webview 自己发出的请求。
+  if (!(Number(details?.webContentsId) > 0)) return
+  log(`[投屏] 捕获网页媒体 ${url.slice(0, 120)}`)
+  const headers = details.requestHeaders || {}
+  const item = {
+    url,
+    kind,
+    referer: headerValue(headers, 'referer') || headerValue(headers, 'origin') || '',
+    cookie: headerValue(headers, 'cookie'),
+    at: Date.now(),
+  }
+  const index = parseMediaCandidates.findIndex((entry) => entry.url === url)
+  if (index >= 0) parseMediaCandidates.splice(index, 1)
+  parseMediaCandidates.unshift(item)
+  if (parseMediaCandidates.length > MAX_PARSE_MEDIA) parseMediaCandidates.length = MAX_PARSE_MEDIA
+}
+
+function clearParseMedia() {
+  parseMediaCandidates.length = 0
+}
+
+function parseWebviewUrl() {
   try {
+    return parseWebviewContents()?.getURL() || ''
+  } catch {
+    return ''
+  }
+}
+
+function parseFrames(contents) {  try {
     return contents.mainFrame.framesInSubtree.filter(Boolean).slice(0, 8)
   } catch {
     try {
@@ -1044,6 +1096,16 @@ function attachProxyUrls(result, cookie) {
   }
 }
 
+async function makeQrDataUrl(target) {
+  const QRCode = require('qrcode')
+  return QRCode.toDataURL(String(target), {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 320,
+    color: { dark: '#07101d', light: '#ffffff' },
+  })
+}
+
 function registerIpc() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -1139,6 +1201,7 @@ function registerIpc() {
       }
       const result = await parseWithLine({ videoUrl: url, line, cookieHeader })
       if (result.kind === 'page') {
+        clearParseMedia()
         log(`解析 ${line.name} → 页面 ${result.url}`)
         return { ok: true, kind: 'page', url: result.url, line: publicLine(line), platform: detectPlatformByUrl(url)?.name || '未知' }
       }
@@ -1246,17 +1309,71 @@ function registerIpc() {
     let qrDataUrl = ''
     try {
       // 二维码内容就是手机要打开的局域网地址；手机和电脑在同一 Wi-Fi 即可扫码播放。
-      const QRCode = require('qrcode')
-      qrDataUrl = await QRCode.toDataURL(pageUrl, {
-        errorCorrectionLevel: 'M',
-        margin: 1,
-        width: 320,
-        color: { dark: '#07101d', light: '#ffffff' },
-      })
+      qrDataUrl = await makeQrDataUrl(pageUrl)
     } catch {
       /* 二维码生成失败不影响复制地址 */
     }
     return { ok: true, pageUrl, host: new URL(pageUrl).host, qrDataUrl }
+  })
+
+  // 网页解析线路：从解析页播放器近期发出的请求里挑一条真实流，交给电视投屏。
+  ipcMain.handle('cast:sniff', async (_event, payload = {}) => {
+    if (!caster || !proxy) return { ok: false, error: '投屏模块还没准备好' }
+    const candidates = parseMediaCandidates.slice(0, 10)
+    if (!candidates.length) {
+      return { ok: false, error: '还没有抓到真实播放地址：先在网页里点一下播放，等画面出来后再点投屏' }
+    }
+    const pageUrl = parseWebviewUrl()
+    // HLS 优先，其次 mp4/flv；同类按最近请求排序
+    const ordered = [...candidates].sort((left, right) => {
+      const rank = (item) => (item.kind === 'hls' ? 0 : item.kind === 'mp4' ? 1 : 2)
+      return rank(left) - rank(right) || right.at - left.at
+    })
+    let best = null
+    let sawDrm = false
+    for (const item of ordered.slice(0, 4)) {
+      let media = { duration: 0, segments: 0, drm: false }
+      try {
+        media = await measureStream(item.url, {
+          referer: item.referer || pageUrl,
+          cookie: item.cookie,
+          timeout: 5000,
+        })
+      } catch {
+        /* 量不出来不阻塞投屏 */
+      }
+      if (media.drm) {
+        sawDrm = true
+        continue
+      }
+      const score = (Number(media.duration) || 0) + (Number(media.segments) || 0) / 100
+      if (!best || score > best.score) best = { item, media, score }
+      if (media.duration > 60) break
+    }
+    const pick = best?.item || (sawDrm ? null : ordered[0])
+    if (!pick) {
+      return { ok: false, error: '抓到的是 DRM 加密流（可能来自会员内容），内置代理/电视无法播放' }
+    }
+    const mime = pick.kind === 'hls' ? 'hls' : 'mp4'
+    return {
+      ok: true,
+      url: proxy.resourceUrl(pick.url, pick.referer || pageUrl, pick.cookie),
+      original: pick.url,
+      mime,
+      duration: Math.round(Number(best?.media?.duration) || 0),
+      title: String(payload.title || '').slice(0, 120),
+    }
+  })
+
+  // 网页解析页本身的二维码：手机扫码直接在浏览器打开这个解析页（不经过 DLNA）
+  ipcMain.handle('cast:qr', async (_event, payload = {}) => {
+    const url = String(payload.url || '')
+    if (!/^https?:\/\//i.test(url)) return { ok: false, error: '不是可打开的网页地址' }
+    try {
+      return { ok: true, qrDataUrl: await makeQrDataUrl(url) }
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error).slice(0, 80) }
+    }
   })
 
   ipcMain.handle('cast:start', async (_event, payload = {}) => {
@@ -1537,7 +1654,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     log(`[解析页] 广告拦截设置失败：${error?.message || error}`)
   }
-  proxy = await new StreamProxy().start()
+  proxy = await new StreamProxy({ onRequest: rememberParseMedia }).start()
   log(`本地取流代理已启动：${proxy.base}`)
 
   caster = new CastManager({

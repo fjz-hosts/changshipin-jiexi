@@ -135,6 +135,8 @@
       position: 0,
       duration: 0,
       pageUrl: '',
+      pageOnly: false,
+      sniffing: false,
       source: null,
       error: '',
     },
@@ -1553,32 +1555,40 @@
   function updateCastButton() {
     const button = $('#btn-cast')
     if (!button) return
-    const ready = Boolean(currentCastSource())
+    const source = currentCastSource()
+    const pageMode = state.lastResult?.kind === 'page'
+    const ready = Boolean(source) || pageMode
     const label = $('#cast-btn-label')
     if (label) label.textContent = state.cast.casting ? '投屏中' : '投屏'
     button.classList.toggle('active', Boolean(state.cast.casting))
-    // 没有可投屏的流时不真禁用，保留点击以便弹提示说明原因（网页解析线路拿不到真实流）。
+    // 没有可投屏的流时不真禁用，保留点击以便弹提示说明原因（网页解析线路可以先抓流 / 扫码）。
     button.classList.toggle('is-disabled', !state.cast.casting && !ready)
     button.classList.toggle('ready', ready && !state.cast.casting)
     button.disabled = false
     button.title = state.cast.casting
       ? '正在投屏到电视 / 大屏，点击查看或停止'
-      : ready
+      : source
         ? '投屏到电视 / 手机 / 平板'
-        : '当前是网页解析线路，拿不到真实流地址，无法投屏；换到内置播放器线路再试'
+        : pageMode
+          ? '网页解析线路：先在网页里播放一下，再点投屏抓真实流；也可以扫码在手机浏览器打开'
+          : '当前没有可投屏的视频，先解析播放再点投屏'
   }
 
   function renderCast() {
     const cast = state.cast
     const status = $('#cast-scan-status')
     if (status) {
-      status.textContent = cast.scanning
-        ? '正在搜索局域网设备…（大约 3 秒）'
-        : cast.error
-          ? cast.error
-          : cast.devices.length
-            ? `找到 ${cast.devices.length} 个设备，点一下开始投屏`
-            : '没有找到设备：确认电视已打开「投屏 / DLNA」，或直接用下面的浏览器地址'
+      status.textContent = cast.sniffing
+        ? '正在从网页里抓取真实播放地址…（通常 3–10 秒）'
+        : cast.scanning
+          ? '正在搜索局域网设备…（大约 3 秒）'
+          : cast.error
+            ? cast.error
+            : cast.pageOnly
+              ? '当前是网页解析线路：手机可扫码打开；电视 DLNA 需要先在网页里播放一下，再点投屏抓真实流'
+              : cast.devices.length
+                ? `找到 ${cast.devices.length} 个设备，点一下开始投屏`
+                : '没有找到设备：确认电视已打开「投屏 / DLNA」，或直接用下面的浏览器地址'
     }
     const scanButton = $('#cast-scan')
     if (scanButton) {
@@ -1601,7 +1611,7 @@
             return `
               <li>
                 <button class="cast-device${active ? ' active' : ''}" data-id="${escapeHtml(device.id)}" ${
-                  cast.busy || cast.scanning ? 'disabled' : ''
+                  cast.busy || cast.scanning || cast.pageOnly ? 'disabled' : ''
                 }>
                   <span class="cast-device-icon">${CAST_DEVICE_ICON}</span>
                   <span class="cast-device-main">
@@ -1639,6 +1649,7 @@
     if (!snapshot || typeof snapshot !== 'object') return
     const cast = state.cast
     cast.casting = Boolean(snapshot.casting)
+    if (cast.casting) cast.pageOnly = false
     const device = snapshot.device || null
     cast.deviceId = device?.id || (cast.casting ? cast.deviceId : '')
     cast.deviceName = device?.name || ''
@@ -1687,13 +1698,68 @@
     }
   }
 
+  async function loadPageQr(pageUrl) {
+    const input = $('#cast-url')
+    const hint = $('#cast-hint')
+    const qr = $('#cast-qr')
+    const qrRow = $('#cast-qr-row')
+    if (input) input.value = pageUrl || ''
+    if (hint) {
+      hint.textContent =
+        '当前是网页解析线路：手机扫码可以直接在浏览器里播放这个解析页；电视 DLNA 投屏需要先在网页里播放一下，再点投屏抓真实流。'
+    }
+    if (!pageUrl) return
+    try {
+      const result = await window.desktop.castQr({ url: pageUrl })
+      if (result?.ok && qr) {
+        qr.src = result.qrDataUrl
+        qr.hidden = false
+        if (qrRow) qrRow.hidden = false
+      }
+    } catch {
+      /* 二维码失败不影响复制地址 */
+    }
+  }
+
   async function openCastModal() {
-    const source = currentCastSource()
+    let source = currentCastSource()
+    const pageMode = state.lastResult?.kind === 'page'
+    if (!source && !state.cast.casting && pageMode) {
+      state.cast.pageOnly = false
+      state.cast.source = null
+      state.cast.sniffing = true
+      $('#cast-modal').hidden = false
+      renderCast()
+      let sniffed = null
+      try {
+        sniffed = await window.desktop.castSniff({ title: state.currentTitle })
+      } catch {
+        sniffed = null
+      }
+      state.cast.sniffing = false
+      if (sniffed?.ok) {
+        source = {
+          url: sniffed.url,
+          title: sniffed.title || state.currentTitle,
+          mime: sniffed.mime || 'mp4',
+          original: sniffed.original,
+        }
+        state.cast.source = source
+      } else {
+        state.cast.pageOnly = true
+        state.cast.pageUrl = state.lastResult?.url || ''
+        renderCast()
+        await loadPageQr(state.cast.pageUrl)
+        toast(sniffed?.error || '还没有抓到真实流；可以先用手机扫码打开当前解析页', 'warn', 6500)
+        return
+      }
+    }
     if (!source && !state.cast.casting) {
       toast('先解析出一个能播放的视频，再点投屏；网页解析线路拿不到真实流地址，不能投屏。换到出 m3u8/mp4 的线路再试。', 'warn', 6200)
       return
     }
     if (source) state.cast.source = source
+    state.cast.pageOnly = false
     $('#cast-modal').hidden = false
     $('#cast-url').value = state.cast.pageUrl || ''
     renderCast()
@@ -1757,6 +1823,7 @@
       state.cast.transportState = 'PLAYING'
       state.cast.position = silent ? 0 : position
       state.cast.error = ''
+      state.cast.pageOnly = false
       // 投屏成功就把本机暂停，避免电视和电脑同时出声
       try {
         video?.pause()
@@ -1819,6 +1886,7 @@
     state.cast.position = 0
     state.cast.duration = 0
     state.cast.error = ''
+    state.cast.pageOnly = false
     renderCast()
     toast('已停止投屏', 'ok')
   }

@@ -209,7 +209,9 @@ async function runSmoke({ app, window, proxy, store }) {
       mirrorResponse.status === 200 &&
         mirrorBody.includes('/hls.min.js') &&
         mirrorBody.includes('烟雾&lt;测试&gt;') &&
-        mirrorBody.includes('投屏播放'),
+        mirrorBody.includes('投屏播放') &&
+        mirrorBody.includes('全屏播放') &&
+        mirrorBody.includes('requestFullscreen'),
       `${mirrorResponse.status} ${mirrorBody.length}`,
     )
     const hlsAsset = await net.fetch(`${proxy.base}/hls.min.js`)
@@ -461,6 +463,8 @@ async function runSmoke({ app, window, proxy, store }) {
       readonly: input ? input.readOnly : null,
       shortEntry: Boolean(document.querySelector('#short-cast')),
       qr: Boolean(document.querySelector('#cast-qr')),
+      sniffApi: typeof window.desktop.castSniff === 'function',
+      qrApi: typeof window.desktop.castQr === 'function',
       source: window.__app.currentCastSource(),
     })
   })()`)
@@ -475,6 +479,8 @@ async function runSmoke({ app, window, proxy, store }) {
       castUi.readonly === true &&
       castUi.shortEntry === true &&
       castUi.qr === true &&
+      castUi.sniffApi === true &&
+      castUi.qrApi === true &&
       castUi.source === null,
     castUiCheck,
   )

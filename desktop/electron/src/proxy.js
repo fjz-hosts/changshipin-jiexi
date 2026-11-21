@@ -21,12 +21,13 @@ const MAX_PLAYLIST_BYTES = 8 * 1024 * 1024
 const STREAM_PATHS = new Set(['/stream', '/stream.m3u8', '/stream.mp4'])
 
 class StreamProxy {
-  constructor() {
+  constructor({ onRequest = null } = {}) {
     this.server = null
     this.port = 0
     this.token = crypto.randomBytes(9).toString('hex')
     this.session = null
     this.hlsBody = null
+    this.onRequest = typeof onRequest === 'function' ? onRequest : null
   }
 
   get base() {
@@ -38,6 +39,12 @@ class StreamProxy {
     // Chromium 的 net 模块不允许直接 setHeader('Referer')（会被 ERR_BLOCKED_BY_CLIENT 拦掉），
     // 所以先用自定义头把 Referer 带进去，再在 webRequest 层替换成真正的 Referer。
     this.session.webRequest.onBeforeSendHeaders((details, callback) => {
+      try {
+        // 解析页 webview 的所有请求都会经过这里；主进程借这个钩子记录真实媒体地址。
+        this.onRequest?.(details)
+      } catch {
+        /* 忽略 */
+      }
       const headers = details.requestHeaders
       const referer = headers['X-Proxy-Referer'] || headers['x-proxy-referer']
       if (referer) {
@@ -365,6 +372,10 @@ function mirrorPageHtml(title, isHls) {
   .start:hover { border-color: #37e08b; color: #37e08b; }
   .tip { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); max-width: 86%; padding: 10px 16px; border-radius: 10px; background: rgba(255,100,112,.14); border: 1px solid rgba(255,100,112,.4); color: #ffb2b8; font-size: 13px; line-height: 1.7; }
   footer { flex: none; padding: 10px 22px 14px; font-size: 12px; color: rgba(233,238,247,.5); }
+  /* 开始播放后隐藏页头 / 页脚，视频铺满整个屏幕；全屏 API 生效后地址栏也会收起 */
+  body.playing header, body.playing footer { display: none; }
+  body.playing .player { position: fixed; inset: 0; z-index: 9999; }
+  body.playing video { width: 100vw; height: 100vh; }
 </style>
 </head>
 <body>
@@ -375,7 +386,7 @@ function mirrorPageHtml(title, isHls) {
 </header>
 <div class="player">
   <video id="video" controls playsinline preload="metadata"></video>
-  <button class="start" id="start" type="button">▶ 点击播放</button>
+  <button class="start" id="start" type="button">▶ 全屏播放</button>
   <div class="tip" id="tip" hidden></div>
 </div>
 <footer>由电脑上的「视频解析」投屏 · 请保持电脑端程序运行并停留在当前视频，关闭后本页会停止播放</footer>
@@ -392,13 +403,33 @@ function mirrorPageHtml(title, isHls) {
   var tip = document.getElementById('tip')
   var hls = null
   function showTip(text) { tip.hidden = false; tip.textContent = text }
+  function enterFullscreen() {
+    // iOS Safari 不支持元素全屏，但支持视频原生全屏；其他浏览器用 Fullscreen API。
+    if (video.webkitEnterFullscreen) {
+      try { video.webkitEnterFullscreen(); return } catch (error) {}
+    }
+    var element = document.documentElement
+    var request = element.requestFullscreen || element.webkitRequestFullscreen || element.msRequestFullscreen
+    if (request) {
+      try {
+        var result = request.call(element)
+        if (result && result.catch) result.catch(function () {})
+      } catch (error) {}
+    }
+  }
   function begin() {
     start.hidden = true
+    document.body.classList.add('playing')
+    enterFullscreen()
     var playing = video.play()
     if (playing && playing.catch) playing.catch(function () { start.hidden = false })
   }
   start.addEventListener('click', begin)
-  video.addEventListener('play', function () { start.hidden = true })
+  video.addEventListener('dblclick', enterFullscreen)
+  video.addEventListener('play', function () {
+    start.hidden = true
+    document.body.classList.add('playing')
+  })
   video.addEventListener('error', function () {
     if (hls) return
     showTip('视频加载失败：请确认电脑端还在播放这个视频，并且程序没有退出')
