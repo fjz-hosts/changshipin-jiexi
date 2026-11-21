@@ -31,6 +31,7 @@ SHOT_NAMES = {
     'fullscreen': 'guide-08-fullscreen',
     'settings': 'guide-09-settings',
     'short': 'guide-10-short',
+    'cast': 'guide-11-cast',
 }
 
 TARGET_WIDTH = {
@@ -44,6 +45,7 @@ TARGET_WIDTH = {
     'fullscreen': 1600,
     'settings': 1500,
     'short': 1600,
+    'cast': 1500,
 }
 
 

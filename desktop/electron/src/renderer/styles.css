@@ -3518,3 +3518,253 @@ body.mode-short.browser-open .short-panel {
   }
 }
 
+
+/* ---------------- 投屏（电视 / 大屏） ---------------- */
+
+.cast-modal {
+  width: min(720px, 92vw);
+}
+
+.cast-head p.cast-sub {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.cast-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 18px;
+}
+
+.cast-scan-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cast-scan-status {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.cast-devices {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cast-device,
+.cast-empty {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.cast-device {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cast-device:hover {
+  border-color: rgba(55, 224, 139, 0.5);
+  background: rgba(55, 224, 139, 0.07);
+}
+
+.cast-device.active {
+  border-color: rgba(55, 224, 139, 0.62);
+  background: rgba(55, 224, 139, 0.09);
+}
+
+.cast-device:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cast-empty {
+  justify-content: center;
+  font-size: 11.8px;
+  color: var(--muted);
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  line-height: 1.8;
+  padding: 16px 14px;
+  text-align: center;
+}
+
+.cast-device-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: rgba(55, 224, 139, 0.1);
+  border: 1px solid rgba(55, 224, 139, 0.24);
+}
+
+.cast-device-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cast-device-name {
+  font-size: 12.8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cast-device-sub {
+  font-size: 10.8px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cast-device-go {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.cast-active {
+  margin-top: 14px;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(55, 224, 139, 0.3);
+  background: rgba(55, 224, 139, 0.05);
+}
+
+.cast-active-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.cast-live {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+.cast-state {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.cast-progress {
+  margin: 11px 0 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.cast-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
+}
+
+.cast-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.cast-actions {
+  margin-top: 11px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cast-note {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--warn);
+}
+
+.cast-mirror {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+
+.cast-mirror h3 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+}
+
+.cast-mirror p {
+  margin: 0 0 9px;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+.cast-url-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cast-url-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.34);
+  color: var(--text);
+  font-size: 12px;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.cast-url-row input:focus {
+  outline: none;
+  border-color: rgba(41, 186, 255, 0.55);
+}
+
+#btn-cast.active {
+  color: var(--accent);
+  border-color: rgba(55, 224, 139, 0.45);
+  background: rgba(55, 224, 139, 0.1);
+}
+
+@media (max-width: 760px) {
+  .cast-url-row {
+    flex-direction: column;
+  }
+}
+

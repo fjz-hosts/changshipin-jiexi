@@ -123,6 +123,21 @@
     // ---------------- 登录状态提示 ----------------
     authStatus: {},
     loginHinted: new Set(),
+    // ---------------- 投屏（电视 / 大屏） ----------------
+    cast: {
+      devices: [],
+      scanning: false,
+      busy: false,
+      casting: false,
+      deviceId: '',
+      deviceName: '',
+      transportState: '',
+      position: 0,
+      duration: 0,
+      pageUrl: '',
+      source: null,
+      error: '',
+    },
   }
 
   const $ = (selector) => document.querySelector(selector)
@@ -1256,6 +1271,7 @@
       }
     }
     applyResumeAndProgress(video)
+    recastIfNeeded()
   }
 
   // ---------------------------------------------------------------------------
@@ -1395,6 +1411,7 @@
   // ---------------------------------------------------------------------------
 
   function setDownloadButton() {
+    updateCastButton()
     const button = $('#btn-download')
     if (!button) return
     if (state.downloadRunning) {
@@ -1480,6 +1497,317 @@
       toast(`下载失败：${update.error || '未知原因'}`, 'error', 6000)
     }
     state.downloadId = ''
+  }
+
+  // ---------------------------------------------------------------------------
+  // 投屏（DLNA 电视 / 局域网大屏播放页）
+  // ---------------------------------------------------------------------------
+
+  const CAST_DEVICE_ICON =
+    '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<rect x="3" y="5" width="18" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7" />' +
+    '<path d="M9 20h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />' +
+    '<path d="M10.5 9.4l4.2 2.6-4.2 2.6V9.4Z" fill="currentColor" /></svg>'
+
+  const CAST_STATE_TEXT = {
+    PLAYING: '正在播放',
+    PAUSED_PLAYBACK: '已暂停',
+    STOPPED: '已停止',
+    TRANSITIONING: '正在切换',
+    NO_MEDIA_PRESENT: '设备没有开始播放',
+  }
+
+  /** 当前正在播放的画面：投屏只能推本地代理地址（电视自己拉不到平台直链）。 */
+  function currentCastSource() {
+    if (state.mode === 'short') {
+      const quality = currentShortQuality()
+      // B 站 DASH 是音视频分离的两路，DLNA 直接推一路会没声音；这种档位不提供投屏。
+      if (!quality || quality.format === 'dash') return null
+      const url = quality?.playUrl || quality?.url
+      if (!url) return null
+      const original = quality?.originalUrl || quality?.url || ''
+      return {
+        url,
+        title: state.shortResult?.title || '短视频',
+        mime: /\.m3u8([?#]|$)/i.test(original) ? 'hls' : 'mp4',
+      }
+    }
+    const result = state.lastResult
+    if (!result || result.kind !== 'stream' || !result.playUrl) return null
+    return {
+      url: result.playUrl,
+      title: state.currentTitle || result.title || '视频',
+      mime: /\.m3u8([?#]|$)/i.test(result.original || result.playUrl) ? 'hls' : 'mp4',
+    }
+  }
+
+  function castClock(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0))
+    const hours = Math.floor(total / 3600)
+    const minutes = Math.floor((total % 3600) / 60)
+    const rest = total % 60
+    const pad = (value) => String(value).padStart(2, '0')
+    return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${pad(minutes)}:${pad(rest)}`
+  }
+
+  function updateCastButton() {
+    const button = $('#btn-cast')
+    if (!button) return
+    const ready = Boolean(currentCastSource())
+    button.textContent = state.cast.casting ? '投屏中' : '投屏'
+    button.classList.toggle('active', Boolean(state.cast.casting))
+    button.disabled = !state.cast.casting && !ready
+    button.title = state.cast.casting
+      ? '正在投屏到电视 / 大屏，点击查看或停止'
+      : ready
+        ? '投屏到电视 / 大屏'
+        : '当前是网页解析线路，拿不到真实流地址，无法投屏'
+  }
+
+  function renderCast() {
+    const cast = state.cast
+    const status = $('#cast-scan-status')
+    if (status) {
+      status.textContent = cast.scanning
+        ? '正在搜索局域网设备…（大约 3 秒）'
+        : cast.error
+          ? cast.error
+          : cast.devices.length
+            ? `找到 ${cast.devices.length} 个设备，点一下开始投屏`
+            : '没有找到设备：确认电视已打开「投屏 / DLNA」，或直接用下面的浏览器地址'
+    }
+    const scanButton = $('#cast-scan')
+    if (scanButton) {
+      scanButton.disabled = cast.scanning
+      scanButton.textContent = cast.scanning ? '搜索中…' : '搜索设备'
+    }
+    const list = $('#cast-devices')
+    if (list) {
+      if (!cast.devices.length) {
+        list.innerHTML = `<li class="cast-empty">${
+          cast.scanning
+            ? '正在查找同一网络里的电视…'
+            : '还没有发现设备。电视需要和电脑在同一个 Wi-Fi 下，并打开电视上的投屏 / DLNA 接收；也可以在电视浏览器里打开下面的地址。'
+        }</li>`
+      } else {
+        list.innerHTML = cast.devices
+          .map((device) => {
+            const active = device.id === cast.deviceId
+            const sub = [device.manufacturer, device.model].filter(Boolean).join(' · ') || device.host || 'DLNA 设备'
+            return `
+              <li>
+                <button class="cast-device${active ? ' active' : ''}" data-id="${escapeHtml(device.id)}" ${
+                  cast.busy || cast.scanning ? 'disabled' : ''
+                }>
+                  <span class="cast-device-icon">${CAST_DEVICE_ICON}</span>
+                  <span class="cast-device-main">
+                    <span class="cast-device-name">${escapeHtml(device.name || '投屏设备')}</span>
+                    <span class="cast-device-sub">${escapeHtml(sub)}</span>
+                  </span>
+                  <span class="cast-device-go">${active ? '投屏中' : '投屏'}</span>
+                </button>
+              </li>`
+          })
+          .join('')
+      }
+    }
+    const activeBox = $('#cast-active')
+    if (activeBox) {
+      activeBox.hidden = !cast.casting
+      if (cast.casting) {
+        $('#cast-active-name').textContent = cast.deviceName || '投屏设备'
+        $('#cast-active-state').textContent = CAST_STATE_TEXT[cast.transportState] || '投屏中'
+        const percent = cast.duration > 0 ? Math.max(0, Math.min(100, (cast.position / cast.duration) * 100)) : 0
+        $('#cast-progress-bar').style.width = `${percent.toFixed(1)}%`
+        $('#cast-time-now').textContent = castClock(cast.position)
+        $('#cast-time-total').textContent = cast.duration > 0 ? castClock(cast.duration) : '--:--'
+        const playing = cast.transportState === 'PLAYING' || cast.transportState === 'TRANSITIONING'
+        $('#cast-toggle').textContent = playing ? '暂停' : '继续'
+        const note = $('#cast-note')
+        note.hidden = !cast.error
+        note.textContent = cast.error || ''
+      }
+    }
+    updateCastButton()
+  }
+
+  function applyCastState(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return
+    const cast = state.cast
+    cast.casting = Boolean(snapshot.casting)
+    const device = snapshot.device || null
+    cast.deviceId = device?.id || (cast.casting ? cast.deviceId : '')
+    cast.deviceName = device?.name || ''
+    cast.transportState = snapshot.transportState || cast.transportState
+    cast.position = Number(snapshot.position) || 0
+    cast.duration = Number(snapshot.duration) || 0
+    cast.error = snapshot.note || ''
+    cast.scanning = Boolean(snapshot.scanning)
+    if (Array.isArray(snapshot.devices)) cast.devices = snapshot.devices
+    renderCast()
+  }
+
+  async function loadCastPage(source) {
+    const input = $('#cast-url')
+    const hint = $('#cast-hint')
+    try {
+      const page = await window.desktop.castPage({ url: source.url, mime: source.mime, title: source.title })
+      if (page?.ok) {
+        state.cast.pageUrl = page.pageUrl
+        if (input) input.value = page.pageUrl
+        return
+      }
+      state.cast.pageUrl = ''
+      if (input) input.value = ''
+      if (hint && page?.error) hint.textContent = page.error
+    } catch {
+      /* 地址生成失败不影响设备投屏 */
+    }
+  }
+
+  async function openCastModal() {
+    const source = currentCastSource()
+    if (!source) {
+      toast('先解析出一个能播放的视频，再点投屏；网页解析线路拿不到真实流地址，不能投屏', 'warn', 5600)
+      return
+    }
+    state.cast.source = source
+    $('#cast-modal').hidden = false
+    $('#cast-url').value = state.cast.pageUrl || ''
+    renderCast()
+    loadCastPage(source)
+    if (!state.cast.casting && !state.cast.devices.length) scanCast()
+  }
+
+  function closeCastModal() {
+    $('#cast-modal').hidden = true
+  }
+
+  async function scanCast(userTriggered = false) {
+    if (state.cast.scanning) return
+    state.cast.scanning = true
+    state.cast.error = ''
+    renderCast()
+    try {
+      const result = await window.desktop.castScan()
+      state.cast.devices = Array.isArray(result?.devices) ? result.devices : []
+      state.cast.error = result?.ok ? '' : result?.error || '搜索设备失败'
+      if (userTriggered && !state.cast.devices.length) {
+        toast('没有找到可投屏设备：确认电视和电脑在同一个 Wi-Fi，并打开电视的投屏 / DLNA 接收', 'warn', 6200)
+      }
+    } catch (error) {
+      state.cast.error = String(error?.message || error)
+      if (userTriggered) toast(`搜索设备失败：${state.cast.error}`, 'error', 5200)
+    } finally {
+      state.cast.scanning = false
+      renderCast()
+    }
+  }
+
+  async function castTo(deviceId, { silent = false } = {}) {
+    if (state.cast.busy) return
+    const source = currentCastSource() || state.cast.source
+    if (!source) {
+      if (!silent) toast('当前没有可投屏的视频', 'warn')
+      return
+    }
+    state.cast.source = source
+    const video = state.mode === 'short' ? $('#short-video') : $('#video')
+    const position = Number(video?.currentTime) || 0
+    state.cast.busy = true
+    renderCast()
+    try {
+      const result = await window.desktop.castStart({
+        url: source.url,
+        title: source.title,
+        mime: source.mime,
+        position: silent ? 0 : position,
+        deviceId: String(deviceId || state.cast.deviceId || ''),
+      })
+      if (!result?.ok) {
+        state.cast.error = result?.error || '投屏失败'
+        if (!silent) toast(state.cast.error, 'warn', 6000)
+        return
+      }
+      state.cast.casting = true
+      state.cast.deviceId = result.device?.id || ''
+      state.cast.deviceName = result.device?.name || ''
+      state.cast.transportState = 'PLAYING'
+      state.cast.position = silent ? 0 : position
+      state.cast.error = ''
+      // 投屏成功就把本机暂停，避免电视和电脑同时出声
+      try {
+        video?.pause()
+      } catch {
+        /* 忽略 */
+      }
+      if (!silent) {
+        toast(`已投屏到「${result.device?.name || '电视'}」，电脑这边已暂停`, 'ok', 5200)
+        loadCastPage(source)
+      }
+    } catch (error) {
+      state.cast.error = String(error?.message || error)
+      if (!silent) toast(`投屏失败：${state.cast.error}`, 'error', 6000)
+    } finally {
+      state.cast.busy = false
+      renderCast()
+    }
+  }
+
+  async function toggleCastPlayback() {
+    if (!state.cast.casting) return
+    try {
+      const result = await window.desktop.castControl({ action: 'toggle' })
+      if (!result?.ok) {
+        toast(result?.error || '控制电视失败', 'warn', 5200)
+        return
+      }
+      if (result.state) applyCastState(result.state)
+    } catch (error) {
+      toast(`控制电视失败：${String(error?.message || error)}`, 'warn', 5200)
+    }
+  }
+
+  async function seekCast(delta) {
+    if (!state.cast.casting) return
+    const target = Math.max(0, (Number(state.cast.position) || 0) + Number(delta || 0))
+    try {
+      const result = await window.desktop.castControl({ action: 'seek', seconds: target })
+      if (!result?.ok) {
+        toast(result?.error || '电视快进失败', 'warn', 5200)
+        return
+      }
+      state.cast.position = target
+      renderCast()
+    } catch (error) {
+      toast(`电视快进失败：${String(error?.message || error)}`, 'warn', 5200)
+    }
+  }
+
+  async function stopCast() {
+    try {
+      await window.desktop.castStop()
+    } catch {
+      /* 忽略 */
+    }
+    state.cast.casting = false
+    state.cast.deviceId = ''
+    state.cast.deviceName = ''
+    state.cast.transportState = ''
+    state.cast.position = 0
+    state.cast.duration = 0
+    state.cast.error = ''
+    renderCast()
+    toast('已停止投屏', 'ok')
+  }
+
+  /** 换集 / 换清晰度后把新画面重新推到同一个电视上。 */
+  function recastIfNeeded() {
+    if (!state.cast.casting) return
+    const source = currentCastSource()
+    if (!source) return
+    state.cast.source = source
+    setTimeout(() => castTo(state.cast.deviceId, { silent: true }), 1200)
   }
 
   // ---------------------------------------------------------------------------
@@ -1760,6 +2088,7 @@
     } catch {
       /* 忽略 */
     }
+    recastIfNeeded()
   }
 
   function renderShortSeries() {
@@ -3579,6 +3908,33 @@
     })
     $('#btn-fullscreen').addEventListener('click', () => toggleFullscreen())
 
+    // 投屏（电视 / 大屏）
+    $('#btn-cast').addEventListener('click', () => openCastModal())
+    $('#short-cast').addEventListener('click', () => openCastModal())
+    $('#cast-close').addEventListener('click', () => closeCastModal())
+    $('#cast-modal').addEventListener('click', (event) => {
+      if (event.target === $('#cast-modal')) closeCastModal()
+    })
+    $('#cast-scan').addEventListener('click', () => scanCast(true))
+    $('#cast-devices').addEventListener('click', (event) => {
+      const item = event.target.closest('.cast-device')
+      if (!item || item.disabled) return
+      castTo(item.dataset.id)
+    })
+    $('#cast-toggle').addEventListener('click', () => toggleCastPlayback())
+    $('#cast-back').addEventListener('click', () => seekCast(-10))
+    $('#cast-forward').addEventListener('click', () => seekCast(10))
+    $('#cast-stop').addEventListener('click', () => stopCast())
+    $('#cast-copy-url').addEventListener('click', async () => {
+      const value = $('#cast-url').value
+      if (!value) {
+        toast('还没有可复制的地址', 'warn')
+        return
+      }
+      await window.desktop.copyText(value)
+      toast('大屏播放地址已复制，去电视 / 平板的浏览器里打开', 'ok', 4600)
+    })
+
     // 选集条
     $('#episode-prev').addEventListener('click', () => seriesNav(-1))
     $('#episode-next').addEventListener('click', () => seriesNav(1))
@@ -3883,6 +4239,11 @@
         }
       }
       if (event.key !== 'Escape') return
+      if (!$('#cast-modal').hidden) {
+        event.preventDefault()
+        closeCastModal()
+        return
+      }
       if (!$('#auth-modal').hidden) {
         event.preventDefault()
         closeAuthModal()
@@ -3987,6 +4348,7 @@
       if (update.status === 'downloaded') toast(`新版本 v${update.version || ''} 已下载，重启后生效`, 'ok', 6000)
     })
     window.desktop.onDownloadState?.(onDownloadState)
+    window.desktop.onCastState?.((snapshot) => applyCastState(snapshot))
 
     // 拖拽链接
     const urlBox = $('#url-box')
@@ -4123,6 +4485,7 @@
       refreshAuthStatus()
       setDownloadButton()
       updateNativeButton()
+      renderCast()
       backfillHistoryTitles()
       renderUpdateState(await window.desktop.getUpdateState())
       if (state.config.lastUrl) {
@@ -4155,6 +4518,14 @@
         switchMode,
         resolveShortFromUrl,
         getShortResult: () => state.shortResult,
+        openCast: openCastModal,
+        castTo,
+        getCastState: () => state.cast,
+        currentCastSource,
+        showCastDevices: (devices) => {
+          state.cast.devices = Array.isArray(devices) ? devices : []
+          renderCast()
+        },
       }
     } catch (error) {
       console.error(error)

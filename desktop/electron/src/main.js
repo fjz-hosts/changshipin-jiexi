@@ -27,6 +27,7 @@ const path = require('node:path')
 
 const { Store } = require('./store')
 const { StreamProxy } = require('./proxy')
+const { CastManager } = require('./cast')
 const { UpdateManager } = require('./updater')
 const {
   DEFAULT_LINES,
@@ -113,6 +114,7 @@ let mainWindow = null
 let tray = null
 let store = null
 let proxy = null
+let caster = null
 let updater = null
 let downloader = null
 let lastStream = null
@@ -1221,6 +1223,52 @@ function registerIpc() {
     return false
   })
 
+  // -------------------------------------------------------------------------
+  // 投屏（DLNA 电视 / 局域网大屏播放页）
+  // -------------------------------------------------------------------------
+  ipcMain.handle('cast:scan', async () => {
+    if (!caster) return { ok: false, error: '投屏模块还没准备好', devices: [] }
+    const result = await caster.scan()
+    log(`[投屏] 扫描完成：${result.devices?.length || 0} 个可投屏设备${result.error ? `（${result.error}）` : ''}`)
+    return result
+  })
+
+  ipcMain.handle('cast:state', () => caster?.snapshot() || { ok: false, casting: false, devices: [] })
+
+  // 大屏浏览器播放页：电视上没有 DLNA 时，用这个地址在电视 / 平板的浏览器里打开
+  ipcMain.handle('cast:page', (_event, payload = {}) => {
+    if (!caster || !proxy) return { ok: false, error: '投屏模块还没准备好' }
+    const url = String(payload.url || '')
+    if (!url.startsWith(proxy.base)) return { ok: false, error: '当前没有可投屏的视频流' }
+    const mime = payload.mime === 'hls' ? 'hls' : 'mp4'
+    const pageUrl = caster.pageUrl(url, { mime, title: String(payload.title || '').slice(0, 120) })
+    if (!pageUrl) return { ok: false, error: '找不到局域网地址：请确认电脑和电视在同一个 Wi-Fi 下' }
+    return { ok: true, pageUrl, host: new URL(pageUrl).host }
+  })
+
+  ipcMain.handle('cast:start', async (_event, payload = {}) => {
+    if (!caster || !proxy) return { ok: false, error: '投屏模块还没准备好' }
+    const url = String(payload.url || '')
+    // 只允许推本地代理地址，避免把任意地址丢给电视
+    if (!url.startsWith(proxy.base)) return { ok: false, error: '当前画面拿不到可投屏的流地址（网页解析线路不支持投屏）' }
+    const result = await caster.start({
+      url,
+      title: String(payload.title || '').slice(0, 120),
+      mime: payload.mime === 'hls' ? 'hls' : 'mp4',
+      position: Number(payload.position) || 0,
+      deviceId: String(payload.deviceId || ''),
+    })
+    if (result.ok) log(`[投屏] 已推送到「${result.device?.name || '设备'}」`)
+    return result
+  })
+
+  ipcMain.handle('cast:control', async (_event, payload = {}) => {
+    if (!caster) return { ok: false, error: '投屏模块还没准备好' }
+    return caster.control(payload)
+  })
+
+  ipcMain.handle('cast:stop', async () => (caster ? caster.stopCasting() : { ok: false }))
+
   ipcMain.handle('lines:test', async (_event, payload = {}) => {
     const sample = isHttpUrl(payload.url) ? normalizeUrlText(payload.url) : SAMPLE_URL
     if (payload.draft && typeof payload.draft === 'object') {
@@ -1442,6 +1490,11 @@ app.on('before-quit', () => {
   } catch (error) {
     log(`[退出] downloader.cancelAll 失败：${error?.message || error}`)
   }
+  try {
+    caster?.dispose()
+  } catch (error) {
+    log(`[退出] caster.dispose 失败：${error?.message || error}`)
+  }
 })
 
 app.on('activate', () => {
@@ -1473,6 +1526,12 @@ app.whenReady().then(async () => {
   }
   proxy = await new StreamProxy().start()
   log(`本地取流代理已启动：${proxy.base}`)
+
+  caster = new CastManager({
+    log,
+    proxy,
+    onState: (state) => sendCommand('cast:state', state),
+  })
 
   downloader = new DownloadManager({
     log,

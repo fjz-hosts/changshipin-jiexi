@@ -634,6 +634,71 @@ def main():
         capture(c, '10-short')
         shots['short'] = {'raw': '10-short.png', 'boxes': short_boxes, 'dim': 0.36}
 
+        # 11. 投屏（演示设备；真实扫描需要局域网里的电视）
+        c.ev("""(() => {
+          document.querySelector('#modal-close')?.click();
+          window.__app.switchMode('long', { force: true });
+          const s = window.__app.getState();
+          s.lastResult = {
+            kind: 'stream',
+            title: '演示视频',
+            original: 'https://example.com/demo.m3u8',
+            playUrl: 'http://127.0.0.1:1/stream?t=demo',
+          };
+          s.currentTitle = '演示视频';
+          s.cast.devices = [
+            { id: 'demo-tv', name: '客厅电视', model: 'Smart TV', manufacturer: 'Demo', host: '192.168.1.23' },
+            { id: 'demo-projector', name: '投影仪', model: 'Projector', manufacturer: 'Demo', host: '192.168.1.24' },
+          ];
+          s.cast.casting = true;
+          s.cast.deviceId = 'demo-tv';
+          s.cast.deviceName = '客厅电视';
+          s.cast.transportState = 'PLAYING';
+          s.cast.position = 640;
+          s.cast.duration = 2764;
+          s.cast.error = '';
+          document.querySelector('#btn-cast').click();
+          return true;
+        })()""")
+        time.sleep(0.8)
+        c.ev("""(() => {
+          const s = window.__app.getState();
+          s.cast.casting = true;
+          s.cast.deviceId = 'demo-tv';
+          s.cast.deviceName = '客厅电视';
+          s.cast.transportState = 'PLAYING';
+          s.cast.position = 640;
+          s.cast.duration = 2764;
+          const input = document.querySelector('#cast-url');
+          input.value = 'http://192.168.1.23:65432/mirror?t=demo&ty=hls&n=演示视频';
+          document.querySelector('#cast-scan-status').textContent = '找到 2 个设备，点一下开始投屏';
+          document.querySelector('#cast-active').hidden = false;
+          document.querySelector('#cast-active-name').textContent = '客厅电视';
+          document.querySelector('#cast-active-state').textContent = '正在播放';
+          document.querySelector('#cast-progress-bar').style.width = '23.2%';
+          document.querySelector('#cast-time-now').textContent = '10:40';
+          document.querySelector('#cast-time-total').textContent = '46:04';
+          return true;
+        })()""")
+        time.sleep(0.7)
+        c.ev("""(() => {
+          document.querySelector('#cast-hint').textContent = '电视端的画面来自电脑上的解析结果，投屏期间请不要关闭电脑端程序；Windows 第一次运行弹出防火墙提示时请选择「允许」，否则电视访问不到电脑。';
+          return true;
+        })()""")
+        time.sleep(0.3)
+        cast_boxes = [b for b in [
+            box(c, '#cast-scan', 1),
+            box(c, '#cast-devices', 2),
+            box(c, '#cast-active', 3),
+            box(c, '#cast-url', 4),
+        ] if b]
+        cast_modal = rect(c, '.cast-modal')
+        cast_crop = clamp_crop({'x': cast_modal['x'] - 18, 'y': cast_modal['y'] - 18, 'w': cast_modal['w'] + 36, 'h': cast_modal['h'] + 36}, vw, vh) if cast_modal else None
+        capture(c, '11-cast')
+        shots['cast'] = {'raw': '11-cast.png', 'boxes': cast_boxes, 'crop': cast_crop, 'dim': 0.26}
+        c.ev("document.querySelector('#cast-close').click(); true")
+        time.sleep(0.4)
+
         with open(os.path.join(GUIDE_DIR, 'shots.json'), 'w', encoding='utf-8') as f:
             json.dump({'viewport': [vw, vh], 'shots': shots}, f, ensure_ascii=False, indent=2)
         print('shots.json written')

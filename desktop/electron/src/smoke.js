@@ -145,6 +145,106 @@ async function runSmoke({ app, window, proxy, store }) {
 
     const denied = await net.fetch(proxy.resourceUrl(`http://127.0.0.1:${testPort}/video.mp4`).replace(/t=[a-f0-9]+/, 't=bad'))
     check('代理令牌校验', denied.status === 403, String(denied.status))
+
+    // ---- 2.5 投屏（DLNA 发现 / SOAP / 局域网大屏播放页） ----
+    const cast = require('./cast')
+    const lanList = cast.lanAddresses()
+    check(
+      '投屏：局域网地址推导',
+      Array.isArray(lanList) && lanList.every((item) => cast.isPrivateIPv4(item.address)),
+      JSON.stringify(lanList.map((item) => item.address)),
+    )
+    check(
+      '投屏：同网段匹配',
+      cast.inSameSubnet('192.168.1.5', '255.255.255.0', '192.168.1.23') === true &&
+        cast.inSameSubnet('192.168.1.5', '255.255.255.0', '192.168.2.23') === false,
+    )
+    const descXml =
+      "<?xml version='1.0'?><root><device><deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>" +
+      '<friendlyName>客厅电视 &amp; 盒子</friendlyName><manufacturer>Xiaomi</manufacturer><modelName>MiTV</modelName>' +
+      '<UDN>uuid:smoke-cast</UDN><serviceList>' +
+      '<service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType>' +
+      '<controlURL>/upnp/control/AVTransport1</controlURL></service>' +
+      '<service><serviceType>urn:schemas-upnp-org:service:RenderingControl:1</serviceType>' +
+      '<controlURL>upnp/control/Rcs1</controlURL></service></serviceList></device></root>'
+    const desc = cast.parseDeviceDescription(descXml, 'http://192.168.1.23:49152/desc.xml')
+    check(
+      '投屏：设备描述解析',
+      desc?.friendlyName === '客厅电视 & 盒子' &&
+        desc?.udn === 'uuid:smoke-cast' &&
+        desc?.services?.avTransport?.controlURL === 'http://192.168.1.23:49152/upnp/control/AVTransport1' &&
+        desc?.services?.renderingControl?.controlURL === 'http://192.168.1.23:49152/upnp/control/Rcs1',
+      JSON.stringify(desc),
+    )
+    const soapBody = cast.buildSoapEnvelope('urn:schemas-upnp-org:service:AVTransport:1', 'SetAVTransportURI', {
+      InstanceID: 0,
+      CurrentURI: 'http://192.168.1.5:9000/stream.m3u8?a=1&b=2',
+      CurrentURIMetaData: '<DIDL-Lite>',
+    })
+    check(
+      '投屏：SOAP 指令与转义',
+      soapBody.includes('<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">') &&
+        soapBody.includes('http://192.168.1.5:9000/stream.m3u8?a=1&amp;b=2') &&
+        soapBody.includes('&lt;DIDL-Lite&gt;'),
+      soapBody.slice(0, 120),
+    )
+    const castManager = new cast.CastManager({ proxy })
+    const castSource = `http://127.0.0.1:${proxy.port}/stream?t=${proxy.token}&u=c2VnbWVudA`
+    const lanUrl = castManager.localToLan(castSource, '192.168.1.23', 'hls')
+    if (lanList.length) {
+      check(
+        '投屏：代理地址换成局域网地址',
+        /^http:\/\/\d{1,3}(\.\d{1,3}){3}:\d+\/stream\.m3u8\?t=/.test(lanUrl),
+        lanUrl,
+      )
+    } else {
+      check('投屏：没有局域网时明确失败', lanUrl === '', lanUrl)
+    }
+    const mirrorResponse = await net.fetch(
+      `${proxy.base}/mirror?t=${proxy.token}&ty=hls&n=${encodeURIComponent('烟雾<测试>')}`,
+    )
+    const mirrorBody = await mirrorResponse.text()
+    check(
+      '投屏：大屏播放页可访问',
+      mirrorResponse.status === 200 &&
+        mirrorBody.includes('/hls.min.js') &&
+        mirrorBody.includes('烟雾&lt;测试&gt;') &&
+        mirrorBody.includes('投屏播放'),
+      `${mirrorResponse.status} ${mirrorBody.length}`,
+    )
+    const hlsAsset = await net.fetch(`${proxy.base}/hls.min.js`)
+    const hlsBody = await hlsAsset.text()
+    check(
+      '投屏：大屏页 HLS 脚本可加载',
+      hlsAsset.status === 200 && hlsBody.length > 100000,
+      `${hlsAsset.status} ${hlsBody.length}`,
+    )
+    // 播放列表里的分片要改写成「请求者看到的地址」，电视才拉得到
+    const playlistUrl = proxy.resourceUrl(upstreamPlaylist, 'https://www.iqiyi.com/', '')
+    const parsedPlaylist = new URL(playlistUrl)
+    const hostPlaylist = await new Promise((resolve, reject) => {
+      const request = http.request(
+        {
+          host: '127.0.0.1',
+          port: proxy.port,
+          path: `${parsedPlaylist.pathname}${parsedPlaylist.search}`,
+          method: 'GET',
+          headers: { Host: `192.168.9.9:${proxy.port}` },
+        },
+        (response) => {
+          const chunks = []
+          response.on('data', (chunk) => chunks.push(chunk))
+          response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+        },
+      )
+      request.on('error', reject)
+      request.end()
+    })
+    check(
+      '投屏：播放列表按访问地址改写',
+      hostPlaylist.includes(`192.168.9.9:${proxy.port}/stream?t=`),
+      hostPlaylist.slice(0, 140),
+    )
   } finally {
     testServer.close()
   }
@@ -345,6 +445,52 @@ async function runSmoke({ app, window, proxy, store }) {
     '图文教程：入口 / 章节 / 配图加载',
     guide.open === true && guide.sections >= 9 && guide.navs >= 10 && guide.images >= 9 && guide.loaded === guide.images,
     guideCheck,
+  )
+
+  // ---- 3.3 投屏：渲染层入口 / 设备列表 ----
+  const castUiCheck = await window.webContents.executeJavaScript(`(() => {
+    const button = document.querySelector('#btn-cast')
+    const modal = document.querySelector('#cast-modal')
+    const input = document.querySelector('#cast-url')
+    return JSON.stringify({
+      button: Boolean(button),
+      disabled: button ? button.disabled : null,
+      modal: Boolean(modal),
+      hidden: modal ? modal.hidden : null,
+      readonly: input ? input.readOnly : null,
+      shortEntry: Boolean(document.querySelector('#short-cast')),
+      source: window.__app.currentCastSource(),
+    })
+  })()`)
+  const castUi = JSON.parse(castUiCheck)
+  check(
+    '投屏：入口与弹窗就绪（无视频时按钮禁用）',
+    castUi.button === true &&
+      castUi.disabled === true &&
+      castUi.modal === true &&
+      castUi.hidden === true &&
+      castUi.readonly === true &&
+      castUi.shortEntry === true &&
+      castUi.source === null,
+    castUiCheck,
+  )
+
+  const castDevicesCheck = await window.webContents.executeJavaScript(`(() => {
+    window.__app.showCastDevices([
+      { id: 'uuid:tv1', name: '客厅电视', model: 'MiTV', manufacturer: 'Xiaomi', host: '192.168.1.23' },
+      { id: 'uuid:box1', name: '投影仪', model: '', manufacturer: '', host: '192.168.1.30' },
+    ])
+    const items = Array.from(document.querySelectorAll('#cast-devices .cast-device'))
+    const names = items.map((item) => item.querySelector('.cast-device-name').textContent)
+    const status = document.querySelector('#cast-scan-status').textContent
+    window.__app.showCastDevices([])
+    return JSON.stringify({ count: items.length, names, status })
+  })()`)
+  const castDevices = JSON.parse(castDevicesCheck)
+  check(
+    '投屏：设备列表渲染',
+    castDevices.count === 2 && castDevices.names.join(',') === '客厅电视,投影仪' && castDevices.status.includes('2'),
+    castDevicesCheck,
   )
 
   // ---- 3.5 在线解析链路（可选，需要外网）----

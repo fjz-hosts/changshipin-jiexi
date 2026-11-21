@@ -204,6 +204,7 @@
                     </label>
                     <button class="primary-sm" id="short-play">播放</button>
                     <button class="primary-sm" id="short-download">下载 MP4</button>
+                    <button class="ghost-sm" id="short-cast" title="投屏到电视 / 大屏">投屏</button>
                     <button class="ghost-sm" id="short-open">打开原平台</button>
                   </div>
                   <p class="short-note" id="short-note"></p>
@@ -300,6 +301,7 @@
               <button class="tool-btn" id="btn-next-line" title="换一条解析线路">换线路</button>
               <button class="tool-btn" id="btn-native" title="用平台官方接口解析（按 yt-dlp 流程，免费内容可用，能记录进度）" hidden>原生解析</button>
               <button class="tool-btn" id="btn-download" title="下载本集（仅内置播放器可用）" disabled>下载</button>
+              <button class="tool-btn" id="btn-cast" title="投屏到电视 / 大屏" disabled>投屏</button>
               <button class="tool-btn" id="btn-open-web" title="用系统浏览器打开当前链接">浏览器打开</button>
               <button class="tool-btn" id="btn-fullscreen" title="全屏（F11）">全屏</button>
             </div>
@@ -629,6 +631,58 @@
       </div>
     </div>
 
+    <!-- 投屏：电视 / 大屏 -->
+    <div class="modal-mask" id="cast-modal" hidden>
+      <div class="modal cast-modal" role="dialog" aria-modal="true" aria-labelledby="cast-title">
+        <header class="modal-head cast-head">
+          <div>
+            <h2 id="cast-title">投屏到大屏</h2>
+            <p class="cast-sub">电视、投影、机顶盒需要和电脑在同一个 Wi-Fi 下，并在电视上打开「投屏 / DLNA」接收</p>
+          </div>
+          <button class="icon-btn" id="cast-close" title="关闭（Esc）">✕</button>
+        </header>
+        <div class="cast-body">
+          <div class="cast-scan-row">
+            <button class="primary-sm" id="cast-scan">搜索设备</button>
+            <span class="cast-scan-status" id="cast-scan-status">点「搜索设备」查找同一网络里的电视</span>
+          </div>
+          <ul class="cast-devices" id="cast-devices"></ul>
+
+          <section class="cast-active" id="cast-active" hidden>
+            <div class="cast-active-head">
+              <span class="cast-live" aria-hidden="true"></span>
+              <b id="cast-active-name">—</b>
+              <span class="cast-state" id="cast-active-state">投屏中</span>
+            </div>
+            <div class="cast-progress"><span id="cast-progress-bar"></span></div>
+            <div class="cast-time">
+              <span id="cast-time-now">00:00</span>
+              <span id="cast-time-total">00:00</span>
+            </div>
+            <div class="cast-actions">
+              <button class="ghost-sm" id="cast-back">− 10 秒</button>
+              <button class="primary-sm" id="cast-toggle">暂停</button>
+              <button class="ghost-sm" id="cast-forward">+ 10 秒</button>
+              <button class="ghost-sm danger" id="cast-stop">停止投屏</button>
+            </div>
+            <p class="cast-note" id="cast-note" hidden></p>
+          </section>
+
+          <section class="cast-mirror">
+            <h3>没有找到设备？用大屏浏览器直接打开</h3>
+            <p>在电视、投影、平板或笔记本的浏览器里输入下面的地址，就能播放当前画面（需要和电脑在同一个局域网）。</p>
+            <div class="cast-url-row">
+              <input id="cast-url" type="text" readonly spellcheck="false" placeholder="正在生成地址…" />
+              <button class="ghost-sm" id="cast-copy-url">复制地址</button>
+            </div>
+            <p class="hint" id="cast-hint">
+              电视端的画面来自电脑上的解析结果，投屏期间请不要关闭电脑端程序；Windows 第一次运行弹出防火墙提示时请选择「允许」，否则电视访问不到电脑。
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+
     <!-- 图文教程 -->
     <div class="modal-mask" id="guide-modal" hidden>
       <div class="modal guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
@@ -652,6 +706,7 @@
             <button data-guide="fullscreen">8 · 全屏与快捷键</button>
             <button data-guide="settings">9 · 设置与常见问题</button>
             <button data-guide="short">10 · 短视频与短剧下载</button>
+            <button data-guide="cast">11 · 投屏到大屏</button>
             <div class="guide-nav-foot">按 Esc 或点右上角关闭</div>
           </nav>
           <div class="guide-content" id="guide-content">
@@ -858,6 +913,23 @@
                 <li>解析失败时，可以先进入原平台页面确认视频能正常播放，再复制当前页面链接回来重试。</li>
               </ul>
               <div class="guide-tip">短视频和长视频共用程序安装目录旁的「视频解析下载」文件夹，但短视频按平台名保存、短剧单独放在剧名文件夹里，不会混在一起。</div>
+            </section>
+
+            <section class="guide-section" id="guide-cast">
+              <h3><span class="guide-step">11</span>投屏到大屏</h3>
+              <p>解析成功后，播放区右上角的「投屏」可以把画面送到电视、投影或机顶盒；电视上没有 DLNA 接收端时，也能用电视浏览器的地址播放。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-11-cast.webp" alt="投屏弹窗：搜索设备、设备列表、投屏控制和大屏浏览器地址" />
+                <figcaption><b>①</b> 搜索设备　<b>②</b> 点一下投屏到这个设备　<b>③</b> 投屏中的播放控制　<b>④</b> 电视 / 平板浏览器直接打开的地址</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>电脑和电视必须连同一个 Wi-Fi；电脑上如果弹出防火墙提示，请选择「允许」。</li>
+                <li>点「搜索设备」后，同一网络里的电视 / 投影会出现在列表里；点设备名就开始投屏，本机自动暂停，避免两边同时出声。</li>
+                <li>投屏后可以暂停 / 继续、快退 / 快进 10 秒、停止投屏；换集或换清晰度会自动把新的画面重新推到电视上。</li>
+                <li>电视没有「投屏 / DLNA」接收端时，把弹窗里的地址复制到电视浏览器（或平板）打开，也能直接播；这个地址需要电脑端保持运行。</li>
+                <li>网页解析线路（第三方解析页）拿不到真实流地址，投屏按钮是灰的；换到内置播放器线路再投屏。</li>
+              </ul>
+              <div class="guide-tip">投屏期间电脑端不要退出软件、也不要切到别的视频：电视是从电脑这里的代理拉流，软件关掉画面就会停。</div>
             </section>
           </div>
         </div>
