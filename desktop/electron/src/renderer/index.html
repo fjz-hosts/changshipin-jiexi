@@ -301,7 +301,9 @@
               <button class="tool-btn" id="btn-next-line" title="换一条解析线路">换线路</button>
               <button class="tool-btn" id="btn-native" title="用平台官方接口解析（按 yt-dlp 流程，免费内容可用，能记录进度）" hidden>原生解析</button>
               <button class="tool-btn" id="btn-download" title="下载本集（仅内置播放器可用）" disabled>下载</button>
-              <button class="tool-btn" id="btn-cast" title="投屏到电视 / 大屏" disabled>投屏</button>
+              <button class="tool-btn" id="btn-cast" title="投屏到电视 / 手机 / 平板">
+                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7.8 12.2a5.2 5.2 0 0 1 5.2-5.2M10.6 12.2a2.4 2.4 0 0 1 2.4-2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span id="cast-btn-label">投屏</span>
+              </button>
               <button class="tool-btn" id="btn-open-web" title="用系统浏览器打开当前链接">浏览器打开</button>
               <button class="tool-btn" id="btn-fullscreen" title="全屏（F11）">全屏</button>
             </div>
@@ -670,7 +672,14 @@
 
           <section class="cast-mirror">
             <h3>没有找到设备？用大屏浏览器直接打开</h3>
-            <p>在电视、投影、平板或笔记本的浏览器里输入下面的地址，就能播放当前画面（需要和电脑在同一个局域网）。</p>
+            <p>在电视、投影、平板或手机的浏览器里输入下面的地址，就能播放当前画面（需要和电脑在同一个局域网）。</p>
+            <div class="cast-qr-row" id="cast-qr-row" hidden>
+              <img id="cast-qr" alt="手机扫码打开投屏地址" />
+              <div class="cast-qr-text">
+                <b>手机扫码投屏</b>
+                <p>手机和电脑连同一个 Wi-Fi，用相机 / 微信扫这个码，就能在手机浏览器里直接打开当前画面。</p>
+              </div>
+            </div>
             <div class="cast-url-row">
               <input id="cast-url" type="text" readonly spellcheck="false" placeholder="正在生成地址…" />
               <button class="ghost-sm" id="cast-copy-url">复制地址</button>
@@ -917,14 +926,15 @@
 
             <section class="guide-section" id="guide-cast">
               <h3><span class="guide-step">11</span>投屏到大屏</h3>
-              <p>解析成功后，播放区右上角的「投屏」可以把画面送到电视、投影或机顶盒；电视上没有 DLNA 接收端时，也能用电视浏览器的地址播放。</p>
+              <p>解析成功后，播放区右上角的「投屏」可以把画面送到电视、投影或机顶盒；电视上没有 DLNA 接收端时，手机扫码或用电视浏览器打开弹窗里的地址也能播放。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-11-cast.webp" alt="投屏弹窗：搜索设备、设备列表、投屏控制和大屏浏览器地址" />
-                <figcaption><b>①</b> 搜索设备　<b>②</b> 点一下投屏到这个设备　<b>③</b> 投屏中的播放控制　<b>④</b> 电视 / 平板浏览器直接打开的地址</figcaption>
+                <img src="assets/guide/guide-11-cast.webp" alt="投屏弹窗：搜索设备、设备列表、投屏控制、手机扫码和大屏浏览器地址" />
+                <figcaption><b>①</b> 搜索设备　<b>②</b> 点一下投屏到这个设备　<b>③</b> 投屏中的播放控制　<b>④</b> 手机扫码 / 电视浏览器直接打开的地址</figcaption>
               </figure>
               <ul class="guide-points">
                 <li>电脑和电视必须连同一个 Wi-Fi；电脑上如果弹出防火墙提示，请选择「允许」。</li>
                 <li>点「搜索设备」后，同一网络里的电视 / 投影会出现在列表里；点设备名就开始投屏，本机自动暂停，避免两边同时出声。</li>
+                <li>手机和电脑在同一个 Wi-Fi 时，直接扫弹窗里的二维码，就能在手机浏览器打开当前画面；也可以复制地址发到手机 / 平板。</li>
                 <li>投屏后可以暂停 / 继续、快退 / 快进 10 秒、停止投屏；换集或换清晰度会自动把新的画面重新推到电视上。</li>
                 <li>电视没有「投屏 / DLNA」接收端时，把弹窗里的地址复制到电视浏览器（或平板）打开，也能直接播；这个地址需要电脑端保持运行。</li>
                 <li>网页解析线路（第三方解析页）拿不到真实流地址，投屏按钮是灰的；换到内置播放器线路再投屏。</li>

@@ -455,22 +455,26 @@ async function runSmoke({ app, window, proxy, store }) {
     return JSON.stringify({
       button: Boolean(button),
       disabled: button ? button.disabled : null,
+      dimmed: button ? button.classList.contains('is-disabled') : null,
       modal: Boolean(modal),
       hidden: modal ? modal.hidden : null,
       readonly: input ? input.readOnly : null,
       shortEntry: Boolean(document.querySelector('#short-cast')),
+      qr: Boolean(document.querySelector('#cast-qr')),
       source: window.__app.currentCastSource(),
     })
   })()`)
   const castUi = JSON.parse(castUiCheck)
   check(
-    '投屏：入口与弹窗就绪（无视频时按钮禁用）',
+    '投屏：入口与弹窗就绪（无视频时按钮置灰、点击提示）',
     castUi.button === true &&
-      castUi.disabled === true &&
+      castUi.disabled === false &&
+      castUi.dimmed === true &&
       castUi.modal === true &&
       castUi.hidden === true &&
       castUi.readonly === true &&
       castUi.shortEntry === true &&
+      castUi.qr === true &&
       castUi.source === null,
     castUiCheck,
   )

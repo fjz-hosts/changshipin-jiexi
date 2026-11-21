@@ -15,8 +15,10 @@ import subprocess
 import threading
 import time
 import base64
+import io
 from urllib.parse import unquote
 
+import qrcode
 import requests
 import websocket
 
@@ -685,6 +687,17 @@ def main():
           document.querySelector('#cast-hint').textContent = '电视端的画面来自电脑上的解析结果，投屏期间请不要关闭电脑端程序；Windows 第一次运行弹出防火墙提示时请选择「允许」，否则电视访问不到电脑。';
           return true;
         })()""")
+        qr_img = qrcode.make('http://192.168.1.23:65432/mirror?t=demo&ty=hls&n=演示视频')
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format='PNG')
+        qr_b64 = base64.b64encode(qr_buf.getvalue()).decode('ascii')
+        c.ev(f"""(() => {{
+          const img = document.querySelector('#cast-qr');
+          img.src = 'data:image/png;base64,{qr_b64}';
+          img.hidden = false;
+          document.querySelector('#cast-qr-row').hidden = false;
+          return true;
+        }})()""")
         time.sleep(0.3)
         cast_boxes = [b for b in [
             box(c, '#cast-scan', 1),

@@ -1236,14 +1236,27 @@ function registerIpc() {
   ipcMain.handle('cast:state', () => caster?.snapshot() || { ok: false, casting: false, devices: [] })
 
   // 大屏浏览器播放页：电视上没有 DLNA 时，用这个地址在电视 / 平板的浏览器里打开
-  ipcMain.handle('cast:page', (_event, payload = {}) => {
+  ipcMain.handle('cast:page', async (_event, payload = {}) => {
     if (!caster || !proxy) return { ok: false, error: '投屏模块还没准备好' }
     const url = String(payload.url || '')
     if (!url.startsWith(proxy.base)) return { ok: false, error: '当前没有可投屏的视频流' }
     const mime = payload.mime === 'hls' ? 'hls' : 'mp4'
     const pageUrl = caster.pageUrl(url, { mime, title: String(payload.title || '').slice(0, 120) })
     if (!pageUrl) return { ok: false, error: '找不到局域网地址：请确认电脑和电视在同一个 Wi-Fi 下' }
-    return { ok: true, pageUrl, host: new URL(pageUrl).host }
+    let qrDataUrl = ''
+    try {
+      // 二维码内容就是手机要打开的局域网地址；手机和电脑在同一 Wi-Fi 即可扫码播放。
+      const QRCode = require('qrcode')
+      qrDataUrl = await QRCode.toDataURL(pageUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 320,
+        color: { dark: '#07101d', light: '#ffffff' },
+      })
+    } catch {
+      /* 二维码生成失败不影响复制地址 */
+    }
+    return { ok: true, pageUrl, host: new URL(pageUrl).host, qrDataUrl }
   })
 
   ipcMain.handle('cast:start', async (_event, payload = {}) => {

@@ -1554,14 +1554,18 @@
     const button = $('#btn-cast')
     if (!button) return
     const ready = Boolean(currentCastSource())
-    button.textContent = state.cast.casting ? '投屏中' : '投屏'
+    const label = $('#cast-btn-label')
+    if (label) label.textContent = state.cast.casting ? '投屏中' : '投屏'
     button.classList.toggle('active', Boolean(state.cast.casting))
-    button.disabled = !state.cast.casting && !ready
+    // 没有可投屏的流时不真禁用，保留点击以便弹提示说明原因（网页解析线路拿不到真实流）。
+    button.classList.toggle('is-disabled', !state.cast.casting && !ready)
+    button.classList.toggle('ready', ready && !state.cast.casting)
+    button.disabled = false
     button.title = state.cast.casting
       ? '正在投屏到电视 / 大屏，点击查看或停止'
       : ready
-        ? '投屏到电视 / 大屏'
-        : '当前是网页解析线路，拿不到真实流地址，无法投屏'
+        ? '投屏到电视 / 手机 / 平板'
+        : '当前是网页解析线路，拿不到真实流地址，无法投屏；换到内置播放器线路再试'
   }
 
   function renderCast() {
@@ -1650,15 +1654,33 @@
   async function loadCastPage(source) {
     const input = $('#cast-url')
     const hint = $('#cast-hint')
+    const qr = $('#cast-qr')
+    const qrRow = $('#cast-qr-row')
     try {
       const page = await window.desktop.castPage({ url: source.url, mime: source.mime, title: source.title })
       if (page?.ok) {
         state.cast.pageUrl = page.pageUrl
         if (input) input.value = page.pageUrl
+        if (qr) {
+          if (page.qrDataUrl) {
+            qr.src = page.qrDataUrl
+            qr.hidden = false
+            if (qrRow) qrRow.hidden = false
+          } else {
+            qr.hidden = true
+            qr.removeAttribute('src')
+            if (qrRow) qrRow.hidden = true
+          }
+        }
         return
       }
       state.cast.pageUrl = ''
       if (input) input.value = ''
+      if (qr) {
+        qr.hidden = true
+        qr.removeAttribute('src')
+      }
+      if (qrRow) qrRow.hidden = true
       if (hint && page?.error) hint.textContent = page.error
     } catch {
       /* 地址生成失败不影响设备投屏 */
@@ -1667,15 +1689,15 @@
 
   async function openCastModal() {
     const source = currentCastSource()
-    if (!source) {
-      toast('先解析出一个能播放的视频，再点投屏；网页解析线路拿不到真实流地址，不能投屏', 'warn', 5600)
+    if (!source && !state.cast.casting) {
+      toast('先解析出一个能播放的视频，再点投屏；网页解析线路拿不到真实流地址，不能投屏。换到出 m3u8/mp4 的线路再试。', 'warn', 6200)
       return
     }
-    state.cast.source = source
+    if (source) state.cast.source = source
     $('#cast-modal').hidden = false
     $('#cast-url').value = state.cast.pageUrl || ''
     renderCast()
-    loadCastPage(source)
+    if (source) loadCastPage(source)
     if (!state.cast.casting && !state.cast.devices.length) scanCast()
   }
 
