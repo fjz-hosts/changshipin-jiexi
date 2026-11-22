@@ -1,4 +1,4 @@
-# 长视频解析 · 项目规则
+# 音视频解析 · 项目规则
 
 本文件是**本项目的开发/发版约定**，优先级高于临时口头说明；新对话先读本文件。
 
@@ -66,7 +66,7 @@ node scripts\sync-releases.mjs
 # 仅隔离验证示例（不要写 D:\长视频解析）
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 $env:CHANGSPIN_USERDATA='F:\Desktop\长视频解析\.tmp\unpacked-smoke'
-Start-Process -FilePath 'F:\Desktop\长视频解析\release\win-unpacked\长视频解析.exe' `
+Start-Process -FilePath 'F:\Desktop\长视频解析\release\win-unpacked\音视频解析.exe' `
   -ArgumentList '--smoke-test','--no-sandbox','--disable-gpu' -Wait `
   -RedirectStandardOutput 'F:\Desktop\长视频解析\.tmp\unpacked-smoke.txt'
 ```
@@ -106,7 +106,7 @@ node scripts\sync-releases.mjs --no-cleanup
 ## 3. 发版前测试
 
 ```powershell
-# 无头自检（32 项）
+# 无头自检（44 项）
 powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 
 # 界面回归（需要先启动开发版并开 9345 调试端口）

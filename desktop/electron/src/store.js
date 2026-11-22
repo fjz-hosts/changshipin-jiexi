@@ -6,7 +6,19 @@ const { DEFAULT_LINES } = require('./lines')
 const { PLATFORMS, detectPlatformByUrl } = require('./platforms')
 
 const MAX_HISTORY = 40
+const MAX_SHORT_HISTORY = 120
+const MAX_MUSIC_HISTORY = 120
+const MAX_MUSIC_FAVORITES = 300
 const CONFIG_VERSION = 1
+
+// 音乐平台登录态只用于主进程请求官方接口，不暴露给渲染进程。
+const MUSIC_COOKIE_KEYS = {
+  netease: ['MUSIC_U'],
+  qq: ['qm_keyst', 'qqmusic_key', 'p_skey'],
+  kugou: ['userid', 'KugouID', 'token'],
+  kuwo: ['userid', 'token'],
+  qishui: ['sessionid'],
+}
 
 // 「第 12 集 / 第12期 / EP12 / S01E02」：历史记录按「一部剧一条」合并，
 // 剧名去掉集数后就是这部剧的名字。
@@ -137,6 +149,84 @@ function normalizeHistory(raw) {
     .map((item) => ({ ...item, seriesKey: historySeriesKey(item) }))
 }
 
+// 短视频历史：和长视频分开存，只记「解析过哪条视频」，点一下可以重新解析。
+function normalizeShortHistory(raw) {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const url = cleanText(item.url, 2000)
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue
+    seen.add(url)
+    out.push({
+      url,
+      platform: cleanText(item.platform, 20),
+      platformName: cleanText(item.platformName, 30),
+      title: cleanText(item.title, 150),
+      author: cleanText(item.author, 80),
+      cover: cleanText(item.cover, 1000),
+      duration: Math.max(0, Number(item.duration) || 0),
+      at: Number(item.at) || Date.now(),
+    })
+  }
+  return out.sort((left, right) => right.at - left.at).slice(0, MAX_SHORT_HISTORY)
+}
+
+function normalizeMusicItem(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const platform = cleanText(raw.platform, 20)
+  const id = cleanText(raw.id, 120)
+  const title = cleanText(raw.title, 150)
+  if (!platform || !id || !title) return null
+  return {
+    key: `${platform}:${id}`,
+    platform,
+    platformName: cleanText(raw.platformName, 30),
+    id,
+    url: cleanText(raw.url, 2000),
+    title,
+    artist: cleanText(raw.artist, 120),
+    album: cleanText(raw.album, 120),
+    cover: cleanText(raw.cover, 1000),
+    duration: Math.max(0, Number(raw.duration) || 0),
+    vip: Boolean(raw.vip),
+    at: Number(raw.at) || Date.now(),
+  }
+}
+
+function normalizeMusicList(raw, max) {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of raw) {
+    const normalized = normalizeMusicItem(item)
+    if (!normalized || seen.has(normalized.key)) continue
+    seen.add(normalized.key)
+    out.push(normalized)
+  }
+  return out.sort((left, right) => right.at - left.at).slice(0, max)
+}
+
+function normalizeMusicCookies(raw) {
+  const out = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const key of Object.keys(MUSIC_COOKIE_KEYS)) {
+    const value = cleanText(raw[key], 20000)
+    if (value) out[key] = value
+  }
+  return out
+}
+
+function musicLoginFromCookies(cookies) {
+  const status = {}
+  for (const [key, loginNames] of Object.entries(MUSIC_COOKIE_KEYS)) {
+    const cookie = String(cookies[key] || '')
+    status[key] = Boolean(cookie && loginNames.some((name) => new RegExp(`(?:^|;\\s*)${name}=`).test(cookie)))
+  }
+  return status
+}
+
 class Store {
   constructor(userDataDir) {
     this.dir = userDataDir
@@ -151,6 +241,10 @@ class Store {
       lines: DEFAULT_LINES.map((line, index) => normalizeLine(line, index)),
       defaultLineId: DEFAULT_LINES[0]?.id || '',
       history: [],
+      shortHistory: [],
+      musicHistory: [],
+      musicFavorites: [],
+      musicCookies: {},
       lineHealth: {},
       autoLineTest: true,
       autoUpdate: true,
@@ -213,6 +307,10 @@ class Store {
         nativeParseVersion: 2,
         lines: lines.length ? lines : defaults.lines,
         history: normalizeHistory(data.history),
+        shortHistory: normalizeShortHistory(data.shortHistory),
+        musicHistory: normalizeMusicList(data.musicHistory, MAX_MUSIC_HISTORY),
+        musicFavorites: normalizeMusicList(data.musicFavorites, MAX_MUSIC_FAVORITES),
+        musicCookies: normalizeMusicCookies(data.musicCookies),
         lineHealth: normalizeHealth(data.lineHealth),
         autoLineTest: data.autoLineTest !== false,
         autoUpdate: data.autoUpdate !== false,
@@ -242,7 +340,11 @@ class Store {
   }
 
   snapshot() {
-    return clone(this.data)
+    const copy = clone(this.data)
+    // 登录 Cookie 只留在主进程；渲染进程只看登录状态。
+    delete copy.musicCookies
+    copy.musicLogin = musicLoginFromCookies(this.data.musicCookies)
+    return copy
   }
 
   get(key) {
@@ -349,6 +451,111 @@ class Store {
     this.data.history = []
     this._write()
     return this.data.history
+  }
+
+  // -------------------------------------------------------------------------
+  // 短视频历史（与长视频观看历史完全独立）
+  // -------------------------------------------------------------------------
+  addShortHistory(entry = {}) {
+    const url = cleanText(entry.url, 2000)
+    if (!/^https?:\/\//i.test(url)) return this.snapshot().shortHistory
+    const item = {
+      url,
+      platform: cleanText(entry.platform, 20),
+      platformName: cleanText(entry.platformName, 30),
+      title: cleanText(entry.title, 150),
+      author: cleanText(entry.author, 80),
+      cover: cleanText(entry.cover, 1000),
+      duration: Math.max(0, Number(entry.duration) || 0),
+      at: Date.now(),
+    }
+    const previous = this.data.shortHistory.find((old) => old.url === url)
+    if (previous) {
+      if (!item.title) item.title = previous.title
+      if (!item.cover) item.cover = previous.cover
+      if (!item.author) item.author = previous.author
+      if (!item.platformName) item.platformName = previous.platformName
+    }
+    this.data.shortHistory = [item, ...this.data.shortHistory.filter((old) => old.url !== url)].slice(0, MAX_SHORT_HISTORY)
+    this._write()
+    return this.snapshot().shortHistory
+  }
+
+  removeShortHistory(rawUrl) {
+    const url = cleanText(rawUrl, 2000)
+    this.data.shortHistory = this.data.shortHistory.filter((item) => item.url !== url)
+    this._write()
+    return this.snapshot().shortHistory
+  }
+
+  clearShortHistory() {
+    this.data.shortHistory = []
+    this._write()
+    return []
+  }
+
+  // -------------------------------------------------------------------------
+  // 音乐：播放记录 / 收藏 / 平台登录 Cookie
+  // -------------------------------------------------------------------------
+  addMusicHistory(entry = {}) {
+    const item = normalizeMusicItem({ ...entry, at: Date.now() })
+    if (!item) return this.snapshot().musicHistory
+    this.data.musicHistory = [item, ...this.data.musicHistory.filter((old) => old.key !== item.key)].slice(0, MAX_MUSIC_HISTORY)
+    this._write()
+    return this.snapshot().musicHistory
+  }
+
+  removeMusicHistory(key) {
+    const target = cleanText(key, 200)
+    this.data.musicHistory = this.data.musicHistory.filter((item) => item.key !== target)
+    this._write()
+    return this.snapshot().musicHistory
+  }
+
+  clearMusicHistory() {
+    this.data.musicHistory = []
+    this._write()
+    return []
+  }
+
+  addMusicFavorite(entry = {}) {
+    const item = normalizeMusicItem({ ...entry, at: Date.now() })
+    if (!item) return this.snapshot().musicFavorites
+    this.data.musicFavorites = [item, ...this.data.musicFavorites.filter((old) => old.key !== item.key)].slice(0, MAX_MUSIC_FAVORITES)
+    this._write()
+    return this.snapshot().musicFavorites
+  }
+
+  removeMusicFavorite(key) {
+    const target = cleanText(key, 200)
+    this.data.musicFavorites = this.data.musicFavorites.filter((item) => item.key !== target)
+    this._write()
+    return this.snapshot().musicFavorites
+  }
+
+  clearMusicFavorites() {
+    this.data.musicFavorites = []
+    this._write()
+    return []
+  }
+
+  saveMusicCookies(patch = {}) {
+    const next = { ...this.data.musicCookies }
+    for (const key of Object.keys(MUSIC_COOKIE_KEYS)) {
+      if (patch[key] === null) delete next[key]
+      else if (typeof patch[key] === 'string' && patch[key].trim()) next[key] = cleanText(patch[key], 20000)
+    }
+    this.data.musicCookies = normalizeMusicCookies(next)
+    this._write()
+    return this.snapshot().musicLogin
+  }
+
+  getMusicCookie(key) {
+    return String(this.data.musicCookies?.[key] || '')
+  }
+
+  musicLoginState() {
+    return musicLoginFromCookies(this.data.musicCookies || {})
   }
 
   // 用远端线路清单覆盖内置线路，保留用户自建线路与启用状态

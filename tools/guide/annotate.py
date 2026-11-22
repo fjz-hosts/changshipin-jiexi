@@ -32,6 +32,7 @@ SHOT_NAMES = {
     'settings': 'guide-09-settings',
     'short': 'guide-10-short',
     'cast': 'guide-11-cast',
+    'music': 'guide-12-music',
 }
 
 TARGET_WIDTH = {
@@ -46,6 +47,7 @@ TARGET_WIDTH = {
     'settings': 1500,
     'short': 1600,
     'cast': 1500,
+    'music': 1600,
 }
 
 

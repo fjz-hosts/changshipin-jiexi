@@ -52,6 +52,10 @@ const check = (name, ok, detail = '') => {
 const targets = await list()
 const mainT = targets.find((t) => t.type === 'page' && String(t.url).includes('index.html'))
 const main = await connect(mainT.webSocketDebuggerUrl)
+for (let i = 0; i < 80; i += 1) {
+  if (await ev(main, 'Boolean(window.__app && window.__app.getState)')) break
+  await sleep(250)
+}
 
 // 1. 选集条
 const series = await ev(

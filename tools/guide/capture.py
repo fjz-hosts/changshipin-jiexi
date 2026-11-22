@@ -374,6 +374,16 @@ def main():
         shutil.rmtree(USERDATA, ignore_errors=True)
     os.makedirs(USERDATA, exist_ok=True)
 
+    # 教程里的音乐播放器用一个 269 秒的静音 MP3，保证进度条 / 时长和演示歌曲一致
+    demo_audio = os.path.join(WWW, 'demo.mp3')
+    if not os.path.exists(demo_audio):
+        subprocess.run(
+            ['ffmpeg', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+             '-t', '269', '-q:a', '9', demo_audio],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print('demo audio', demo_audio, os.path.getsize(demo_audio))
+
     httpd = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     http_port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -711,6 +721,116 @@ def main():
         shots['cast'] = {'raw': '11-cast.png', 'boxes': cast_boxes, 'crop': cast_crop, 'dim': 0.26}
         c.ev("document.querySelector('#cast-close').click(); true")
         time.sleep(0.4)
+
+        # 12. 音乐（演示播放器 + 歌词，不联网）
+        music_song = {
+            'platform': 'netease',
+            'platformName': '网易云音乐',
+            'id': 'demo-qingtian',
+            'title': '晴天',
+            'artist': '周杰伦',
+            'album': '叶惠美',
+            'cover': 'assets/app-icon.png',
+            'duration': 269,
+            'vip': False,
+        }
+        music_lyric = '\n'.join(
+            f'[00:{index * 6:02d}.00]{text}'
+            for index, text in enumerate([
+                '故事的小黄花',
+                '从出生那年就飘着',
+                '童年的荡秋千',
+                '随记忆一直晃到现在',
+                '吹着前奏望着天空',
+                '我想起花瓣试着掉落',
+                '为你翘课的那一天',
+                '花落的那一天',
+                '教室的那一间',
+                '我怎么看不见',
+                '消失的下雨天',
+                '我好想再淋一遍',
+                '没想到失去的勇气我还留着',
+                '好想再问一遍',
+                '你会等待还是离开',
+                '刮风这天我试过握着你手',
+                '但偏偏雨渐渐大到我看你不见',
+                '还要多久我才能在你身边',
+                '等到放晴的那天也许我会比较好一点',
+                '从前从前有个人爱你很久',
+            ])
+        )
+        music_result = {
+            'ok': True,
+            'platform': 'netease',
+            'platformName': '网易云音乐',
+            'title': '晴天',
+            'artist': '周杰伦',
+            'album': '叶惠美',
+            'cover': 'assets/app-icon.png',
+            'duration': 269,
+            'format': 'mp3',
+            'bitrate': 320000,
+            'playUrl': f'http://127.0.0.1:{http_port}/demo.mp3',
+            'streamUrl': f'http://127.0.0.1:{http_port}/demo.mp3',
+            'referer': '',
+            'cookie': '',
+            'lyric': music_lyric,
+            'translation': '',
+            'via': 'kuwo',
+            'viaName': '酷我音乐',
+            'note': '已自动换到酷我上的同名单曲（晴天 - 周杰伦）',
+            'qualities': [
+                {'key': '128', 'label': '标准 128K', 'format': 'mp3', 'available': True},
+                {'key': '320', 'label': '高品 320K', 'format': 'mp3', 'available': True},
+                {'key': 'flac', 'label': '无损 FLAC', 'format': 'flac', 'available': False},
+            ],
+        }
+        music_results = [
+            music_song,
+            {**music_song, 'id': 'demo-2', 'title': '稻香', 'album': '魔杰座', 'duration': 223},
+            {**music_song, 'id': 'demo-3', 'title': '七里香', 'album': '七里香', 'duration': 299},
+            {**music_song, 'id': 'demo-4', 'title': '夜曲', 'album': '十一月的萧邦', 'duration': 226},
+        ]
+        c.ev("window.scrollTo(0, 0); window.__app.switchMode('music', { force: true }); true")
+        time.sleep(0.9)
+        c.ev(f""" (async () => {{
+          const ok = window.MusicUI.renderDemo({{
+            song: {json.dumps(music_song, ensure_ascii=False)},
+            result: {json.dumps(music_result, ensure_ascii=False)},
+            results: {json.dumps(music_results, ensure_ascii=False)},
+          }});
+          const audio = document.querySelector('#music-audio');
+          await new Promise((resolve) => {{
+            if (audio.readyState >= 1) {{ resolve(); return; }}
+            audio.addEventListener('loadedmetadata', resolve, {{ once: true }});
+            setTimeout(resolve, 2500);
+          }});
+          audio.pause();
+          audio.muted = true;
+          try {{ audio.currentTime = 48; }} catch (e) {{}}
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          document.querySelector('#music-toggle').textContent = '⏸';
+          document.querySelector('#music-pos').textContent = '00:48';
+          document.querySelector('#music-dur').textContent = '04:29';
+          document.querySelector('#music-seek').value = '178';
+          document.querySelector('#music-fav').textContent = '♥ 已收藏';
+          document.querySelector('#music-fav').classList.add('on');
+          window.MusicUI.setActiveLyric(8);
+          document.querySelector('#music-panel').scrollTop = 0;
+          window.scrollTo(0, 0);
+          document.querySelector('#status-text').textContent = '正在播放：晴天 - 周杰伦';
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          return ok;
+        }})()""")
+        time.sleep(1.2)
+        music_boxes = [b for b in [
+            box(c, '.music-platform-grid', 1),
+            box(c, '.music-search-row', 2),
+            box(c, '.music-actions', 3),
+            box(c, '.music-tabs', 4, badge='right'),
+        ] if b]
+        capture(c, '12-music')
+        shots['music'] = {'raw': '12-music.png', 'boxes': music_boxes, 'dim': 0.36}
 
         with open(os.path.join(GUIDE_DIR, 'shots.json'), 'w', encoding='utf-8') as f:
             json.dump({'viewport': [vw, vh], 'shots': shots}, f, ensure_ascii=False, indent=2)

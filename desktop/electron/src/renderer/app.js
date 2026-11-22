@@ -120,6 +120,7 @@
     shortActiveDownload: '',
     shortWaiters: new Map(),
     shortFinished: new Map(),
+    shortHistory: [],
     // ---------------- 登录状态提示 ----------------
     authStatus: {},
     loginHinted: new Set(),
@@ -1134,10 +1135,25 @@
     $('#live-dot').classList.remove('playing')
   }
 
+  // 第三方解析平台 22:30 之后基本都会停止工作（用户反馈 22:30–23:00 起解析失败）。
+  // 失败页直接给一句提示，不用用户自己猜是不是链接问题。
+  function isNightParseWindow() {
+    const now = new Date()
+    const minutes = now.getHours() * 60 + now.getMinutes()
+    return minutes >= 22 * 60 + 30 || minutes < 6 * 60
+  }
+
+  function updateNightTip() {
+    const tip = $('#error-night')
+    if (!tip) return
+    tip.hidden = !isNightParseWindow()
+  }
+
   function showError(title, detail) {
     setView('error')
     $('#error-title').textContent = title
     $('#error-detail').textContent = detail
+    updateNightTip()
     $('#live-dot').classList.remove('playing')
     setStatus(`解析失败：${title}`)
     setDownloadButton()
@@ -2029,7 +2045,7 @@
   }
 
   function switchMode(mode, { force = false } = {}) {
-    const next = mode === 'short' ? 'short' : 'long'
+    const next = mode === 'short' || mode === 'music' ? mode : 'long'
     if (state.mode === next && !force) return
     state.mode = next
     try {
@@ -2039,27 +2055,41 @@
     }
     if (state.browserOpen) hideBrowser({ mute: true })
     document.body.classList.toggle('mode-short', next === 'short')
+    document.body.classList.toggle('mode-music', next === 'music')
     $$('.long-only').forEach((node) => {
-      node.hidden = next === 'short'
+      node.hidden = next !== 'long'
     })
     $('#short-panel').hidden = next !== 'short'
+    $('#music-panel').hidden = next !== 'music'
     $$('#mode-switch button').forEach((button) => {
       const active = button.dataset.mode === next
       button.classList.toggle('active', active)
       button.setAttribute('aria-selected', String(active))
     })
-    // 短视频没有解析线路，设置里隐藏「解析线路」页签，避免误以为要配线路
+    // 短视频 / 音乐没有解析线路，设置里隐藏「解析线路」页签，避免误以为要配线路
     const linesTab = $('#modal-tabs button[data-tab="lines"]')
     if (linesTab) {
-      linesTab.hidden = next === 'short'
-      if (next === 'short' && linesTab.classList.contains('active')) switchTab('play')
+      linesTab.hidden = next !== 'long'
+      if (next !== 'long' && linesTab.classList.contains('active')) switchTab('play')
     }
     if (next === 'short') {
       stopPlayback()
+      window.MusicUI?.pause()
       updateShortBadge()
-      $('#status-hint').textContent = 'Enter 解析 / 点平台卡片登录 / 右侧队列查看下载'
+      $('#status-hint').textContent = 'Enter 解析 / 点平台卡片登录 / 右侧队列与历史'
       setStatus('短视频模式 · 支持抖音 / B站 / AcFun / 红果短剧 / 快手')
+    } else if (next === 'music') {
+      stopPlayback()
+      try {
+        $('#short-video').pause()
+      } catch {
+        /* 忽略 */
+      }
+      window.MusicUI?.show()
+      $('#status-hint').textContent = '搜索歌曲 / 双击播放 / 右侧收藏与下载'
+      setStatus('音乐模式 · 酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水音乐')
     } else {
+      window.MusicUI?.pause()
       const video = $('#short-video')
       try {
         video.pause()
@@ -2255,6 +2285,52 @@
     const done = state.shortQueue.filter((item) => item.status === 'done').length
     const failed = state.shortQueue.filter((item) => item.status === 'failed').length
     $('#short-queue-legend').textContent = `${done}/${state.shortQueue.length}${failed ? ` · 失败 ${failed}` : ''}`
+  }
+
+  function renderShortHistory() {
+    const list = $('#short-history-list')
+    if (!list) return
+    const items = Array.isArray(state.shortHistory) ? state.shortHistory : []
+    $('#short-history-legend').textContent = items.length ? `${items.length} 条` : ''
+    if (!items.length) {
+      list.innerHTML = '<li class="short-queue-empty">还没有解析过短视频</li>'
+      return
+    }
+    list.innerHTML = items
+      .map((item) => {
+        const platform = shortPlatformInfo(item.platform)
+        const cover = item.cover ? `<img class="short-history-cover" src="${escapeHtml(item.cover)}" alt="" loading="lazy" />` : '<span class="short-history-cover ph">▶</span>'
+        const meta = [platform?.name || item.platformName, item.author, item.duration ? formatSeconds(item.duration) : '']
+          .filter(Boolean)
+          .join(' · ')
+        return `<li class="short-history-item" data-url="${escapeHtml(item.url)}" title="${escapeHtml(item.url)}">
+          ${cover}
+          <span class="short-history-main">
+            <b>${escapeHtml(item.title || '未命名视频')}</b>
+            <small>${escapeHtml(meta || '短视频')} · ${timeAgo(item.at)}</small>
+          </span>
+          <button class="short-history-del" title="删除这条记录">×</button>
+        </li>`
+      })
+      .join('')
+  }
+
+  async function rememberShortHistory(result, url) {
+    if (!result?.ok || !url) return
+    try {
+      state.shortHistory = await window.desktop.shortHistoryAdd({
+        url,
+        platform: result.platformKey || detectShortPlatform(url) || '',
+        platformName: result.platformName || shortPlatformInfo(result.platformKey)?.name || '',
+        title: result.title || '',
+        author: result.author || '',
+        cover: result.cover || '',
+        duration: Number(result.duration) || 0,
+      })
+      renderShortHistory()
+    } catch {
+      /* 历史记录失败不影响解析 */
+    }
   }
 
   function enqueueShortDownload(item) {
@@ -2536,6 +2612,7 @@
     state.shortQualityIndex = 0
     state.shortSelected = new Set((result.episodes || []).map((_, index) => index))
     renderShortResult()
+    rememberShortHistory(result, target)
     setStatus(`解析成功：${result.title}`)
     if (!auto) toast(`已解析：${result.title}`, 'ok', 4200)
   }
@@ -3029,7 +3106,7 @@
       }
       renderLineList()
       state.config = await window.desktop.saveSettings({ lineHealth: merged })
-      setStatus(`线路体检完成：${okCount} 条可用${failCount ? `，${failCount} 条失效` : ''}`)
+      if (state.mode === 'long') setStatus(`线路体检完成：${okCount} 条可用${failCount ? `，${failCount} 条失效` : ''}`)
       if (!silent) {
         toast(`测速完成：${okCount} 条可用${failCount ? `，${failCount} 条失效` : ''}`, failCount ? 'warn' : 'ok')
       }
@@ -3870,6 +3947,26 @@
     })
     $('#short-open-folder').addEventListener('click', () => window.desktop.openDownloadFolder())
 
+    $('#short-history-list').addEventListener('click', async (event) => {
+      const item = event.target.closest('.short-history-item')
+      if (!item) return
+      if (event.target.closest('.short-history-del')) {
+        state.shortHistory = await window.desktop.shortHistoryRemove(item.dataset.url)
+        renderShortHistory()
+        toast('已删除这条短视频记录')
+        return
+      }
+      $('#short-url-input').value = item.dataset.url
+      updateShortBadge()
+      resolveShortVideo()
+    })
+    $('#short-history-clear').addEventListener('click', async () => {
+      if (!state.shortHistory.length) return
+      state.shortHistory = await window.desktop.shortHistoryClear()
+      renderShortHistory()
+      toast('已清空短视频历史')
+    })
+
     // 登录与限制说明
     $('#btn-auth').addEventListener('click', () => openAuthModal())
     $('#auth-close').addEventListener('click', () => closeAuthModal())
@@ -4406,6 +4503,11 @@
 
     window.desktop.onExternalParse((payload = {}) => {
       if (!payload.url) return
+      if (window.MusicUI?.isMusicUrl?.(payload.url)) {
+        switchMode('music')
+        window.MusicUI.openLink(payload.url)
+        return
+      }
       if (detectShortPlatform(payload.url)) {
         $('#short-url-input').value = payload.url
         updateShortBadge()
@@ -4570,7 +4672,11 @@
       renderHistory()
       renderShortPlatforms()
       renderShortQueue()
-      switchMode(localStorage.getItem('csp.mode') === 'short' ? 'short' : 'long', { force: true })
+      state.shortHistory = Array.isArray(state.config.shortHistory) ? state.config.shortHistory : []
+      renderShortHistory()
+      window.MusicUI?.init()
+      const savedMode = localStorage.getItem('csp.mode')
+      switchMode(savedMode === 'short' || savedMode === 'music' ? savedMode : 'long', { force: true })
       updateShortBadge()
       refreshAuthStatus()
       setDownloadButton()
@@ -4585,47 +4691,51 @@
       const feedList = $('#feed-list')
       const updateState = await window.desktop.getUpdateState()
       feedList.innerHTML = (updateState.feeds || []).map((feed) => `<li>${escapeHtml(feed)}</li>`).join('')
-      setStatus(`就绪 · 共 ${state.config.lines.filter((line) => line.enabled).length} 条可用线路`)
-      window.__app = {
-        detectPlatform,
-        platformInfo,
-        detectVideoPlatform,
-        openBrowser,
-        hideBrowser,
-        getState: () => state,
-        startParse,
-        toggleFullscreen,
-        showSeries: (series) => {
-          if (series) saveSeries(series)
-          setSeries(series)
-        },
-        getSeries: () => state.series,
-        seriesNav,
-        switchEpisode,
-        requestSeries,
-        setDownloadButton,
-        updateNativeButton,
-        switchMode,
-        resolveShortFromUrl,
-        getShortResult: () => state.shortResult,
-        openCast: openCastModal,
-        castTo,
-        getCastState: () => state.cast,
-        currentCastSource,
-        showCastDevices: (devices) => {
-          state.cast.devices = Array.isArray(devices) ? devices : []
-          renderCast()
-        },
-      }
+      if (state.mode === 'long') setStatus(`就绪 · 共 ${state.config.lines.filter((line) => line.enabled).length} 条可用线路`)
     } catch (error) {
       console.error(error)
       setStatus('初始化失败')
       showError('程序初始化失败', String(error?.message || error))
-      window.__app = { detectPlatform, platformInfo, getState: () => state }
+      window.__app = APP_API
     }
   }
 
-  window.__app = { detectPlatform, platformInfo, getState: () => state }
+  // 完整 API 在脚本加载时就挂上，避免自动化 / 外部链接在 init 的异步步骤
+  // （读取配置、检查登录、检查更新）完成之前拿到一个残缺的 window.__app。
+  const APP_API = {
+    detectPlatform,
+    platformInfo,
+    detectVideoPlatform,
+    openBrowser,
+    hideBrowser,
+    getState: () => state,
+    startParse,
+    toggleFullscreen,
+    showSeries: (series) => {
+      if (series) saveSeries(series)
+      setSeries(series)
+    },
+    getSeries: () => state.series,
+    seriesNav,
+    switchEpisode,
+    requestSeries,
+    setDownloadButton,
+    updateNativeButton,
+    switchMode,
+    resolveShortFromUrl,
+    showError,
+    isNightParseWindow,
+    getShortResult: () => state.shortResult,
+    openCast: openCastModal,
+    castTo,
+    getCastState: () => state.cast,
+    currentCastSource,
+    showCastDevices: (devices) => {
+      state.cast.devices = Array.isArray(devices) ? devices : []
+      renderCast()
+    },
+  }
+  window.__app = APP_API
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
   } else {

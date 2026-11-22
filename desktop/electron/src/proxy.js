@@ -169,7 +169,7 @@ class StreamProxy {
    */
   _serveMirror(response, url) {
     const rawTitle = String(url.searchParams.get('n') || '').slice(0, 120)
-    const title = rawTitle || '视频解析投屏'
+    const title = rawTitle || '音视频解析投屏'
     const isHls = url.searchParams.get('ty') === 'hls'
     const html = mirrorPageHtml(title, isHls)
     const buffer = Buffer.from(html, 'utf8')
@@ -351,13 +351,13 @@ function mirrorEscape(text) {
  * 只用相对地址（/stream、/hls.min.js），所以页面在任何局域网设备上打开都能自己拉流。
  */
 function mirrorPageHtml(title, isHls) {
-  const safeTitle = mirrorEscape(title || '视频解析投屏')
+  const safeTitle = mirrorEscape(title || '音视频解析投屏')
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${safeTitle} · 视频解析投屏</title>
+<title>${safeTitle} · 音视频解析投屏</title>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: #05080e; color: #e9eef7; font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; }
@@ -389,7 +389,7 @@ function mirrorPageHtml(title, isHls) {
   <button class="start" id="start" type="button">▶ 全屏播放</button>
   <div class="tip" id="tip" hidden></div>
 </div>
-<footer>由电脑上的「视频解析」投屏 · 请保持电脑端程序运行并停留在当前视频，关闭后本页会停止播放</footer>
+<footer>由电脑上的「音视频解析」投屏 · 请保持电脑端程序运行并停留在当前视频，关闭后本页会停止播放</footer>
 <script src="/hls.min.js"></script>
 <script>
 (function () {

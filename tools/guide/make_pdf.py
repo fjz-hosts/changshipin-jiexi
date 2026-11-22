@@ -21,7 +21,7 @@ OUT_PDF = os.path.join(ROOT, 'docs', '长视频解析-图文使用教程.pdf')
 ELECTRON = os.path.join(ROOT, 'desktop', 'electron', 'node_modules', 'electron', 'dist', 'electron.exe')
 PRINT_JS = os.path.join(ROOT, 'tools', 'guide', 'print_pdf.js')
 
-TITLE = '长视频解析 · 图文使用教程'
+TITLE = '音视频解析 · 图文使用教程'
 SUBTITLE = '从粘贴链接到全屏播放，一步一步来'
 
 
@@ -209,14 +209,14 @@ def build():
 </head>
 <body>
   <section class="cover">
-    <div><span class="cover-mark">长视频解析 · v1.0.11</span></div>
+    <div><span class="cover-mark">音视频解析 · v1.3.0</span></div>
     <h1>{html_lib.escape(TITLE)}</h1>
     <p class="sub">{html_lib.escape(SUBTITLE)}</p>
-    <p class="meta">Windows 10 / 11 · 爱奇艺 · 腾讯视频 · 优酷 · 芒果TV　|　{html_lib.escape(today)}</p>
+    <p class="meta">Windows 10 / 11 · 爱奇艺 · 腾讯视频 · 优酷 · 芒果TV · 酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水　|　{html_lib.escape(today)}</p>
     <div class="cover-line"></div>
     <div class="cover-facts">
-      <div><b>10 个章节</b><span>从安装、粘贴链接到线路、下载和全屏</span></div>
-      <div><b>9 张实拍截图</b><span>红框、编号和聚光灯标出每一步的重点</span></div>
+      <div><b>13 个章节</b><span>从安装、粘贴链接到线路、下载、全屏和音乐</span></div>
+      <div><b>12 张实拍截图</b><span>红框、编号和聚光灯标出每一步的重点</span></div>
       <div><b>常见问题速查</b><span>线路失效、地区限制、下载、更新都有说明</span></div>
     </div>
     <div class="cover-hero">
@@ -239,7 +239,7 @@ def build():
     <p>软件内：「设置 → 关于」可以打开配置目录、日志目录和项目主页；遇到解析失败时，先换线路，再试「在线更新线路」。</p>
   </div>
 
-  <div class="doc-foot">长视频解析 · 图文使用教程 · v1.0.11 · 共 {len(sections)} 节</div>
+  <div class="doc-foot">音视频解析 · 图文使用教程 · v1.3.0 · 共 {len(sections)} 节</div>
 </body>
 </html>'''
 

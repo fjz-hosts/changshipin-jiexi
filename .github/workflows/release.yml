@@ -70,7 +70,7 @@ jobs:
           }
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "长视频解析 v$version" --generate-notes --target "${{ github.sha }}"
+            gh release create $tag --title "音视频解析 v$version" --generate-notes --target "${{ github.sha }}"
           }
           gh release upload $tag $files --clobber
           Write-Host "已发布：$tag"

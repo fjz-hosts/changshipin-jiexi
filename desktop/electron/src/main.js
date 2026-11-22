@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * 长视频解析 · Electron 主进程
+ * 音视频解析 · Electron 主进程
  *
  * 职责：窗口 / 菜单 / 托盘 / 单实例、内置官网浏览器、解析调度、
  * 本地取流代理、配置与历史、自动更新。
@@ -45,11 +45,21 @@ const { resolveSeries } = require('./series')
 const { DownloadManager } = require('./download')
 const { PLATFORMS, detectPlatformByUrl, platformByKey } = require('./platforms')
 const { SHORT_PLATFORMS, resolveShort, detectShortPlatform } = require('./shortvideo')
+const {
+  MUSIC_PLATFORMS,
+  searchMusic,
+  resolveMusic,
+  loginMusicPlatform,
+  isQishuiLink,
+  qishuiTrackId,
+  MusicDownloadManager,
+} = require('./music')
 
 const APP_ID = 'com.fjzhosts.changshipin'
-const APP_NAME = '视频解析'
-const APP_SUBTITLE = '长视频 · 短视频链接解析'
-const OLD_APP_NAME = '长视频解析'
+const APP_NAME = '音视频解析'
+const APP_SUBTITLE = '长视频 · 短视频 · 音乐解析'
+// 改名前后的配置目录都要兼容，升级后不能丢历史 / 登录态
+const OLD_APP_NAMES = ['视频解析', '长视频解析']
 const REPO_URL = 'https://github.com/fjz-hosts/changshipin-jiexi'
 const IS_SMOKE = process.argv.includes('--smoke-test')
 // 长视频 + 短视频的平台清单：内置窗口 / 登录弹窗 / 快捷键都要按分区识别
@@ -65,10 +75,12 @@ const userDataDir =
   process.env.CHANGSPIN_USERDATA || path.join(app.getPath('appData'), APP_NAME)
 // 改名后沿用旧版本的配置 / 历史 / 登录态，避免升级后设置全丢
 try {
-  if (!process.env.CHANGSPIN_USERDATA) {
-    const oldDir = path.join(app.getPath('appData'), OLD_APP_NAME)
-    if (!fs.existsSync(path.join(userDataDir, 'config.json')) && fs.existsSync(oldDir)) {
+  if (!process.env.CHANGSPIN_USERDATA && !fs.existsSync(path.join(userDataDir, 'config.json'))) {
+    for (const name of OLD_APP_NAMES) {
+      const oldDir = path.join(app.getPath('appData'), name)
+      if (oldDir === userDataDir || !fs.existsSync(oldDir)) continue
       fs.cpSync(oldDir, userDataDir, { recursive: true, force: false })
+      if (fs.existsSync(path.join(userDataDir, 'config.json'))) break
     }
   }
 } catch {
@@ -96,7 +108,15 @@ function log(...args) {
   } catch {
     /* ignore */
   }
-  if (!app.isPackaged) console.log(line)
+  if (!app.isPackaged) {
+    // 开发时 stdout 可能是被关闭的管道；console.log 抛 EPIPE 会再次触发
+    // uncaughtException -> log，形成死循环，这里必须吞掉。
+    try {
+      console.log(line)
+    } catch {
+      /* 忽略 */
+    }
+  }
 }
 
 prepareLog()
@@ -117,6 +137,7 @@ let proxy = null
 let caster = null
 let updater = null
 let downloader = null
+let musicDownloader = null
 let lastStream = null
 let quitting = false
 let trayNoticeShown = false
@@ -882,8 +903,14 @@ function quitApp() {
 // 安装目录同级不可写（例如装在 Program Files）或系统拦截写入时，再依次退回「下载\视频解析」等目录。
 function pickDownloadDir() {
   const exeDir = path.dirname(app.getPath('exe'))
+  const parentDir = path.dirname(exeDir)
+  // 改名后：老用户继续用「视频解析下载」，避免之前的视频 / 音乐文件找不到；
+  // 新安装才用「音视频解析下载」。
+  const legacyRoot = path.join(parentDir, '视频解析下载')
+  const brandedRoot = path.join(parentDir, `${APP_NAME}下载`)
+  const packagedRoot = fs.existsSync(legacyRoot) ? legacyRoot : brandedRoot
   const candidates = [
-    ...(app.isPackaged ? [path.join(path.dirname(exeDir), `${APP_NAME}下载`)] : []),
+    ...(app.isPackaged ? [packagedRoot] : []),
     path.join(app.getPath('downloads'), APP_NAME),
     path.join(app.getPath('videos'), APP_NAME),
     path.join(app.getPath('documents'), APP_NAME),
@@ -931,7 +958,8 @@ function showAbout() {
     message: `${APP_NAME} v${app.getVersion()}`,
     detail:
       '长视频：把爱奇艺、腾讯视频、优酷、芒果TV 的链接粘贴进来，选择解析线路后直接在内置播放器里播放。\n' +
-      '短视频：支持抖音、B站、AcFun、红果短剧、快手，选清晰度下载 MP4，短剧可一键下载全集。\n\n' +
+      '短视频：支持抖音、B站、AcFun、红果短剧、快手，选清晰度下载 MP4，短剧可一键下载全集。\n' +
+      '音乐：支持酷我、酷狗、QQ音乐、网易云、汽水音乐，搜索 / 分享链接解析后播放，下载 MP3 / FLAC + LRC 歌词。\n\n' +
       '解析线路来自互联网公开的第三方接口，程序本身不提供、不存储任何视频内容；' +
       '线路随时可能失效，可在「线路管理」里更换或添加。请只在合法范围内使用。\n\n' +
       `项目地址：${REPO_URL}`,
@@ -1093,6 +1121,18 @@ function attachProxyUrls(result, cookie) {
           qualities: Array.isArray(episode.qualities) ? episode.qualities.map(withProxy) : episode.qualities,
         }))
       : [],
+  }
+}
+
+// 音乐直链换成本地代理：<audio> 和下载器都没法自己带 Referer / Cookie。
+function attachMusicProxy(result) {
+  if (!proxy || !result?.ok || !result.playUrl) return result
+  const referer = String(result.referer || '')
+  const cookie = String(result.cookie || '')
+  return {
+    ...result,
+    originalUrl: result.playUrl,
+    streamUrl: proxy.resourceUrl(result.playUrl, referer, cookie),
   }
 }
 
@@ -1580,6 +1620,151 @@ function registerIpc() {
     if (result.ok) log(`[短视频下载] 开始 ${payload.title || url}`)
     return result
   })
+
+  // 短视频历史（单独一份，和长视频观看历史互不影响）
+  ipcMain.handle('short:history:add', (_event, entry = {}) => store.addShortHistory(entry))
+  ipcMain.handle('short:history:remove', (_event, url) => store.removeShortHistory(url))
+  ipcMain.handle('short:history:clear', () => store.clearShortHistory())
+
+  // -------------------------------------------------------------------------
+  // 音乐（酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水音乐）
+  // -------------------------------------------------------------------------
+  const musicLoginState = () => store.musicLoginState()
+
+  ipcMain.handle('music:platforms', () =>
+    MUSIC_PLATFORMS.map((item) => ({
+      key: item.key,
+      name: item.name,
+      short: item.short,
+      color: item.color,
+      home: item.home,
+      searchable: item.searchable,
+      hint: item.hint,
+      note: item.note,
+      loggedIn: Boolean(musicLoginState()[item.key]),
+    })),
+  )
+
+  ipcMain.handle('music:search', async (_event, payload = {}) => {
+    const platform = String(payload.platform || '')
+    const keyword = String(payload.keyword || '').trim()
+    const cookie = store.getMusicCookie(platform)
+    const started = Date.now()
+    try {
+      const result = await searchMusic({ platform, keyword, cookie })
+      log(`[音乐] ${platform} 搜索「${keyword}」：${result.ok ? result.songs.length : 0} 条，${Date.now() - started}ms`)
+      return result
+    } catch (error) {
+      log(`[音乐] 搜索异常：${error?.stack || error}`)
+      return { ok: false, error: String(error?.message || error).slice(0, 200) }
+    }
+  })
+
+  ipcMain.handle('music:resolve', async (_event, payload = {}) => {
+    const platform = String(payload.platform || '')
+    const song = payload.song && typeof payload.song === 'object' ? payload.song : null
+    if (!song) return { ok: false, error: '歌曲信息不完整' }
+    const cookie = store.getMusicCookie(platform)
+    const started = Date.now()
+    try {
+      const result = await resolveMusic({
+        platform,
+        song,
+        quality: String(payload.quality || '320'),
+        format: payload.format === 'flac' ? 'flac' : 'mp3',
+        cookie,
+      })
+      log(
+        `[音乐] ${platform} ${result.ok ? '解析成功' : '解析失败'}：${song.title || song.id} ${result.via || ''} ` +
+          `${Date.now() - started}ms ${result.error || ''}`,
+      )
+      return attachMusicProxy(result)
+    } catch (error) {
+      log(`[音乐] 解析异常：${error?.stack || error}`)
+      return { ok: false, error: String(error?.message || error).slice(0, 200) }
+    }
+  })
+
+  ipcMain.handle('music:download', async (_event, payload = {}) => {
+    if (!musicDownloader) return { ok: false, error: '下载器还没准备好' }
+    const platform = String(payload.platform || '')
+    const song = payload.song && typeof payload.song === 'object' ? payload.song : null
+    if (!song) return { ok: false, error: '歌曲信息不完整' }
+    const format = payload.format === 'flac' ? 'flac' : 'mp3'
+    const quality = String(payload.quality || '320')
+    const cookie = store.getMusicCookie(platform)
+    let resolved = null
+    try {
+      resolved = await resolveMusic({ platform, song, quality, format, cookie })
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error).slice(0, 200) }
+    }
+    if (!resolved?.ok) return { ok: false, error: resolved?.error || '没有拿到可下载的音频地址' }
+    const withLyric = payload.withLyric !== false && Boolean(resolved.lyric)
+    const result = musicDownloader.start({
+      id: String(payload.id || ''),
+      url: resolved.playUrl,
+      referer: resolved.referer || '',
+      cookie: resolved.cookie || '',
+      platform,
+      platformName: resolved.platformName || '',
+      title: resolved.title || song.title,
+      artist: resolved.artist || song.artist,
+      format: resolved.format || format,
+      lyric: withLyric ? resolved.lyric : '',
+    })
+    if (result.ok) {
+      log(`[音乐下载] 开始 ${song.title || song.id} -> ${format}`)
+      result.via = resolved.via || ''
+      result.note = resolved.note || ''
+      result.preview = Boolean(resolved.preview)
+      result.format = resolved.format || format
+    }
+    return result
+  })
+
+  ipcMain.handle('music:save-lyric', (_event, payload = {}) =>
+    musicDownloader?.saveLyric({
+      platformName: String(payload.platformName || ''),
+      title: String(payload.title || ''),
+      artist: String(payload.artist || ''),
+      lyric: String(payload.lyric || ''),
+    }) || { ok: false, error: '下载器还没准备好' },
+  )
+  ipcMain.handle('music:snapshot', (_event, id) => musicDownloader?.snapshot(String(id || '')) || null)
+  ipcMain.handle('music:cancel', (_event, id) => musicDownloader?.cancel(String(id || '')) || false)
+  ipcMain.handle('music:folder', () => {
+    const folder = musicDownloader?.folder || ''
+    if (folder) shell.openPath(folder)
+    return folder
+  })
+  ipcMain.handle('music:reveal', (_event, target) => {
+    const file = String(target || '') || musicDownloader?.lastSavedPath || ''
+    if (file && fs.existsSync(file)) shell.showItemInFolder(file)
+    return Boolean(file)
+  })
+
+  ipcMain.handle('music:login', async (_event, key) => {
+    const platform = String(key || '')
+    const result = await loginMusicPlatform(platform)
+    if (!result.ok) return result
+    const login = store.saveMusicCookies({ [platform]: result.cookie || '' })
+    log(`[音乐] ${platform} 登录窗口关闭，Cookie ${result.count || 0} 条，登录态=${Boolean(login[platform])}`)
+    return { ok: true, loggedIn: Boolean(login[platform]), count: result.count || 0 }
+  })
+
+  ipcMain.handle('music:logout', (_event, key) => {
+    const platform = String(key || '')
+    store.saveMusicCookies({ [platform]: null })
+    return { ok: true, loggedIn: false }
+  })
+
+  ipcMain.handle('music:history:add', (_event, entry = {}) => store.addMusicHistory(entry))
+  ipcMain.handle('music:history:remove', (_event, key) => store.removeMusicHistory(key))
+  ipcMain.handle('music:history:clear', () => store.clearMusicHistory())
+  ipcMain.handle('music:favorites:add', (_event, entry = {}) => store.addMusicFavorite(entry))
+  ipcMain.handle('music:favorites:remove', (_event, key) => store.removeMusicFavorite(key))
+  ipcMain.handle('music:favorites:clear', () => store.clearMusicFavorites())
 }
 
 // ---------------------------------------------------------------------------
@@ -1619,6 +1804,11 @@ app.on('before-quit', () => {
     downloader?.cancelAll()
   } catch (error) {
     log(`[退出] downloader.cancelAll 失败：${error?.message || error}`)
+  }
+  try {
+    musicDownloader?.cancelAll()
+  } catch (error) {
+    log(`[退出] musicDownloader.cancelAll 失败：${error?.message || error}`)
   }
   try {
     caster?.dispose()
@@ -1668,6 +1858,20 @@ app.whenReady().then(async () => {
     dir: pickDownloadDir(),
     onState: (state) => sendCommand('download:state', state),
     // 分片改走本地代理（Chromium 网络栈），能带上防盗链需要的头，和播放走同一条路
+    proxify: (url, job) => proxy.resourceUrl(url, job.referer || '', job.cookie || ''),
+  })
+
+  // 音乐单独一个文件夹：<下载根目录>/音乐/<平台>/歌曲 - 歌手.mp3|flac
+  const musicDir = path.join(downloader.folder, '音乐')
+  try {
+    fs.mkdirSync(musicDir, { recursive: true })
+  } catch {
+    /* 目录不可写时下载器会再报错 */
+  }
+  musicDownloader = new MusicDownloadManager({
+    log,
+    dir: musicDir,
+    onState: (state) => sendCommand('music:download-state', state),
     proxify: (url, job) => proxy.resourceUrl(url, job.referer || '', job.cookie || ''),
   })
 

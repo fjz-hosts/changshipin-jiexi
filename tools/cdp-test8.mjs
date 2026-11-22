@@ -5,6 +5,7 @@ function connect(url){return new Promise((resolve,reject)=>{const ws=new WebSock
 async function ev(c,expr){const r=await c.send('Runtime.evaluate',{expression:expr,returnByValue:true,awaitPromise:true});if(r.result?.exceptionDetails)throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0,300));return r.result?.result?.value}
 const report=[];const check=(n,ok,d='')=>{report.push({n,ok});console.log((ok?'PASS ':'FAIL ')+n+'  '+d)}
 const before=await list();const mainT=before.find(t=>t.type==='page'&&t.url.includes('index.html'));const main=await connect(mainT.webSocketDebuggerUrl)
+for(let i=0;i<80;i++){if(await ev(main,'Boolean(window.__app && window.__app.openBrowser)'))break;await sleep(250)}
 check('启动时只有一个主窗口',before.filter(t=>t.type==='page').length===1,String(before.length))
 await ev(main,"window.__app.openBrowser('iqiyi')")
 await sleep(7000)

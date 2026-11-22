@@ -260,7 +260,7 @@ class UpdateManager {
     const options = {
       type: 'info',
       title: '发现新版本',
-      message: `视频解析 v${version} 已下载完成`,
+      message: `音视频解析 v${version} 已下载完成`,
       detail: '点击「立即重启安装」后会在后台静默覆盖安装，不会弹出安装向导；配置、登录状态和桌面快捷方式都会保留，装完自动打开新版本。',
       buttons: ['立即重启安装', '稍后'],
       defaultId: 0,

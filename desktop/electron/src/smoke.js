@@ -43,7 +43,7 @@ async function runSmoke({ app, window, proxy, store }) {
   check('渲染进程初始化（window.desktop + window.__app）', ready)
 
   const title = await window.webContents.executeJavaScript('document.title')
-  check('窗口标题', String(title).includes('视频解析'), title)
+  check('窗口标题', String(title).includes('音视频解析'), title)
 
   const cards = await window.webContents.executeJavaScript('document.querySelectorAll(".platform-card[data-platform]").length')
   check('四个平台快捷入口', cards === 4, String(cards))
@@ -426,6 +426,48 @@ async function runSmoke({ app, window, proxy, store }) {
     '观看历史：按平台分组 + 搜索无结果提示',
     grouped.groups === 1 && grouped.items === 2 && grouped.empty.includes('没有匹配'),
     groupedHistory,
+  )
+
+  // 渲染层：音乐模式（五个平台 / 搜索 / 播放器 / 四个列表页签）
+  const musicCheck = await window.webContents.executeJavaScript(`(async () => {
+    window.__app.switchMode('music', { force: true })
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const result = {
+      visible: !document.querySelector('#music-panel').hidden,
+      cards: document.querySelectorAll('#music-platform-grid .music-platform-card').length,
+      search: Boolean(document.querySelector('#music-search-input') && document.querySelector('#music-search-btn')),
+      player: Boolean(document.querySelector('#music-player') && document.querySelector('#music-audio')),
+      tabs: document.querySelectorAll('#music-tabs button[data-mtab]').length,
+      hasApi: typeof window.desktop.musicSearch === 'function' && typeof window.desktop.musicDownload === 'function',
+    }
+    window.__app.switchMode('long', { force: true })
+    return JSON.stringify(result)
+  })()`)
+  const music = JSON.parse(musicCheck)
+  check(
+    '音乐模式：5 个平台 / 搜索 / 播放器 / 记录与收藏',
+    music.visible && music.cards === 5 && music.search && music.player && music.tabs === 4 && music.hasApi,
+    musicCheck,
+  )
+
+  // 短视频历史与长视频历史分开存
+  const shortHistoryCheck = await window.webContents.executeJavaScript(`(async () => {
+    const entry = { url: 'https://v.douyin.com/smoke-short/', platform: 'douyin', platformName: '抖音', title: '烟雾短视频', author: '测试', duration: 12 }
+    const shortList = await window.desktop.shortHistoryAdd(entry)
+    const config = await window.desktop.getConfig()
+    const result = {
+      shortCount: shortList.filter((item) => item.url === entry.url).length,
+      longCount: config.history.filter((item) => item.url === entry.url).length,
+      title: shortList.find((item) => item.url === entry.url)?.title || '',
+    }
+    await window.desktop.shortHistoryRemove(entry.url)
+    return JSON.stringify(result)
+  })()`)
+  const shortHistory = JSON.parse(shortHistoryCheck)
+  check(
+    '短视频历史：和长视频历史分开保存',
+    shortHistory.shortCount === 1 && shortHistory.longCount === 0 && shortHistory.title === '烟雾短视频',
+    shortHistoryCheck,
   )
 
   // 渲染层：图文教程入口 / 章节 / 图片
