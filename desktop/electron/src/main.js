@@ -1146,6 +1146,16 @@ async function makeQrDataUrl(target) {
   })
 }
 
+// ---------------------------------------------------------------------------
+// 下载记录删除：只允许删下载目录里的文件，删完顺手把空的「剧名」文件夹清掉
+// ---------------------------------------------------------------------------
+const { removeFileInRoot } = require('./downloadfiles')
+
+// 「已下载完成」才算可以被清空的记录；下载中的记录不能删（文件还没落盘）
+function isFinishedDownload(item) {
+  return Boolean(item) && item.status !== 'queued' && item.status !== 'running'
+}
+
 function registerIpc() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -1156,6 +1166,9 @@ function registerIpc() {
     userData: userDataDir,
     logDir: LOG_DIR,
     sampleUrl: SAMPLE_URL,
+    // 下载目录（界面 / 自动化测试用它定位记录对应的文件）
+    downloadDir: downloader?.folder || '',
+    musicDir: musicDownloader?.folder || '',
   }))
 
   ipcMain.handle('config:get', () => store.snapshot())
@@ -1509,6 +1522,16 @@ function registerIpc() {
   })
 
   ipcMain.handle('shell:open-external', (_event, url) => safeOpenExternal(url))
+
+  // 在文件夹中定位一个下载文件（短视频 / 音乐下载记录都能用）
+  ipcMain.handle('shell:reveal', (_event, target) => {
+    const file = String(target || '')
+    if (file && fs.existsSync(file)) {
+      shell.showItemInFolder(file)
+      return true
+    }
+    return false
+  })
   ipcMain.handle('app:open-userdata', () => shell.openPath(userDataDir))
   ipcMain.handle('app:open-logs', () => shell.openPath(LOG_DIR))
   ipcMain.handle('app:create-shortcut', () => createDesktopShortcut())
@@ -1625,6 +1648,40 @@ function registerIpc() {
   ipcMain.handle('short:history:add', (_event, entry = {}) => store.addShortHistory(entry))
   ipcMain.handle('short:history:remove', (_event, url) => store.removeShortHistory(url))
   ipcMain.handle('short:history:clear', () => store.clearShortHistory())
+
+  // 短视频下载记录：单独存一份，删记录时把对应文件一起删掉
+  ipcMain.handle('short:download:record', (_event, entry = {}) => store.saveShortDownload(entry))
+  ipcMain.handle('short:download:remove', (_event, id) => {
+    const target = String(id || '')
+    const record = (store.snapshot().shortDownloads || []).find((item) => item.id === target)
+    if (!record) return { ok: false, error: '下载记录不存在', records: store.snapshot().shortDownloads }
+    if (record.savedPath) {
+      const result = removeFileInRoot(record.savedPath, downloader?.folder || '')
+      if (result.error) return { ok: false, error: result.error, records: store.snapshot().shortDownloads }
+      const records = store.removeShortDownload(record.id)
+      log(`[短视频下载] 删除记录${result.removed ? '和文件' : '（文件已不在）'}：${record.savedPath}`)
+      return { ok: true, removedFile: result.removed, records }
+    }
+    return { ok: true, removedFile: false, records: store.removeShortDownload(record.id) }
+  })
+  ipcMain.handle('short:download:clear', (_event, scope = 'finished') => {
+    const records = store.snapshot().shortDownloads || []
+    const targets = records.filter((item) => isFinishedDownload(item) || scope === 'all')
+    if (!targets.length) return { ok: true, removedFiles: 0, failed: [], records }
+    let removedFiles = 0
+    const failed = []
+    for (const record of targets) {
+      if (!record.savedPath) continue
+      const result = removeFileInRoot(record.savedPath, downloader?.folder || '')
+      if (result.error) failed.push({ id: record.id, error: result.error })
+      else if (result.removed) removedFiles += 1
+    }
+    const ids = new Set(targets.map((item) => item.id))
+    const next = records.filter((item) => !ids.has(item.id))
+    store.setShortDownloads(next)
+    log(`[短视频下载] 清空 ${targets.length} 条记录，删除 ${removedFiles} 个文件`)
+    return { ok: true, removedFiles, failed, records: store.snapshot().shortDownloads }
+  })
 
   // -------------------------------------------------------------------------
   // 音乐（酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水音乐）
@@ -1765,6 +1822,47 @@ function registerIpc() {
   ipcMain.handle('music:favorites:add', (_event, entry = {}) => store.addMusicFavorite(entry))
   ipcMain.handle('music:favorites:remove', (_event, key) => store.removeMusicFavorite(key))
   ipcMain.handle('music:favorites:clear', () => store.clearMusicFavorites())
+
+  // 音乐下载记录：以前只存在渲染进程内存里（退出就没了），现在写进 config.json；
+  // 删记录时把音频和同名 .lrc 歌词文件一起删掉。
+  ipcMain.handle('music:download:record', (_event, entry = {}) => store.saveMusicDownload(entry))
+  ipcMain.handle('music:download:remove', (_event, id) => {
+    const target = String(id || '')
+    const record = (store.snapshot().musicDownloads || []).find((item) => item.id === target)
+    if (!record) return { ok: false, error: '下载记录不存在', records: store.snapshot().musicDownloads }
+    const root = musicDownloader?.folder || ''
+    let removedFile = false
+    for (const file of [record.savedPath, record.lyricPath]) {
+      if (!file) continue
+      const result = removeFileInRoot(file, root)
+      if (result.error) return { ok: false, error: result.error, records: store.snapshot().musicDownloads }
+      if (result.removed) removedFile = true
+    }
+    const records = store.removeMusicDownload(record.id)
+    log(`[音乐下载] 删除记录${removedFile ? '和文件' : '（文件已不在）'}：${record.title || record.id}`)
+    return { ok: true, removedFile, records }
+  })
+  ipcMain.handle('music:download:clear', (_event, scope = 'finished') => {
+    const records = store.snapshot().musicDownloads || []
+    const targets = records.filter((item) => isFinishedDownload(item) || scope === 'all')
+    if (!targets.length) return { ok: true, removedFiles: 0, failed: [], records }
+    const root = musicDownloader?.folder || ''
+    let removedFiles = 0
+    const failed = []
+    for (const record of targets) {
+      for (const file of [record.savedPath, record.lyricPath]) {
+        if (!file) continue
+        const result = removeFileInRoot(file, root)
+        if (result.error) failed.push({ id: record.id, error: result.error })
+        else if (result.removed) removedFiles += 1
+      }
+    }
+    const ids = new Set(targets.map((item) => item.id))
+    const next = records.filter((item) => !ids.has(item.id))
+    store.setMusicDownloads(next)
+    log(`[音乐下载] 清空 ${targets.length} 条记录，删除 ${removedFiles} 个文件`)
+    return { ok: true, removedFiles, failed, records: store.snapshot().musicDownloads }
+  })
 }
 
 // ---------------------------------------------------------------------------

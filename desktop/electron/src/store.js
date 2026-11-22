@@ -9,6 +9,9 @@ const MAX_HISTORY = 40
 const MAX_SHORT_HISTORY = 120
 const MAX_MUSIC_HISTORY = 120
 const MAX_MUSIC_FAVORITES = 300
+// 短视频 / 音乐下载记录：重启后还要能看到，才能点开文件夹或删除（删记录时文件一起删）
+const MAX_SHORT_DOWNLOADS = 200
+const MAX_MUSIC_DOWNLOADS = 200
 const CONFIG_VERSION = 1
 
 // 音乐平台登录态只用于主进程请求官方接口，不暴露给渲染进程。
@@ -208,6 +211,65 @@ function normalizeMusicList(raw, max) {
   return out.sort((left, right) => right.at - left.at).slice(0, max)
 }
 
+// ---------------------------------------------------------------------------
+// 下载记录（短视频队列 / 音乐下载记录）
+//
+// 以前这两份记录只放在渲染进程内存里，退出重进就没了；现在落到 config.json，
+// 每条记录带 savedPath，删除记录时主进程会把对应文件一起删掉。
+// ---------------------------------------------------------------------------
+const DOWNLOAD_STATUSES = new Set(['queued', 'running', 'done', 'failed', 'cancelled', 'interrupted'])
+
+function normalizeDownloadStatus(raw, fallback = 'failed') {
+  const value = cleanText(raw, 20)
+  return DOWNLOAD_STATUSES.has(value) ? value : fallback
+}
+
+function normalizeDownloadRecord(raw, kind = 'short') {
+  if (!raw || typeof raw !== 'object') return null
+  const id = cleanText(raw.id, 80)
+  if (!id) return null
+  const item = {
+    id,
+    title: cleanText(raw.title, 150) || (kind === 'music' ? '歌曲' : '视频'),
+    platform: cleanText(raw.platform, 40),
+    format: cleanText(raw.format, 12),
+    status: normalizeDownloadStatus(raw.status),
+    percent: Math.max(0, Math.min(100, Number(raw.percent) || 0)),
+    savedPath: cleanText(raw.savedPath, 1000),
+    error: cleanText(raw.error, 200),
+    existed: Boolean(raw.existed),
+    at: Number(raw.at) || Date.now(),
+  }
+  if (kind === 'music') {
+    item.platformName = cleanText(raw.platformName, 30)
+    item.quality = cleanText(raw.quality, 12)
+    item.lyricPath = cleanText(raw.lyricPath, 1000)
+  }
+  return item
+}
+
+function normalizeDownloadList(raw, kind, max = MAX_SHORT_DOWNLOADS) {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set()
+  const out = []
+  for (const item of raw) {
+    const normalized = normalizeDownloadRecord(item, kind)
+    if (!normalized || seen.has(normalized.id)) continue
+    seen.add(normalized.id)
+    out.push(normalized)
+  }
+  return out.slice(0, max)
+}
+
+// 上次没下完的任务在重启后已经没有了下载进程，标记成「已中断」而不是一直显示「下载中」
+function markDownloadsInterrupted(list) {
+  return list.map((item) =>
+    item.status === 'queued' || item.status === 'running'
+      ? { ...item, status: 'interrupted', error: item.error || '程序重启后已中断' }
+      : item,
+  )
+}
+
 function normalizeMusicCookies(raw) {
   const out = {}
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
@@ -242,8 +304,10 @@ class Store {
       defaultLineId: DEFAULT_LINES[0]?.id || '',
       history: [],
       shortHistory: [],
+      shortDownloads: [],
       musicHistory: [],
       musicFavorites: [],
+      musicDownloads: [],
       musicCookies: {},
       lineHealth: {},
       autoLineTest: true,
@@ -308,8 +372,10 @@ class Store {
         lines: lines.length ? lines : defaults.lines,
         history: normalizeHistory(data.history),
         shortHistory: normalizeShortHistory(data.shortHistory),
+        shortDownloads: markDownloadsInterrupted(normalizeDownloadList(data.shortDownloads, 'short', MAX_SHORT_DOWNLOADS)),
         musicHistory: normalizeMusicList(data.musicHistory, MAX_MUSIC_HISTORY),
         musicFavorites: normalizeMusicList(data.musicFavorites, MAX_MUSIC_FAVORITES),
+        musicDownloads: markDownloadsInterrupted(normalizeDownloadList(data.musicDownloads, 'music', MAX_MUSIC_DOWNLOADS)),
         musicCookies: normalizeMusicCookies(data.musicCookies),
         lineHealth: normalizeHealth(data.lineHealth),
         autoLineTest: data.autoLineTest !== false,
@@ -492,6 +558,64 @@ class Store {
     this.data.shortHistory = []
     this._write()
     return []
+  }
+
+  // -------------------------------------------------------------------------
+  // 短视频下载记录（队列）：新增记录追加在末尾，和界面里的队列顺序一致
+  // -------------------------------------------------------------------------
+  saveShortDownload(entry = {}) {
+    const item = normalizeDownloadRecord(entry, 'short')
+    if (!item) return this.snapshot().shortDownloads
+    const list = Array.isArray(this.data.shortDownloads) ? this.data.shortDownloads : []
+    const index = list.findIndex((old) => old.id === item.id)
+    if (index >= 0) list[index] = { ...list[index], ...item }
+    else list.push(item)
+    if (list.length > MAX_SHORT_DOWNLOADS) list.splice(0, list.length - MAX_SHORT_DOWNLOADS)
+    this.data.shortDownloads = list
+    this._write()
+    return this.snapshot().shortDownloads
+  }
+
+  removeShortDownload(id) {
+    const target = cleanText(id, 80)
+    this.data.shortDownloads = (this.data.shortDownloads || []).filter((item) => item.id !== target)
+    this._write()
+    return this.snapshot().shortDownloads
+  }
+
+  setShortDownloads(list) {
+    this.data.shortDownloads = normalizeDownloadList(list, 'short', MAX_SHORT_DOWNLOADS)
+    this._write()
+    return this.snapshot().shortDownloads
+  }
+
+  // -------------------------------------------------------------------------
+  // 音乐下载记录：新增记录放最前面，和「下载记录」列表顺序一致
+  // -------------------------------------------------------------------------
+  saveMusicDownload(entry = {}) {
+    const item = normalizeDownloadRecord(entry, 'music')
+    if (!item) return this.snapshot().musicDownloads
+    const list = Array.isArray(this.data.musicDownloads) ? this.data.musicDownloads : []
+    const index = list.findIndex((old) => old.id === item.id)
+    if (index >= 0) list[index] = { ...list[index], ...item }
+    else list.unshift(item)
+    if (list.length > MAX_MUSIC_DOWNLOADS) list.length = MAX_MUSIC_DOWNLOADS
+    this.data.musicDownloads = list
+    this._write()
+    return this.snapshot().musicDownloads
+  }
+
+  removeMusicDownload(id) {
+    const target = cleanText(id, 80)
+    this.data.musicDownloads = (this.data.musicDownloads || []).filter((item) => item.id !== target)
+    this._write()
+    return this.snapshot().musicDownloads
+  }
+
+  setMusicDownloads(list) {
+    this.data.musicDownloads = normalizeDownloadList(list, 'music', MAX_MUSIC_DOWNLOADS)
+    this._write()
+    return this.snapshot().musicDownloads
   }
 
   // -------------------------------------------------------------------------

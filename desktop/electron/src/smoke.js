@@ -329,7 +329,87 @@ async function runSmoke({ app, window, proxy, store }) {
     JSON.stringify(migrationCheck),
   )
 
-  // ---- 3.2 选集 / 下载的纯逻辑 ----
+  // ---- 3.2 下载记录：跨重启保存 / 删记录时删文件 ----
+  {
+    const { removeFileInRoot } = require('./downloadfiles')
+    const dlRoot = path.join(app.getPath('userData'), `smoke-dl-files-${process.pid}`)
+    const dlStoreDir = path.join(app.getPath('userData'), `smoke-dl-store-${process.pid}`)
+    try {
+      fs.rmSync(dlRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+      fs.rmSync(dlStoreDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+      fs.mkdirSync(path.join(dlRoot, '烟雾测试短剧'), { recursive: true })
+      const video = path.join(dlRoot, '烟雾测试短剧', '第1集.mp4')
+      const lyric = path.join(dlRoot, '音乐', '网易云音乐', '晴天 - 周杰伦.lrc')
+      fs.mkdirSync(path.dirname(lyric), { recursive: true })
+      fs.writeFileSync(video, 'demo')
+      fs.writeFileSync(lyric, 'demo')
+      const musicFile = path.join(dlRoot, '音乐', '网易云音乐', '晴天 - 周杰伦.mp3')
+      fs.writeFileSync(musicFile, 'demo')
+
+      const writer = new Store(dlStoreDir)
+      writer.saveShortDownload({ id: 'short-1', title: '烟雾测试视频', platform: '哔哩哔哩', status: 'running', percent: 42, at: 1000 })
+      writer.saveShortDownload({ id: 'short-2', title: '烟雾测试短剧 第1集', platform: '抖音', status: 'done', percent: 100, savedPath: video, at: 2000 })
+      writer.saveMusicDownload({ id: 'music-1', title: '晴天 - 周杰伦', platformName: '网易云音乐', status: 'done', savedPath: musicFile, lyricPath: lyric, at: 3000 })
+      writer.saveMusicDownload({ id: 'music-2', title: '稻香 - 周杰伦', platformName: '网易云音乐', status: 'queued', at: 4000 })
+
+      const reloaded = new Store(dlStoreDir).snapshot()
+      const runningRecord = reloaded.shortDownloads.find((item) => item.id === 'short-1') || {}
+      const doneRecord = reloaded.shortDownloads.find((item) => item.id === 'short-2') || {}
+      check(
+        '下载记录：重启后仍在，未下完的标记为已中断',
+        reloaded.shortDownloads.length === 2 &&
+          runningRecord.status === 'interrupted' &&
+          doneRecord.status === 'done' &&
+          doneRecord.savedPath === video,
+        JSON.stringify(reloaded.shortDownloads.map((item) => [item.id, item.status])),
+      )
+      check(
+        '下载记录：音乐记录重启后仍在且按时间新的在前',
+        reloaded.musicDownloads.length === 2 &&
+          reloaded.musicDownloads[0].id === 'music-2' &&
+          reloaded.musicDownloads[1].id === 'music-1',
+        JSON.stringify(reloaded.musicDownloads.map((item) => item.id)),
+      )
+
+      const fileDeleted = removeFileInRoot(video, dlRoot)
+      check(
+        '下载记录：删记录时文件一起删掉，空的剧名文件夹也清掉',
+        fileDeleted.removed === true && !fs.existsSync(video) && !fs.existsSync(path.dirname(video)),
+        JSON.stringify(fileDeleted),
+      )
+
+      const outsideDir = path.join(app.getPath('userData'), `smoke-dl-outside-${process.pid}`)
+      fs.mkdirSync(outsideDir, { recursive: true })
+      const decoy = path.join(outsideDir, 'keep.txt')
+      fs.writeFileSync(decoy, 'keep')
+      const outside = removeFileInRoot(decoy, dlRoot)
+      check(
+        '下载记录：拒绝删除下载目录外的文件',
+        outside.removed === false && Boolean(outside.error) && fs.existsSync(decoy),
+        JSON.stringify(outside),
+      )
+
+      const remover = new Store(dlStoreDir)
+      const leftShort = remover.removeShortDownload('short-2')
+      const leftMusic = remover.removeMusicDownload('music-1')
+      check(
+        '下载记录：单条删除只删这一条',
+        leftShort.length === 1 && leftShort[0].id === 'short-1' && leftMusic.length === 1 && leftMusic[0].id === 'music-2',
+        JSON.stringify({ leftShort: leftShort.map((item) => item.id), leftMusic: leftMusic.map((item) => item.id) }),
+      )
+      fs.rmSync(outsideDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+    } finally {
+      for (const dir of [dlRoot, dlStoreDir]) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 120 })
+        } catch {
+          /* 清理失败不影响自检结论 */
+        }
+      }
+    }
+  }
+
+  // ---- 3.3 选集 / 下载的纯逻辑 ----
   const series = require('./series')
   const { parsePlaylist, sanitizeFileName } = require('./download')
   const objectText = 'window.__X__ = {"a":{"b":"}{"},"c":[1,2],"d":"x\\"y"} ;tail'

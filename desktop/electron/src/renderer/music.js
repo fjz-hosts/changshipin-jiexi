@@ -375,26 +375,26 @@
     return state.favorites.some((item) => songKey(item) === songKey(song))
   }
 
+  function downloadStatusText(item) {
+    if (item.status === 'running') return `下载中 ${Number(item.percent) || 0}%`
+    if (item.status === 'done') return item.existed ? '已存在，跳过' : '已完成'
+    if (item.status === 'failed') return `失败${item.error ? `：${escapeHtml(item.error)}` : ''}`
+    if (item.status === 'cancelled') return '已取消'
+    if (item.status === 'interrupted') return '已中断（可重新下载）'
+    return '等待中'
+  }
+
   function downloadRow(item) {
-    const statusText =
-      item.status === 'running'
-        ? `下载中 ${Number(item.percent) || 0}%`
-        : item.status === 'done'
-          ? item.existed
-            ? '已存在，跳过'
-            : '已完成'
-          : item.status === 'failed'
-            ? `失败${item.error ? `：${escapeHtml(item.error)}` : ''}`
-            : item.status === 'cancelled'
-              ? '已取消'
-              : '等待中'
+    const statusText = downloadStatusText(item)
+    const busy = item.status === 'queued' || item.status === 'running'
     return `<li class="music-download-row ${item.status}" data-id="${escapeHtml(item.id)}">
-      <span class="music-download-main">
+      <span class="music-download-main" title="${escapeHtml(item.savedPath || '')}">
         <b>${escapeHtml(item.title || '歌曲')}</b>
         <small>${escapeHtml(item.platformName || '')} · ${escapeHtml(item.format || 'mp3')} · ${statusText}</small>
         ${item.savedPath ? `<em>${escapeHtml(item.savedPath)}</em>` : ''}
       </span>
       <button class="music-row-btn" data-action="reveal" title="在文件夹中显示"${item.savedPath ? '' : ' hidden'}>↗</button>
+      <button class="music-row-btn danger" data-action="delete" title="删除记录并删除文件"${busy ? ' hidden' : ''}>×</button>
     </li>`
   }
 
@@ -403,7 +403,7 @@
     const head = $('#music-list-head')
     if (!list || !head) return
     if (state.tab === 'downloads') {
-      head.innerHTML = `<span>下载记录 <em>${state.downloads.length}</em></span><button class="mini-btn" data-list-action="clear-downloads">清空已完成</button>`
+      head.innerHTML = `<span>下载记录 <em>${state.downloads.length}</em></span><button class="mini-btn" data-list-action="clear-downloads" title="清空已完成 / 已中断的记录，对应文件一起删除">清空记录</button>`
       list.innerHTML = state.downloads.length
         ? state.downloads.map(downloadRow).join('')
         : '<li class="music-list-empty">还没有下载任务</li>'
@@ -666,6 +666,53 @@
     return key === 'flac' ? 'flac' : key
   }
 
+  // 下载记录要能跨重启：状态一变就写进 config.json（进度不写，省得频繁落盘）
+  function saveDownloadRecord(item) {
+    if (!item?.id) return
+    try {
+      const pending = window.desktop.musicDownloadRecord({
+        id: item.id,
+        title: item.title,
+        platform: item.song?.platform || item.platform || '',
+        platformName: item.platformName || '',
+        format: item.format,
+        quality: item.quality,
+        status: item.status,
+        percent: item.percent,
+        savedPath: item.savedPath || '',
+        lyricPath: item.lyricPath || '',
+        error: item.error || '',
+        existed: Boolean(item.existed),
+        at: item.at || Date.now(),
+      })
+      if (pending?.catch) pending.catch(() => {})
+    } catch {
+      /* 记录失败不影响下载 */
+    }
+  }
+
+  async function removeDownloadRecord(item) {
+    if (!item) return
+    if (item.savedPath) {
+      const files = [item.savedPath, item.lyricPath].filter(Boolean).join('\n')
+      if (!window.confirm(`删除这条下载记录？\n\n${item.title || '歌曲'}\n\n对应文件会一起删除：\n${files}`)) return
+    }
+    let result = null
+    try {
+      result = await window.desktop.musicDownloadRemove(item.id)
+    } catch (error) {
+      toast(`删除失败：${String(error?.message || error)}`, 'error')
+      return
+    }
+    if (!result?.ok) {
+      toast(result?.error || '删除失败', 'error')
+      return
+    }
+    state.downloads = state.downloads.filter((entry) => entry.id !== item.id)
+    renderList()
+    toast(result.removedFile ? '已删除记录和文件' : '已删除下载记录', 'ok')
+  }
+
   function startDownload(format) {
     if (!state.current || !state.resolved) {
       toast('先播放一首歌再下载', 'warn')
@@ -690,8 +737,10 @@
       percent: 0,
       savedPath: '',
       error: '',
+      at: Date.now(),
     }
     state.downloads.unshift(item)
+    saveDownloadRecord(item)
     switchTab('downloads')
     renderList()
     toast(`已加入下载队列：${item.title}（${format === 'flac' ? 'FLAC' : 'MP3'}）`, 'ok')
@@ -725,12 +774,15 @@
           item.status = 'done'
           item.existed = true
           item.savedPath = response.savedPath || ''
+          item.lyricPath = response.lyricPath || ''
+          saveDownloadRecord(item)
           renderList()
           continue
         }
         if (!response?.ok) {
           item.status = 'failed'
           item.error = response?.error || '启动下载失败'
+          saveDownloadRecord(item)
           renderList()
           continue
         }
@@ -766,6 +818,7 @@
           item.status = 'failed'
           item.error = '下载超时'
         }
+        saveDownloadRecord(item)
         renderList()
       }
     } finally {
@@ -980,6 +1033,11 @@
       const button = event.target.closest('button[data-mtab]')
       if (button) switchTab(button.dataset.mtab)
     })
+    // 「清空播放记录 / 收藏 / 下载记录」这些按钮在列表头里，监听要单独挂在头上
+    $('#music-list-head')?.addEventListener('click', async (event) => {
+      const action = event.target.closest('[data-list-action]')
+      if (action) await handleListAction(action.dataset.listAction)
+    })
     $('#music-list')?.addEventListener('click', async (event) => {
       const action = event.target.closest('[data-list-action]')
       if (action) {
@@ -1015,7 +1073,16 @@
       const download = event.target.closest('.music-download-row')
       if (download) {
         const item = state.downloads.find((entry) => entry.id === download.dataset.id)
-        if (item?.savedPath) window.desktop.musicReveal(item.savedPath)
+        if (!item) return
+        const button = event.target.closest('[data-action]')
+        if (button?.dataset.action === 'delete') {
+          await removeDownloadRecord(item)
+          return
+        }
+        if (item.savedPath) {
+          const shown = await window.desktop.revealFile(item.savedPath)
+          if (!shown) toast('文件已经不在下载目录里了', 'warn')
+        }
       }
     })
     $('#music-fav')?.addEventListener('click', () => toggleFavorite())
@@ -1130,8 +1197,30 @@
 
   async function handleListAction(action) {
     if (action === 'clear-downloads') {
+      const finished = state.downloads.filter((item) => item.status !== 'queued' && item.status !== 'running')
+      if (!finished.length) {
+        toast('没有可清空的下载记录（下载中的任务要等它下完）', 'warn')
+        return
+      }
+      const withFiles = finished.filter((item) => item.savedPath || item.lyricPath).length
+      const tip = withFiles
+        ? `清空 ${finished.length} 条下载记录？\n\n其中 ${withFiles} 条对应的音频 / 歌词文件会一起删除，正在下载的任务不受影响。`
+        : `清空 ${finished.length} 条下载记录？`
+      if (!window.confirm(tip)) return
+      let result = null
+      try {
+        result = await window.desktop.musicDownloadClear('finished')
+      } catch (error) {
+        toast(`清空失败：${String(error?.message || error)}`, 'error')
+        return
+      }
+      if (!result?.ok) {
+        toast(result?.error || '清空失败', 'error')
+        return
+      }
       state.downloads = state.downloads.filter((item) => item.status === 'queued' || item.status === 'running')
       renderList()
+      toast(result.removedFiles ? `已清空记录，删除 ${result.removedFiles} 个文件` : '已清空下载记录', 'ok')
       return
     }
     if (action === 'clear-history') {
@@ -1159,6 +1248,10 @@
       const config = await window.desktop.getConfig()
       state.history = Array.isArray(config?.musicHistory) ? config.musicHistory : []
       state.favorites = Array.isArray(config?.musicFavorites) ? config.musicFavorites : []
+      // 下载记录跟着配置走：退出重进不会再清空，上次没下完的会显示「已中断」
+      state.downloads = Array.isArray(config?.musicDownloads)
+        ? config.musicDownloads.map((record) => ({ ...record, percent: Number(record.percent) || 0 }))
+        : []
     } catch {
       /* 忽略 */
     }

@@ -2254,6 +2254,48 @@
     renderShortSeries()
   }
 
+  function shortQueueStatusText(item) {
+    if (item.status === 'running') return `下载中 ${Number(item.percent) || 0}%`
+    if (item.status === 'done') return item.existed ? '已存在，跳过' : '已完成'
+    if (item.status === 'failed') return `失败${item.error ? `：${item.error}` : ''}`
+    if (item.status === 'cancelled') return '已取消'
+    if (item.status === 'interrupted') return '已中断'
+    return '等待中'
+  }
+
+  function shortQueueItemId(item) {
+    return item.id || item.key || ''
+  }
+
+  // 下载记录要能跨重启：状态一变就写进 config.json（进度不写，省得频繁落盘）
+  function shortDownloadRecord(item) {
+    return {
+      id: shortQueueItemId(item),
+      title: item.title,
+      platform: item.platform,
+      format: 'mp4',
+      status: item.status,
+      percent: Number(item.percent) || 0,
+      savedPath: item.savedPath || '',
+      error: item.error || '',
+      existed: Boolean(item.existed),
+      at: item.at || Date.now(),
+    }
+  }
+
+  function saveShortDownloadRecord(item) {
+    if (!item) return
+    const id = shortQueueItemId(item)
+    if (!id) return
+    if (!item.id) item.id = id
+    try {
+      const pending = window.desktop.shortDownloadRecord?.(shortDownloadRecord(item))
+      if (pending?.catch) pending.catch(() => {})
+    } catch {
+      /* 记录失败不影响下载 */
+    }
+  }
+
   function renderShortQueue() {
     const list = $('#short-queue-list')
     if (!list) return
@@ -2264,27 +2306,69 @@
     }
     list.innerHTML = state.shortQueue
       .map((item) => {
-        const label =
-          item.status === 'running'
-            ? `下载中 ${Number(item.percent) || 0}%`
-            : item.status === 'done'
-              ? item.existed
-                ? '已存在，跳过'
-                : '已完成'
-              : item.status === 'failed'
-                ? `失败${item.error ? `：${escapeHtml(item.error)}` : ''}`
-                : item.status === 'cancelled'
-                  ? '已取消'
-                  : '等待中'
-        return `<li class="short-queue-item ${item.status}" title="${escapeHtml(item.savedPath || '')}">
+        const label = shortQueueStatusText(item)
+        const id = shortQueueItemId(item)
+        const busy = item.status === 'queued' || item.status === 'running'
+        return `<li class="short-queue-item ${item.status}" data-id="${escapeHtml(id)}" title="${escapeHtml(item.savedPath || '')}">
           <span class="q-name">${escapeHtml(item.title)}</span>
-          <span class="q-state">${label}</span>
+          <span class="q-state">${escapeHtml(label)}</span>
+          ${item.savedPath ? '<button class="q-btn" data-qaction="reveal" title="在文件夹中显示">↗</button>' : ''}
+          ${busy ? '' : '<button class="q-btn danger" data-qaction="remove" title="删除记录并删除文件">×</button>'}
         </li>`
       })
       .join('')
     const done = state.shortQueue.filter((item) => item.status === 'done').length
     const failed = state.shortQueue.filter((item) => item.status === 'failed').length
     $('#short-queue-legend').textContent = `${done}/${state.shortQueue.length}${failed ? ` · 失败 ${failed}` : ''}`
+  }
+
+  async function removeShortDownloadRecord(item) {
+    if (!item) return
+    const id = shortQueueItemId(item)
+    if (!id) return
+    if (item.savedPath && !window.confirm(`删除这条下载记录？\n\n${item.title}\n\n对应文件会一起删除：\n${item.savedPath}`)) return
+    let result = null
+    try {
+      result = await window.desktop.shortDownloadRemove(id)
+    } catch (error) {
+      toast(`删除失败：${String(error?.message || error)}`, 'error')
+      return
+    }
+    if (!result?.ok) {
+      toast(result?.error || '删除失败', 'error')
+      return
+    }
+    state.shortQueue = state.shortQueue.filter((entry) => shortQueueItemId(entry) !== id)
+    renderShortQueue()
+    toast(result.removedFile ? '已删除记录和文件' : '已删除下载记录', 'ok')
+  }
+
+  async function clearShortDownloadRecords() {
+    const finished = state.shortQueue.filter((item) => item.status !== 'queued' && item.status !== 'running')
+    if (!finished.length) {
+      toast('没有可清空的记录（下载中的任务要等它下完）', 'warn')
+      return
+    }
+    const withFiles = finished.filter((item) => item.savedPath).length
+    const tip = withFiles
+      ? `清空 ${finished.length} 条下载记录？\n\n其中 ${withFiles} 条对应的视频文件会一起删除，正在下载的任务不受影响。`
+      : `清空 ${finished.length} 条下载记录？`
+    if (!window.confirm(tip)) return
+    let result = null
+    try {
+      result = await window.desktop.shortDownloadClear('finished')
+    } catch (error) {
+      toast(`清空失败：${String(error?.message || error)}`, 'error')
+      return
+    }
+    if (!result?.ok) {
+      toast(result?.error || '清空失败', 'error')
+      return
+    }
+    const removed = new Set(finished.map((item) => shortQueueItemId(item)))
+    state.shortQueue = state.shortQueue.filter((item) => !removed.has(shortQueueItemId(item)))
+    renderShortQueue()
+    toast(result.removedFiles ? `已清空记录，删除 ${result.removedFiles} 个文件` : '已清空下载记录', 'ok')
   }
 
   function renderShortHistory() {
@@ -2336,7 +2420,7 @@
   function enqueueShortDownload(item) {
     if (!item?.url) return false
     const id = item.id || `short-${Date.now()}-${state.shortQueue.length}-${Math.random().toString(16).slice(2, 6)}`
-    state.shortQueue.push({
+    const entry = {
       key: `q-${Date.now()}-${state.shortQueue.length}`,
       title: item.title || '短视频',
       url: item.url,
@@ -2348,11 +2432,37 @@
       status: 'queued',
       percent: 0,
       id,
+      at: Date.now(),
       error: '',
       savedPath: '',
-    })
+    }
+    state.shortQueue.push(entry)
+    saveShortDownloadRecord(entry)
     renderShortQueue()
     return true
+  }
+
+  function pushShortDownloadFailure({ title, subdir = '', platform = '', error = '' }) {
+    const item = {
+      key: `q-${Date.now()}-${state.shortQueue.length}`,
+      title,
+      url: '',
+      dash: null,
+      referer: '',
+      cookie: '',
+      subdir,
+      platform,
+      status: 'failed',
+      percent: 0,
+      id: `short-${Date.now()}-${state.shortQueue.length}-${Math.random().toString(16).slice(2, 6)}`,
+      at: Date.now(),
+      error,
+      savedPath: '',
+    }
+    state.shortQueue.push(item)
+    saveShortDownloadRecord(item)
+    renderShortQueue()
+    return item
   }
 
   function applyShortDownloadState(update) {
@@ -2363,6 +2473,7 @@
     item.percent = Number(update.percent) || item.percent
     if (update.savedPath) item.savedPath = update.savedPath
     if (update.error) item.error = update.error
+    if (update.status !== 'running') saveShortDownloadRecord(item)
     renderShortQueue()
     if (update.status !== 'running') {
       const waiter = state.shortWaiters.get(update.id)
@@ -2415,16 +2526,19 @@
           item.existed = true
           item.savedPath = response.savedPath || ''
           skipped += 1
+          saveShortDownloadRecord(item)
           renderShortQueue()
           continue
         }
         if (!response?.ok) {
           item.status = 'failed'
           item.error = response?.error || '启动下载失败'
+          saveShortDownloadRecord(item)
           renderShortQueue()
           continue
         }
         item.id = response.id || item.id
+        saveShortDownloadRecord(item)
         state.shortActiveDownload = item.id
         let snapshot = null
         try {
@@ -2503,19 +2617,11 @@
       if (!quality && (result.platformKey === 'douyin' || result.platform === 'douyin')) {
         // 抖音合集里没拿到直链的集数（付费 / 风控 / 已下架）不要再按单集解析，
         // 否则会重新解析成整部合集，拿错成第一集的清晰度。
-        state.shortQueue.push({
-          key: `q-${Date.now()}-${state.shortQueue.length}`,
+        pushShortDownloadFailure({
           title: `${subdir} ${episode.label || `第${index + 1}集`}`,
-          url: '',
-          referer: '',
-          cookie: '',
           subdir,
           platform: result.platformName,
-          status: 'failed',
-          percent: 0,
-          id: '',
           error: '该集没有返回直链（可能需要登录/付费）',
-          savedPath: '',
         })
         continue
       }
@@ -2534,19 +2640,11 @@
         }
       }
       if (!quality) {
-        state.shortQueue.push({
-          key: `q-${Date.now()}-${state.shortQueue.length}`,
+        pushShortDownloadFailure({
           title: `${subdir} ${episode.label || `第${index + 1}集`}`,
-          url: '',
-          referer: '',
-          cookie: '',
           subdir,
           platform: result.platformName,
-          status: 'failed',
-          percent: 0,
-          id: '',
           error: '没有拿到清晰度',
-          savedPath: '',
         })
         continue
       }
@@ -3939,11 +4037,21 @@
       toggleShortEpisode(Number(item.dataset.index))
     })
 
-    $('#short-queue-clear').addEventListener('click', () => {
-      state.shortQueue = state.shortQueue.filter(
-        (item) => item.status === 'queued' || item.status === 'running',
-      )
-      renderShortQueue()
+    $('#short-queue-clear').addEventListener('click', () => clearShortDownloadRecords())
+    $('#short-queue-list').addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-qaction]')
+      const row = event.target.closest('.short-queue-item')
+      if (!button || !row) return
+      const id = row.dataset.id
+      const item = state.shortQueue.find((entry) => shortQueueItemId(entry) === id)
+      if (!item) return
+      event.stopPropagation()
+      if (button.dataset.qaction === 'reveal') {
+        const shown = item.savedPath ? await window.desktop.revealFile(item.savedPath) : false
+        if (!shown) toast('文件已经不在下载目录里了', 'warn')
+        return
+      }
+      if (button.dataset.qaction === 'remove') await removeShortDownloadRecord(item)
     })
     $('#short-open-folder').addEventListener('click', () => window.desktop.openDownloadFolder())
 
@@ -4671,6 +4779,26 @@
       renderLineList()
       renderHistory()
       renderShortPlatforms()
+      // 下载记录跟配置走：退出重进还能看到，未下完的显示「已中断」
+      state.shortQueue = Array.isArray(state.config.shortDownloads)
+        ? state.config.shortDownloads.map((record) => ({
+            key: record.id,
+            id: record.id,
+            title: record.title,
+            platform: record.platform,
+            status: record.status,
+            percent: Number(record.percent) || 0,
+            savedPath: record.savedPath || '',
+            error: record.error || '',
+            existed: Boolean(record.existed),
+            at: record.at || 0,
+            url: '',
+            dash: null,
+            referer: '',
+            cookie: '',
+            subdir: '',
+          }))
+        : []
       renderShortQueue()
       state.shortHistory = Array.isArray(state.config.shortHistory) ? state.config.shortHistory : []
       renderShortHistory()
@@ -4723,6 +4851,7 @@
     updateNativeButton,
     switchMode,
     resolveShortFromUrl,
+    renderShortQueue,
     showError,
     isNightParseWindow,
     getShortResult: () => state.shortResult,

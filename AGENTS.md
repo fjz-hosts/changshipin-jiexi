@@ -106,7 +106,7 @@ node scripts\sync-releases.mjs --no-cleanup
 ## 3. 发版前测试
 
 ```powershell
-# 无头自检（44 项）
+# 无头自检（49 项）
 powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 
 # 界面回归（需要先启动开发版并开 9345 调试端口）

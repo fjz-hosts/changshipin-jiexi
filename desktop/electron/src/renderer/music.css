@@ -803,6 +803,10 @@
   color: var(--danger);
 }
 
+.music-download-row.interrupted small {
+  color: var(--warn);
+}
+
 .music-help-panel {
   flex: 0 1 auto;
   max-height: 36%;

@@ -630,6 +630,11 @@ def main():
           v.play().catch(() => {{}});
           document.querySelector('#short-cover').hidden = true;
           document.body.classList.add('short-scroll');
+          s.shortQueue = [
+            {{ id: 'demo-dl-1', key: 'demo-dl-1', title: '为了解《我相信》的最低音，做了全曲音高标注', platform: '哔哩哔哩', status: 'done', percent: 100, savedPath: 'D:\\\\视频解析下载\\\\哔哩哔哩 为了解《我相信》的最低音.mp4', at: Date.now() }},
+            {{ id: 'demo-dl-2', key: 'demo-dl-2', title: '铃芽之旅 第1集', platform: '哔哩哔哩', status: 'done', percent: 100, savedPath: 'D:\\\\视频解析下载\\\\铃芽之旅\\\\第1集.mp4', at: Date.now() }},
+          ];
+          window.__app.renderShortQueue();
           window.scrollTo(0, 0);
           return true;
         }})()""")

@@ -3307,6 +3307,34 @@ body.cinema .video-view video {
   color: var(--faint);
 }
 
+.short-queue-item .q-btn {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.short-queue-item .q-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.short-queue-item .q-btn.danger:hover {
+  color: var(--danger);
+  background: rgba(255, 100, 112, 0.12);
+}
+
+.short-queue-item.interrupted .q-state {
+  color: var(--warn);
+}
+
 .short-queue-item.running .q-state {
   color: var(--accent);
 }
