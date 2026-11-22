@@ -209,7 +209,7 @@ def build():
 </head>
 <body>
   <section class="cover">
-    <div><span class="cover-mark">音视频解析 · v1.3.0</span></div>
+    <div><span class="cover-mark">音视频解析 · v1.3.1</span></div>
     <h1>{html_lib.escape(TITLE)}</h1>
     <p class="sub">{html_lib.escape(SUBTITLE)}</p>
     <p class="meta">Windows 10 / 11 · 爱奇艺 · 腾讯视频 · 优酷 · 芒果TV · 酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水　|　{html_lib.escape(today)}</p>
@@ -239,7 +239,7 @@ def build():
     <p>软件内：「设置 → 关于」可以打开配置目录、日志目录和项目主页；遇到解析失败时，先换线路，再试「在线更新线路」。</p>
   </div>
 
-  <div class="doc-foot">音视频解析 · 图文使用教程 · v1.3.0 · 共 {len(sections)} 节</div>
+  <div class="doc-foot">音视频解析 · 图文使用教程 · v1.3.1 · 共 {len(sections)} 节</div>
 </body>
 </html>'''
 

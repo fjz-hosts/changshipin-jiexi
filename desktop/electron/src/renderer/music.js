@@ -16,6 +16,14 @@
     { key: 'qishui', name: '汽水音乐', short: '汽水', color: '#00d6c9', home: 'https://music.douyin.com/qishui/', searchable: false, hint: '粘贴汽水分享链接', loggedIn: false },
   ]
 
+  const MUSIC_ICONS = {
+    kuwo: 'assets/platform-kuwo.png',
+    kugou: 'assets/platform-kugou.png',
+    qq: 'assets/platform-qqmusic.png',
+    netease: 'assets/platform-netease.png',
+    qishui: 'assets/platform-qishui.png',
+  }
+
   const state = {
     inited: false,
     platforms: [],
@@ -178,12 +186,9 @@
       .map(
         (platform) => `
         <div class="music-platform-card${platform.key === state.platform ? ' active' : ''}" data-platform="${platform.key}" style="--brand:${platform.color};--brand-soft:${hexToRgba(platform.color)}">
-          <button class="music-card-main" data-action="select" title="${escapeHtml(platform.hint || '')}">
-            <span class="music-logo" aria-hidden="true">${escapeHtml(platform.short || platform.name.slice(0, 2))}</span>
-            <span class="music-card-meta">
-              <b>${escapeHtml(platform.name)}</b>
-              <small>${platform.searchable === false ? '分享链接解析' : '搜索歌曲'}</small>
-            </span>
+          <button class="music-card-main" data-action="select" title="${escapeHtml(platform.hint || platform.name)}">
+            <span class="music-logo" aria-hidden="true"><img src="${MUSIC_ICONS[platform.key] || 'assets/app-icon.png'}" alt="" /></span>
+            <span class="music-card-meta"><b>${escapeHtml(platform.short || platform.name)}</b></span>
             <em class="music-login-chip" data-login-chip="${platform.key}">未登录</em>
           </button>
         </div>`,
@@ -207,7 +212,7 @@
     const badge = $('#music-platform-badge')
     const platform = platformInfo(state.platform)
     if (!badge || !platform) return
-    badge.textContent = platform.name
+    badge.textContent = platform.short || platform.name
     badge.classList.add('known')
     badge.style.setProperty('--brand', platform.color)
     const input = $('#music-search-input')
@@ -407,7 +412,7 @@
     const items = currentList()
     if (state.tab === 'results') {
       const platform = platformInfo(state.platform)
-      head.innerHTML = `<span>${platform?.name || '搜索结果'} <em>${items.length ? `${items.length} 首` : ''}</em></span>`
+      head.innerHTML = `<span>${platform?.short || platform?.name || '搜索结果'} <em>${items.length ? `${items.length} 首` : ''}</em></span>`
     } else if (state.tab === 'history') {
       head.innerHTML = `<span>播放记录 <em>${items.length}</em></span><button class="mini-btn" data-list-action="clear-history">清空</button>`
     } else {
@@ -512,9 +517,11 @@
     $('#music-title').textContent = title
     $('#music-artist').textContent = artist || '未知歌手'
     $('#music-album').textContent = album ? `专辑：${album}` : ''
-    $('#music-source').textContent = platform?.name || result.platformName || '音乐'
+    $('#music-source').textContent = platform?.short || platform?.name || result.platformName || '音乐'
     $('#music-source').style.setProperty('--brand', platform?.color || '#37e08b')
-    $('#music-quality-tag').textContent = `${String(result.format || 'mp3').toUpperCase()}${result.bitrate ? ` · ${Math.round(Number(result.bitrate) / 1000)}K` : ''}`
+    const formatLabel = result.format === 'flac' ? 'FLAC · 无损' : String(result.format || 'mp3').toUpperCase()
+    const bitrateLabel = result.format === 'flac' ? '' : result.bitrate ? ` · ${Math.round(Number(result.bitrate) / 1000)}K` : ''
+    $('#music-quality-tag').textContent = `${formatLabel}${bitrateLabel}`
     const via = $('#music-via')
     via.hidden = !result.via
     via.textContent = result.via ? `换源 · ${result.viaName || '酷我音乐'}` : ''
@@ -532,6 +539,7 @@
     const note = $('#music-note')
     const noteText = result.note || ''
     note.textContent = noteText
+    note.title = noteText
     note.hidden = !noteText
     renderQualityOptions(result)
     updateFavoriteButton()

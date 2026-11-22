@@ -589,10 +589,19 @@ async function kuwoResolve(song, { quality = '320', format = 'mp3', cookie = '' 
   }
   const lyric = await kuwoLyric(song.id, cookie)
   const lower = String(data.url).toLowerCase()
+  const bitrate = lower.includes('.flac')
+    ? 999000
+    : /m800|320/.test(lower)
+      ? 320000
+      : /m500|128/.test(lower)
+        ? 128000
+        : quality === '128'
+          ? 128000
+          : 320000
   return {
     playUrl: data.url,
     format: lower.includes('.flac') ? 'flac' : 'mp3',
-    bitrate: quality === '128' ? 128000 : 320000,
+    bitrate,
     size: 0,
     referer: 'https://www.kuwo.cn/',
     cookie,
@@ -759,6 +768,141 @@ async function qishuiResolveLink(rawUrl) {
 }
 
 // ---------------------------------------------------------------------------
+// 无损音乐下载（flac.music.hi.cn）：公开的跨平台取流接口
+//
+// 它的搜索接口只支持酷我 / 网易云，但取流接口能拿到一部分会员歌曲的
+// 320K / FLAC 直链（依赖站点自己的版权池）。这里只把它当成「平台取流失败
+// 或用户明确要 FLAC」时的备用源，不参与搜索列表，也不存储任何文件。
+// ---------------------------------------------------------------------------
+
+const HI_BASE = 'https://flac.music.hi.cn/ajax.php'
+
+async function hiPost(act, params) {
+  const body = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) body.append(key, String(value))
+  }
+  const result = await requestJson(`${HI_BASE}?act=${encodeURIComponent(act)}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      referer: 'https://flac.music.hi.cn/',
+      origin: 'https://flac.music.hi.cn',
+    },
+    body: body.toString(),
+  })
+  if (!result.json) throw new Error(`无损音乐源返回异常（HTTP ${result.status}）`)
+  return result.json
+}
+
+async function hiSearch(platform, keyword) {
+  const json = await hiPost('search', { platform, keyword, page: 1, size: 20 })
+  if (Number(json?.code) !== 0) throw new Error(clean(json?.msg, 120) || '无损音乐源搜索失败')
+  return Array.isArray(json?.data?.list) ? json.data.list : []
+}
+
+function pickHiCandidate(song, list) {
+  const title = normalizeMatch(song.title)
+  const artist = normalizeMatch(song.artist)
+  if (!title || !Array.isArray(list) || !list.length) return null
+  let best = null
+  let bestScore = -1
+  for (const item of list) {
+    const itemTitle = normalizeMatch(item.name)
+    const itemArtist = normalizeMatch(item.artist)
+    let score = 0
+    if (itemTitle === title) score += 8
+    else if (itemTitle.includes(title) || title.includes(itemTitle)) score += 4
+    else continue
+    if (artist && itemArtist === artist) score += 8
+    else if (artist && (itemArtist.includes(artist) || artist.includes(itemArtist))) score += 4
+    else if (artist && itemArtist) score -= 6
+    // 优先非 Live / 翻唱 / DJ 版本
+    if (/(live|现场|演唱会|翻唱|cover|伴奏|dj|remix|片段|试听)/i.test(`${item.name} ${item.album_name || ''}`)) score -= 8
+    if (Number(song.duration) && Number(item.duration)) {
+      const diff = Math.abs(Number(song.duration) - Number(item.duration))
+      if (diff <= 3) score += 3
+      else if (diff <= 12) score += 1
+      else if (diff > 40) score -= 4
+    }
+    if (score > bestScore) {
+      bestScore = score
+      best = item
+    }
+  }
+  return bestScore >= 6 ? best : null
+}
+
+async function hiFallback(song, { format = 'mp3', quality = '320' } = {}) {
+  const wantedFlac = format === 'flac' || quality === 'flac'
+  // 网易云歌曲优先走网易云源，其它平台优先走酷我源（酷我的无损命中率更高）
+  const platforms = song.platform === 'netease' ? ['wyy', 'kuwo'] : ['kuwo', 'wyy']
+  // 「江南-《你很》电影片头曲」这类带副标题的歌名，先用主标题搜一次
+  const baseTitle = String(song.title || '')
+    .replace(/\s*[-–—(（【[].*$/, '')
+    .trim()
+  const keywords = [...new Set([song.title, baseTitle, `${song.title} ${song.artist}`.trim()].filter(Boolean))]
+  let fallbackMp3 = null
+  for (const platform of platforms) {
+    for (const keyword of keywords) {
+      let list = []
+      try {
+        list = await hiSearch(platform, keyword)
+      } catch {
+        continue
+      }
+      const match = pickHiCandidate(song, list)
+      if (!match) continue
+      const minfo = Array.isArray(match.minfo) ? match.minfo : []
+      const hasFlac = minfo.some((item) => String(item.format).toLowerCase() === 'flac')
+      const targetFormat = wantedFlac && hasFlac ? 'flac' : 'mp3'
+      const bitrate = targetFormat === 'flac' ? '2000' : '320'
+      let json = null
+      try {
+        json = await hiPost('getUrl', {
+          platform,
+          songid: match.id,
+          format: targetFormat,
+          bitrate,
+          time: match.time,
+          sign: match.sign,
+        })
+      } catch {
+        continue
+      }
+      if (Number(json?.code) !== 0 || !json?.data?.url) continue
+      const playUrl = String(json.data.url)
+      const actualFormat = /\.flac(?:[?#]|$)/i.test(playUrl) ? 'flac' : /\.m4a(?:[?#]|$)/i.test(playUrl) ? 'm4a' : 'mp3'
+      const lyric =
+        platform === 'wyy'
+          ? await neteaseLyric(match.id)
+          : await kuwoLyric(match.id)
+      const candidate = {
+        playUrl,
+        format: actualFormat,
+        bitrate: targetFormat === 'flac' ? 2000000 : 320000,
+        duration: Number(match.duration) || Number(json.data.duration) || 0,
+        referer: 'https://flac.music.hi.cn/',
+        cookie: '',
+        lyric: lyric.lyric,
+        translation: lyric.translation || '',
+        via: 'hi',
+        viaName: '无损音乐下载',
+        note:
+          (wantedFlac && actualFormat !== 'flac'
+            ? '这个源没有返回真正的 FLAC，已改用 320K MP3；'
+            : '') +
+          `原平台没有给出完整音源，已通过无损音乐下载源取到同名单曲（${actualFormat.toUpperCase()}）`,
+      }
+      // 用户要 FLAC 时，先继续找真正返回 FLAC 的源；找不到再退回 320K MP3
+      if (!wantedFlac || actualFormat === 'flac') return candidate
+      if (!fallbackMp3) fallbackMp3 = candidate
+    }
+  }
+  return fallbackMp3
+}
+
+// ---------------------------------------------------------------------------
 // 换源：原平台没有权限时，用歌名 + 歌手在酷我找一条可播放音源
 // ---------------------------------------------------------------------------
 
@@ -855,6 +999,7 @@ async function resolveMusic({ platform, song, quality = '320', format = 'mp3', c
   const meta = platformByKey(platform)
   if (!meta) return { ok: false, error: '未知的音乐平台' }
   if (!song || !song.id) return { ok: false, error: '歌曲信息不完整' }
+  const wantFlac = format === 'flac' || quality === 'flac'
   let resolved = null
   let primaryError = ''
   try {
@@ -866,15 +1011,15 @@ async function resolveMusic({ platform, song, quality = '320', format = 'mp3', c
       const direct = await qishuiResolveLink(song.url || song.shareUrl || '')
       resolved = direct
       if (direct.preview) {
-        const fallback = await kuwoFallback(
-          {
-            ...song,
-            title: direct.title || song.title,
-            artist: direct.artist || song.artist,
-            duration: direct.duration || song.duration,
-          },
-          { format, quality },
-        )
+        const fallbackSong = {
+          ...song,
+          title: direct.title || song.title,
+          artist: direct.artist || song.artist,
+          duration: direct.duration || song.duration,
+        }
+        // 先用无损音乐源的完整音源，再用酷我的免费同名源
+        const hi = await hiFallback(fallbackSong, { format, quality })
+        const fallback = hi || (await kuwoFallback(fallbackSong, { format, quality }))
         if (fallback) {
           resolved = {
             ...fallback,
@@ -891,6 +1036,13 @@ async function resolveMusic({ platform, song, quality = '320', format = 'mp3', c
     primaryError = clean(error?.message || error, 200)
   }
 
+  // 平台没有权限 / 用户明确要 FLAC 时，先试无损音乐源（它有时能直接给 FLAC），
+  // 再退到酷我同名版权源（通常最高 320K）。
+  if (!resolved || (wantFlac && resolved.format !== 'flac')) {
+    const hi = await hiFallback(song, { format, quality })
+    if (hi && (!resolved || hi.format === 'flac')) resolved = hi
+  }
+
   if (!resolved && platform !== 'qishui') {
     // 酷我同一个歌名也可能第一条要会员、后面的版权源还能免费播，
     // 所以酷我也允许「换一条同名版权源」，但排除刚才失败的那一条。
@@ -900,6 +1052,9 @@ async function resolveMusic({ platform, song, quality = '320', format = 'mp3', c
       excludeId: platform === 'kuwo' ? song.id : '',
     })
     if (fallback) resolved = fallback
+  }
+  if (resolved && wantFlac && resolved.format !== 'flac') {
+    resolved.note = `${resolved.note ? `${resolved.note}\n` : ''}没有找到真正的无损音源，已改用 320K MP3`
   }
   if (!resolved) {
     return {
@@ -936,12 +1091,9 @@ function buildQualities(platform, song) {
     { key: '128', label: '标准 128K', format: 'mp3', available: true },
     { key: '320', label: '高品 320K', format: 'mp3', available: true },
   ]
-  let flac = false
-  if (platform === 'netease') flac = true
-  if (platform === 'qq') flac = Number(song?.raw?.sizeFlac) > 0
-  if (platform === 'kugou') flac = Boolean(song?.raw?.hashFlac)
-  if (platform === 'kuwo') flac = false
-  if (platform === 'qishui') flac = false
+  // 五个平台都可能通过无损音乐源换到同名单曲的 FLAC，先让按钮可用；
+  // 实际拿不到时 resolveMusic 会降级并在 note 里说明。
+  const flac = true
   list.push({ key: 'flac', label: '无损 FLAC', format: 'flac', available: flac })
   return list
 }

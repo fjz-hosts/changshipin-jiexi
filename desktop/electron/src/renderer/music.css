@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
   padding-bottom: 4px;
 }
 
@@ -65,17 +65,20 @@
 
 .music-logo {
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
+  display: block;
+  width: 40px;
+  height: 40px;
   border-radius: 11px;
-  background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--brand) 85%, white), color-mix(in srgb, var(--brand) 55%, #05080e));
-  color: #061018;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.3px;
+  overflow: hidden;
+  background: #070b12;
   box-shadow: 0 6px 18px -10px var(--brand);
+}
+
+.music-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .music-card-meta {
@@ -83,6 +86,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
 }
 
@@ -126,25 +130,38 @@
 .music-search-row {
   flex: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+}
+
+/* 链接框永远占满左侧剩余空间，粘贴 / 清空按钮贴右边，不要只占左边一小段 */
+.parse-row .url-box,
+.short-parse-row .url-box,
+.music-search-row .url-box {
+  width: 100%;
 }
 
 .music-search-row .parse-btn {
   min-width: 104px;
 }
 
+.music-quick .quick-head {
+  align-items: center;
+}
+
 .music-login-btn {
-  height: 44px;
-  padding: 0 16px;
-  border-radius: 12px;
+  margin-left: auto;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 
 .music-workspace {
   flex: 1;
-  min-height: 440px;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 348px;
   gap: 12px;
@@ -262,15 +279,15 @@
   position: relative;
   z-index: 1;
   display: flex;
-  gap: 22px;
-  padding: 24px 24px 12px;
+  gap: 16px;
+  padding: 16px 20px 6px;
 }
 
 .music-cover-box {
   position: relative;
   flex: none;
-  width: 190px;
-  height: 190px;
+  width: 158px;
+  height: 158px;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -301,7 +318,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .music-source-row {
@@ -338,7 +355,7 @@
 
 .music-now h2 {
   margin: 2px 0 0;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.35;
   letter-spacing: 0.2px;
   word-break: break-word;
@@ -443,15 +460,17 @@
 
 .music-note {
   margin: 4px 0 0;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border: 1px solid rgba(255, 196, 92, 0.22);
   border-left: 3px solid var(--warn);
   border-radius: 8px;
   background: rgba(255, 196, 92, 0.055);
-  font-size: 11px;
-  line-height: 1.7;
+  font-size: 10.5px;
+  line-height: 1.6;
   color: rgba(255, 220, 160, 0.9);
-  white-space: pre-wrap;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .music-player audio {
@@ -529,11 +548,12 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .music-list-panel {
   flex: 1;
-  min-height: 260px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -784,7 +804,9 @@
 }
 
 .music-help-panel {
-  flex: none;
+  flex: 0 1 auto;
+  max-height: 36%;
+  overflow-y: auto;
 }
 
 .music-help {

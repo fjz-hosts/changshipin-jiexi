@@ -276,13 +276,14 @@
           <div class="quick-head">
             <span>音乐平台</span>
             <small>酷我 · 酷狗 · QQ音乐 · 网易云 · 汽水音乐；搜索歌曲或粘贴分享链接，播放界面带逐行滚动歌词</small>
+            <button class="ghost-sm music-login-btn" id="music-login" title="打开平台官网登录会员账号">登录会员</button>
           </div>
           <div class="music-platform-grid" id="music-platform-grid"></div>
         </div>
 
         <div class="music-search-row">
           <div class="url-box" id="music-url-box">
-            <span class="platform-badge" id="music-platform-badge">网易云音乐</span>
+            <span class="platform-badge" id="music-platform-badge">网易云</span>
             <input
               id="music-search-input"
               type="text"
@@ -293,7 +294,6 @@
             <button class="mini-btn" id="music-paste" title="从剪贴板粘贴">粘贴</button>
             <button class="icon-btn" id="music-clear" title="清空">✕</button>
           </div>
-          <button class="ghost-sm music-login-btn" id="music-login" title="打开平台官网登录会员账号">登录会员</button>
           <button class="parse-btn" id="music-search-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="10.5" cy="10.5" r="6.2" fill="none" stroke="currentColor" stroke-width="2" />
@@ -399,10 +399,9 @@
             <section class="panel music-help-panel">
               <header><h3>音乐说明</h3></header>
               <div class="music-help">
-                <p>· 歌曲来自各平台公开接口；免费歌曲直接播放，会员歌曲会先尝试平台音源，再自动用酷我上的同名单曲换源。</p>
-                <p>· 下载保存到「音乐」文件夹，按平台分开：<b>音乐/网易云音乐/歌名 - 歌手.mp3</b>，歌词是同名 <b>.lrc</b> 文件。</p>
-                <p>· 想要更高音质 / 会员完整版：点「登录会员」，在弹出的平台官网登录后关闭窗口，再点一次播放。</p>
-                <p>· 汽水音乐网页版只给 30 秒试听，且不开放搜索；完整版会尝试换源，换不到时需要到汽水 App 内播放。</p>
+                <p>· 免费歌曲直接播放；会员歌曲先试平台音源，再通过公开无损音乐源（flac.music.hi.cn）和酷我同名源换源，部分 VIP 可换到 320K / FLAC。</p>
+                <p>· 下载到「音乐」文件夹，按平台分开，MP3 / FLAC 旁边会保存同名 <b>.lrc</b>。</p>
+                <p>· 点「登录会员」登录后可提高 VIP 原曲命中率；第三方源可能失效。汽水网页版只给 30 秒试听，且不支持搜索。</p>
               </div>
             </section>
           </aside>
@@ -1111,7 +1110,7 @@
                 <li>播放器下方歌词会跟着进度一行一行滚动，点任意一行可以跳到那一句。</li>
                 <li>「♡ 收藏」把歌收进「我的收藏」；每播放一首会自动写进「播放记录」，和长视频的观看历史分开。</li>
                 <li>下载支持 MP3 和 FLAC（平台有损 / 无损权限不同，没有无损时会自动改用 320K MP3），歌词会一起保存成同名 <b>.lrc</b> 文件，统一放在「音乐」文件夹里、按平台分目录。</li>
-                <li>会员歌曲：点「登录会员」在弹出的平台官网登录，关闭窗口后登录状态会保存；没有会员时，程序会自动按歌名 + 歌手找一条可播放的同名音源，播放器上会标「换源 · 酷我音乐」。</li>
+                <li>会员歌曲：点「登录会员」在弹出的平台官网登录，关闭窗口后登录状态会保存；没有会员时，程序会先通过公开无损音乐源（flac.music.hi.cn）找同名 FLAC / 320K，再退到酷我同名源，播放器上会标「换源」。</li>
                 <li>汽水音乐网页版不开放搜索，请在汽水 App 里复制歌曲分享链接再粘贴解析；网页版只给 30 秒试听，完整版会尝试换源。</li>
               </ul>
               <div class="guide-tip">音乐和视频下载分开存放：音乐在「音视频解析下载\音乐\平台名\歌名 - 歌手.mp3」，旁边就是同名的 .lrc 歌词。</div>
