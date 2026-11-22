@@ -178,7 +178,7 @@ function publicLine(line) {
 // ---------------------------------------------------------------------------
 
 const PARSE_PARTITION = 'persist:parse'
-const PLAYER_ACTIONS = ['toggle', 'back', 'forward', 'volume-up', 'volume-down', 'mute', 'ack-ended']
+const PLAYER_ACTIONS = ['toggle', 'pause', 'back', 'forward', 'volume-up', 'volume-down', 'mute', 'ack-ended']
 
 const PLAYER_BRIDGE_JS = `(() => {
   if (window.__cspVideoBridge) { window.__cspVideoBridge.refresh(); return 'ok' }
@@ -224,6 +224,9 @@ const PLAYER_BRIDGE_JS = `(() => {
       try {
         if (action === 'toggle') {
           if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}) } else { v.pause() }
+        } else if (action === 'pause') {
+          // 离开播放画面（切平台 / 切模式）时只暂停，不清进度，回来还能接着播
+          if (!v.paused) v.pause();
         } else if (action === 'back') {
           v.currentTime = Math.max(0, (Number(v.currentTime) || 0) - 10);
         } else if (action === 'forward') {

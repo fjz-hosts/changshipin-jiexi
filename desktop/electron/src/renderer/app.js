@@ -632,6 +632,7 @@
       }
     }
     if (background) return
+    pausePlaybackForPlatformSwitch()
     if (state.browserOpen && state.browserKey && state.browserKey !== key) {
       saveBrowserScroll(state.browsers.get(state.browserKey))
     }
@@ -706,6 +707,8 @@
       document.querySelector('.workspace').hidden = false
     }
     $$('.platform-card, .short-platform-card').forEach((card) => card.classList.remove('active'))
+    // 打开平台浏览器时把解析页静音了；从浏览器回来要恢复，否则再播没声音
+    if ($('#view-webview') && !$('#view-webview').hidden) setParseViewMuted(false)
     renderBrowserTabs()
     for (const record of state.browsers.values()) {
       if (!mute) continue
@@ -1064,8 +1067,13 @@
     }
     // 只有真正在播放时才给播放区留大高度；空/错/加载态不需要撑高
     $('#stage').classList.toggle('stage-playing', name === 'video' || name === 'webview')
-    if (name === 'webview') startPlayerPolling()
-    else stopPlayerPolling()
+    if (name === 'webview') {
+      // 上次切走时可能把解析页静音了，重新播放时必须放回去
+      setParseViewMuted(false)
+      startPlayerPolling()
+    } else {
+      stopPlayerPolling()
+    }
     updateLayoutMode()
   }
 
@@ -1101,6 +1109,45 @@
     }
   }
 
+  function setParseViewMuted(muted) {
+    try {
+      const view = $('#parse-view')
+      if (view && typeof view.setAudioMuted === 'function') view.setAudioMuted(Boolean(muted))
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  // 离开播放画面（切平台 / 切模式）时先暂停，别让视频在后台继续出声。
+  // 内置播放器直接 pause；网页解析线路的 <video> 在 webview（可能还有 iframe）里，
+  // 交给主进程按 frame 找到播放器再暂停。
+  function pauseLongPlayback({ mute = false } = {}) {
+    const video = $('#video')
+    try {
+      if (video && !video.paused) video.pause()
+    } catch {
+      /* 忽略 */
+    }
+    if ($('#view-webview') && !$('#view-webview').hidden) {
+      controlWebviewPlayer('pause')
+      if (mute) setParseViewMuted(true)
+    }
+  }
+
+  // 点平台卡片打开内置浏览器前，先把正在播的视频 / 短视频暂停
+  function pausePlaybackForPlatformSwitch() {
+    if (state.mode === 'short') {
+      try {
+        const shortVideo = $('#short-video')
+        if (shortVideo && !shortVideo.paused) shortVideo.pause()
+      } catch {
+        /* 忽略 */
+      }
+      return
+    }
+    pauseLongPlayback({ mute: true })
+  }
+
   function stopPlayback({ keepWebview = false } = {}) {
     if (state.hls) {
       try {
@@ -1119,6 +1166,7 @@
       /* 忽略 */
     }
     if (!keepWebview) {
+      pauseLongPlayback({ mute: true })
       try {
         $('#parse-view').stop()
       } catch {
@@ -2096,6 +2144,8 @@
       } catch {
         /* 忽略 */
       }
+      // 切回长视频时，网页线路的播放器可能在上次离开时被静音
+      setParseViewMuted(false)
       updateBadge()
       $('#status-hint').textContent = 'Enter 解析 / F11 全屏 / Ctrl+Shift+V 粘贴解析'
       setStatus(`就绪 · 共 ${(state.config?.lines || []).filter((line) => line.enabled).length} 条可用线路`)

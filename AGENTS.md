@@ -112,6 +112,8 @@ powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 # 界面回归（需要先启动开发版并开 9345 调试端口）
 node tools\cdp-test8.mjs
 node tools\cdp-test9.mjs
+node tools\cdp-test10.mjs   # 下载记录：持久化 / 单条删除 / 清空（含删文件）
+node tools\cdp-test11.mjs   # 切换平台 / 模式时暂停播放
 ```
 
 ## 4. 其它约定
