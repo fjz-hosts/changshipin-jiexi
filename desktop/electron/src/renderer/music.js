@@ -27,7 +27,7 @@
   const state = {
     inited: false,
     platforms: [],
-    platform: localStorage.getItem('csp.musicPlatform') || 'netease',
+    platform: localStorage.getItem('csp.musicPlatform') || 'kuwo',
     keyword: '',
     results: [],
     playlist: [],

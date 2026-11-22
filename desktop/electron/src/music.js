@@ -776,6 +776,7 @@ async function qishuiResolveLink(rawUrl) {
 // ---------------------------------------------------------------------------
 
 const HI_BASE = 'https://flac.music.hi.cn/ajax.php'
+const lyricFallbackCache = new Map()
 
 async function hiPost(act, params) {
   const body = new URLSearchParams()
@@ -833,6 +834,85 @@ function pickHiCandidate(song, list) {
   return bestScore >= 6 ? best : null
 }
 
+// 歌词兜底：有些 VIP 歌曲的酷我歌词接口直接返回 null，但 QQ 音乐 / 网易云
+// 或无损音乐源还能拿到。按 QQ → 网易云 → 酷我 → 无损音乐源 的顺序找。
+async function findLyrics(song) {
+  const key = `${song.platform || ''}|${song.id || ''}|${song.title || ''}|${song.artist || ''}`
+  const cached = lyricFallbackCache.get(key)
+  if (cached && Date.now() - cached.at < 60 * 60 * 1000) return cached.value
+  const title = normalizeMatch(song.title)
+  const artist = normalizeMatch(song.artist)
+  const matches = (item) => {
+    const itemTitle = normalizeMatch(item.title || item.name)
+    const itemArtist = normalizeMatch(item.artist || '')
+    if (!itemTitle) return false
+    const titleOk = itemTitle === title || itemTitle.includes(title) || title.includes(itemTitle)
+    if (!titleOk) return false
+    if (!artist || !itemArtist) return true
+    return itemArtist === artist || itemArtist.includes(artist) || artist.includes(itemArtist)
+  }
+  const remember = (value) => {
+    lyricFallbackCache.set(key, { at: Date.now(), value })
+    while (lyricFallbackCache.size > 300) lyricFallbackCache.delete(lyricFallbackCache.keys().next().value)
+    return value
+  }
+
+  // 1) QQ 音乐：版权库最全，歌词接口也最稳
+  try {
+    const list = await qqSearch(`${song.title} ${song.artist || ''}`.trim())
+    const hit = list.find(matches) || list.find((item) => normalizeMatch(item.title) === title)
+    if (hit) {
+      const lyric = await qqLyric(hit.id)
+      if (lyric.lyric && lyric.lyric.length > 10) return remember(lyric)
+    }
+  } catch {
+    /* 继续下一个源 */
+  }
+
+  // 2) 网易云
+  try {
+    const list = await neteaseSearch(`${song.title} ${song.artist || ''}`.trim())
+    const hit = list.find(matches)
+    if (hit) {
+      const lyric = await neteaseLyric(hit.id)
+      if (lyric.lyric && lyric.lyric.length > 10) return remember(lyric)
+    }
+  } catch {
+    /* 继续下一个源 */
+  }
+
+  // 3) 酷我同名版权源（同一个歌名经常有多条，其中一条有歌词）
+  try {
+    const list = await kuwoSearch(`${song.title} ${song.artist || ''}`.trim())
+    for (const hit of kuwoCandidates(song, list).slice(0, 8)) {
+      const lyric = await kuwoLyric(hit.id)
+      if (lyric.lyric && lyric.lyric.length > 10) return remember(lyric)
+    }
+  } catch {
+    /* 继续下一个源 */
+  }
+
+  // 4) 无损音乐源的歌词接口
+  for (const platform of ['kuwo', 'wyy']) {
+    try {
+      const list = await hiSearch(platform, song.title)
+      const hit = pickHiCandidate(song, list)
+      if (!hit) continue
+      const json = await hiPost('getLyric', {
+        platform,
+        songid: hit.id,
+        time: hit.time,
+        sign: hit.sign,
+      })
+      const lyric = cleanLyric(json?.data)
+      if (lyric && lyric.length > 10) return remember({ lyric, translation: '' })
+    } catch {
+      /* 继续 */
+    }
+  }
+  return remember(null)
+}
+
 async function hiFallback(song, { format = 'mp3', quality = '320' } = {}) {
   const wantedFlac = format === 'flac' || quality === 'flac'
   // 网易云歌曲优先走网易云源，其它平台优先走酷我源（酷我的无损命中率更高）
@@ -873,8 +953,26 @@ async function hiFallback(song, { format = 'mp3', quality = '320' } = {}) {
       if (Number(json?.code) !== 0 || !json?.data?.url) continue
       const playUrl = String(json.data.url)
       const actualFormat = /\.flac(?:[?#]|$)/i.test(playUrl) ? 'flac' : /\.m4a(?:[?#]|$)/i.test(playUrl) ? 'm4a' : 'mp3'
-      const lyric =
-        platform === 'wyy'
+      let hiLyric = ''
+      try {
+        const lyricJson = await hiPost('getLyric', {
+          platform,
+          songid: match.id,
+          time: match.time,
+          sign: match.sign,
+        })
+        hiLyric = cleanLyric(lyricJson?.data)
+        if (!hiLyric && lyricJson?.data) {
+          hiLyric = cleanLyric(String(lyricJson.data).split(/\r?\n/)
+            .filter((line) => !/^\s*\[(ti|ar|al|by|offset):/i.test(line))
+            .join('\n'))
+        }
+      } catch {
+        /* 用平台歌词接口兜底 */
+      }
+      const lyric = hiLyric
+        ? { lyric: hiLyric, translation: '' }
+        : platform === 'wyy'
           ? await neteaseLyric(match.id)
           : await kuwoLyric(match.id)
       const candidate = {
@@ -1052,6 +1150,18 @@ async function resolveMusic({ platform, song, quality = '320', format = 'mp3', c
       excludeId: platform === 'kuwo' ? song.id : '',
     })
     if (fallback) resolved = fallback
+  }
+  if (resolved && (!resolved.lyric || resolved.lyric.length < 10)) {
+    // 歌词兜底最多等 7 秒，不能为了歌词把「开播」拖到十几秒；
+    // 超时后后台请求仍会继续跑，下一次播放可命中缓存。
+    const extra = await Promise.race([
+      findLyrics(song),
+      new Promise((resolve) => setTimeout(() => resolve(null), 7000)),
+    ])
+    if (extra?.lyric) {
+      resolved.lyric = extra.lyric
+      resolved.translation = extra.translation || resolved.translation || ''
+    }
   }
   if (resolved && wantFlac && resolved.format !== 'flac') {
     resolved.note = `${resolved.note ? `${resolved.note}\n` : ''}没有找到真正的无损音源，已改用 320K MP3`
