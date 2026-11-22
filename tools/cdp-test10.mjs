@@ -197,8 +197,95 @@ const musicAfter = JSON.parse(
 check('音乐下载记录：点 × 删除记录', musicAfter.loaded === 0 && musicAfter.records === 0, JSON.stringify(musicAfter))
 check('音乐下载记录：音频和 .lrc 歌词一起删掉', !fs.existsSync(musicFile) && !fs.existsSync(lyricFile))
 
+// ---- 3. 「清空记录」按钮：记录和文件一起清掉（也验证音乐列表头的监听） ----
+const shortDir2 = path.join(info.downloadDir, 'CDP清空测试剧')
+const shortFile2 = path.join(shortDir2, '第1集.mp4')
+fs.mkdirSync(shortDir2, { recursive: true })
+fs.writeFileSync(shortFile2, 'demo')
+await ev(
+  main,
+  `(async () => {
+    await window.desktop.shortDownloadRecord({
+      id: 'cdp-short-2', title: 'CDP清空测试剧 第1集', platform: '抖音',
+      status: 'done', percent: 100, savedPath: ${JSON.stringify(shortFile2)}, at: Date.now(),
+    });
+    const s = window.__app.getState();
+    s.shortQueue = [{ key: 'q-cdp-2', id: 'cdp-short-2', title: 'CDP清空测试剧 第1集', status: 'done', percent: 100, savedPath: ${JSON.stringify(shortFile2)} }];
+    window.__app.renderShortQueue();
+    return true;
+  })()`,
+)
+await ev(main, `document.querySelector('#short-queue-clear').click(); true`)
+await sleep(1200)
+const shortClear = JSON.parse(
+  await ev(
+    main,
+    `(async () => {
+      const config = await window.desktop.getConfig();
+      return JSON.stringify({
+        queue: window.__app.getState().shortQueue.length,
+        records: (config.shortDownloads || []).length,
+      });
+    })()`,
+  ),
+)
+check('短视频「清空记录」：记录和视频文件一起清掉', shortClear.queue === 0 && shortClear.records === 0 && !fs.existsSync(shortFile2), JSON.stringify(shortClear))
+
+const musicFile2 = path.join(musicDir, 'CDP清空 - 歌手.mp3')
+const lyric2 = path.join(musicDir, 'CDP清空 - 歌手.lrc')
+fs.mkdirSync(musicDir, { recursive: true })
+fs.writeFileSync(musicFile2, 'demo')
+fs.writeFileSync(lyric2, 'demo')
+await ev(
+  main,
+  `(async () => {
+    await window.desktop.musicDownloadRecord({
+      id: 'cdp-music-2', title: 'CDP清空 - 歌手', platformName: '网易云音乐', format: 'mp3',
+      status: 'done', percent: 100, savedPath: ${JSON.stringify(musicFile2)}, lyricPath: ${JSON.stringify(lyric2)}, at: Date.now(),
+    });
+    return true;
+  })()`,
+)
+await main.send('Page.reload', { ignoreCache: false })
+await sleep(1500)
+if (!(await waitForApp(main))) throw new Error('重载后渲染进程没有初始化')
+await ev(main, 'window.confirm = () => true; true')
+const musicClear = JSON.parse(
+  await ev(
+    main,
+    `(async () => {
+      window.__app.switchMode('music', { force: true });
+      for (let i = 0; i < 40; i += 1) {
+        if (window.MusicUI && window.MusicUI.state.inited && window.MusicUI.state.downloads.length) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const tab = Array.from(document.querySelectorAll('#music-tabs button')).find((b) => b.dataset.mtab === 'downloads');
+      tab.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const before = window.MusicUI.state.downloads.length;
+      const clearBtn = document.querySelector('#music-list-head [data-list-action="clear-downloads"]');
+      if (!clearBtn) return JSON.stringify({ before, clicked: false });
+      clearBtn.click();
+      await new Promise((r) => setTimeout(r, 1000));
+      const config = await window.desktop.getConfig();
+      return JSON.stringify({
+        before,
+        clicked: true,
+        left: window.MusicUI.state.downloads.length,
+        records: (config.musicDownloads || []).length,
+      });
+    })()`,
+  ),
+)
+check(
+  '音乐「清空记录」：列表头按钮生效，记录和音频 / 歌词一起清掉',
+  musicClear.before === 1 && musicClear.clicked && musicClear.left === 0 && musicClear.records === 0 && !fs.existsSync(musicFile2) && !fs.existsSync(lyric2),
+  JSON.stringify(musicClear),
+)
+
 try {
   fs.rmSync(shortDir, { recursive: true, force: true })
+  fs.rmSync(shortDir2, { recursive: true, force: true })
   fs.rmSync(musicDir, { recursive: true, force: true })
 } catch {
   /* 忽略 */
