@@ -851,13 +851,13 @@
         <header class="modal-head guide-head">
           <div>
             <h2 id="guide-title">使用教程 · 图文版</h2>
-            <p>从粘贴链接到全屏播放，一步一步来。图里的红框就是重点。</p>
+            <p>从安装、粘贴链接到下载、投屏和音乐，一步一步来。图里的红框和编号就是重点。</p>
           </div>
           <button class="icon-btn" id="guide-close" title="关闭（Esc）">✕</button>
         </header>
         <div class="guide-body">
           <nav class="guide-nav" id="guide-nav" aria-label="教程目录">
-            <button data-guide="intro" class="active">开始之前</button>
+            <button data-guide="intro" class="active">0 · 开始之前</button>
             <button data-guide="main">1 · 认识主界面</button>
             <button data-guide="paste">2 · 粘贴链接解析</button>
             <button data-guide="browser">3 · 内置浏览器找剧</button>
@@ -866,263 +866,465 @@
             <button data-guide="lines">6 · 线路与体检</button>
             <button data-guide="download">7 · 下载到电脑</button>
             <button data-guide="fullscreen">8 · 全屏与快捷键</button>
-            <button data-guide="settings">9 · 设置与常见问题</button>
-            <button data-guide="short">10 · 短视频与短剧下载</button>
-            <button data-guide="cast">11 · 投屏到大屏</button>
-            <button data-guide="music">12 · 音乐搜索与下载</button>
+            <button data-guide="cast">9 · 投屏到大屏</button>
+            <button data-guide="settings">10 · 设置与更新</button>
+            <button data-guide="guide">11 · 图文教程</button>
+            <button data-guide="short">12 · 短视频与短剧</button>
+            <button data-guide="music">13 · 音乐</button>
+            <button data-guide="faq">14 · 常见问题</button>
             <div class="guide-nav-foot">按 Esc 或点右上角关闭</div>
           </nav>
           <div class="guide-content" id="guide-content">
             <section class="guide-section" id="guide-intro">
-              <h3><span class="guide-step">0</span>开始之前</h3>
-              <p>「音视频解析」是一个 Windows 桌面工具：长视频支持爱奇艺、腾讯视频、优酷、芒果TV，短视频支持抖音、B站、AcFun、红果短剧、快手，音乐支持酷我、酷狗、QQ音乐、网易云、汽水音乐。</p>
-              <div class="guide-quick">
-                <div><b>1</b><span>复制某一集的网页链接</span></div>
-                <div><b>2</b><span>粘贴到软件里</span></div>
-                <div><b>3</b><span>点「解析播放」</span></div>
-              </div>
+              <h3><span class="guide-step">0</span>开始之前：下载、安装与第一次启动</h3>
+              <p>「音视频解析」是一个 Windows 电脑上的链接解析和下载工具，分长视频、短视频、音乐三个模式。长视频支持爱奇艺、腾讯视频、优酷和芒果TV；短视频支持抖音、B站、AcFun、红果短剧和快手；音乐支持酷我、酷狗、QQ音乐、网易云和汽水音乐。</p>
+              <p>安装只要三步：下载 exe → 双击运行 → 按提示下一步。下面是每一步会看到的画面。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-1.webp" alt="安装包是一个 exe 文件，双击运行就可以，支持 Windows 10 / 11 的 64 位系统。" />
+                <figcaption>安装包是一个 exe 文件，双击运行就可以，支持 Windows 10 / 11 的 64 位系统。</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-2.webp" alt="软件没有购买数字签名，Windows 第一次可能弹出「已保护你的电脑」：先点「更多信息」，再点「仍要运行」。" />
+                <figcaption>软件没有购买数字签名，Windows 第一次可能弹出「已保护你的电脑」：先点「更多信息」，再点「仍要运行」。</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-3.webp" alt="按提示下一步安装就可以，全部用默认选项，不需要改安装路径。" />
+                <figcaption>按提示下一步安装就可以，全部用默认选项，不需要改安装路径。</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-4.webp" alt="装好以后，桌面会出现「音视频解析」的图标，双击打开。" />
+                <figcaption>装好以后，桌面会出现「音视频解析」的图标，双击打开。</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-5.webp" alt="第一次启动会在后台检查更新，不会挡住使用。" />
+                <figcaption>第一次启动会在后台检查更新，不会挡住使用。</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-00-install-6.webp" alt="如果系统弹出防火墙提示，请点「允许」，投屏和局域网播放需要用到。" />
+                <figcaption>如果系统弹出防火墙提示，请点「允许」，投屏和局域网播放需要用到。</figcaption>
+              </figure>
               <ul class="guide-points">
-                <li>软件只做<strong>链接解析和播放</strong>，不存储、不转码、不分发视频。</li>
-                <li>解析线路来自公开的第三方接口，<strong>可能随时失效</strong>；失效时换一条线路即可。</li>
-                <li>会员内容建议先在软件内置的平台窗口里<strong>登录一次</strong>，之后解析会更稳定。</li>
-                <li>想离开软件找剧也可以：点顶部平台卡片，平台官网会直接开在软件里。</li>
+                <li>安装包不需要额外组件，也不用单独装 ffmpeg；HLS 分片合并是程序内置的。</li>
+                <li>覆盖安装新版本<strong>不会清空</strong>设置、观看历史和下载目录，直接装就行。</li>
+                <li>被杀毒软件 / 安全软件拦截时，先允许再安装；装完可以把它加入信任。</li>
               </ul>
-              <div class="guide-tip">第一次用，建议按顺序看：主界面 → 粘贴链接 → 选集 → 观看历史。遇到问题直接翻到最后一节。</div>
+              <div class="guide-tip">第一次打开先不要急着粘贴链接：花一分钟认一下界面（下一节），后面操作会快很多。</div>
             </section>
 
             <section class="guide-section" id="guide-main">
               <h3><span class="guide-step">1</span>认识主界面</h3>
-              <p>软件打开后只有一屏，常用的东西都在这一屏里。先认清这几个区域，后面操作就不会迷路。</p>
+              <p>主窗口打开后，常用的东西都在这一屏里。最上面是三个模式，中间是链接框和播放区，右边是解析线路和观看历史，最下面是状态栏。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-01-main.webp" alt="主界面分区：平台入口、链接输入框、播放区、线路和观看历史" />
-                <figcaption><b>①</b> 平台快捷入口　<b>②</b> 链接输入框　<b>③</b> 解析播放　<b>④</b> 线路与观看历史（中间是播放画面）</figcaption>
+                <img src="assets/guide/guide-01-overview.webp" alt="① 三个模式 ② 平台卡片 ③ 链接输入框 ④ 播放区 ⑤ 线路与观看历史 ⑥ 状态栏" />
+                <figcaption><b>①</b> 三个模式　<b>②</b> 平台卡片　<b>③</b> 链接输入框　<b>④</b> 播放区　<b>⑤</b> 线路与观看历史　<b>⑥</b> 状态栏</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-01-header.webp" alt="① 长视频 / 短视频 / 音乐 ② 找剧 ③ 使用教程 ④ 登录与限制 ⑤ 线路管理 ⑥ 设置" />
+                <figcaption><b>①</b> 长视频 / 短视频 / 音乐　<b>②</b> 找剧　<b>③</b> 使用教程　<b>④</b> 登录与限制　<b>⑤</b> 线路管理　<b>⑥</b> 设置</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-01-tools.webp" alt="播放区右上角：① 刷新 ② 换线路 ③ 下载 ④ 投屏 ⑤ 浏览器打开 ⑥ 全屏" />
+                <figcaption>播放区右上角：<b>①</b> 刷新　<b>②</b> 换线路　<b>③</b> 下载　<b>④</b> 投屏　<b>⑤</b> 浏览器打开　<b>⑥</b> 全屏</figcaption>
               </figure>
               <ul class="guide-points">
-                <li><b>①</b> 点平台卡片进入官网找剧；右上角「找剧」可以跨平台搜索。</li>
-                <li><b>②</b> 粘贴视频页链接，软件会自动识别平台，右侧的线路一般不用改。</li>
-                <li><b>③</b> 点「解析播放」开始；也可以直接按 Enter。</li>
-                <li><b>④</b> 解析成功后画面出现在这里，下载、全屏、换线路按钮都在播放区右上角。</li>
-                <li><b>⑤</b> 右边是解析线路和观看历史；底部状态栏显示当前状态和版本号。</li>
+                <li>最上面一排是三个模式：<strong>长视频、短视频、音乐</strong>。点一下就能切换，三套功能的线路、历史和播放器完全分开，互不影响。</li>
+                <li>长视频模式下，最上面是四个平台卡片，<strong>点卡片会打开平台官网</strong>（在软件里，不跳系统浏览器）。</li>
+                <li>卡片右上角显示登录状态，未登录、已登录一眼就能看到；旁边的「找剧」可以跨平台搜索。</li>
+                <li>中间是链接输入框，粘贴链接后会自动识别平台，右边用来选择解析线路。点「解析播放」开始，也可以直接按 <kbd>Enter</kbd>。</li>
+                <li>下面最大的区域是播放画面，解析成功后视频就出现在这里。播放区右上角有刷新、换线路、下载、投屏、浏览器打开和全屏。</li>
+                <li>右边栏是解析线路和观看历史；最下面是状态栏，显示当前进度和版本号，右边是常用快捷键提示。</li>
+                <li>右上角的「使用教程」「登录与限制」「线路管理」「设置」是四个常用入口。</li>
               </ul>
-              <div class="guide-tip">窗口太小时，可以按 F11 或点右上角「全屏」；播放时页面会自动滚动，把大画面留给视频。</div>
+              <div class="guide-tip">窗口太小时可以按 <kbd>F11</kbd> 或点「全屏」；播放时页面会自动滚动，把大画面留给视频。</div>
             </section>
 
             <section class="guide-section" id="guide-paste">
               <h3><span class="guide-step">2</span>粘贴链接解析</h3>
-              <p>最常用的方式：在浏览器里打开任意一集，复制地址栏链接，回到软件粘贴。</p>
+              <p>最常用的方法：在浏览器里打开任意一集，复制地址栏里的链接，回到软件粘贴、解析。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-02-paste.webp" alt="粘贴链接后点解析播放" />
-                <figcaption><b>①</b> 粘贴链接，自动识别平台　<b>②</b> 选解析线路　<b>③</b> 点「解析播放」</figcaption>
+                <img src="assets/guide/guide-02-paste.webp" alt="① 粘贴链接，自动识别平台 ② 选解析线路（一般不用改） ③ 点「解析播放」，或按 Enter" />
+                <figcaption><b>①</b> 粘贴链接，自动识别平台　<b>②</b> 选解析线路（一般不用改）　<b>③</b> 点「解析播放」，或按 Enter</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-02-loading.webp" alt="解析需要几秒：① 中间显示正在连接线路 ② 状态栏显示正在解析；线路慢的时候会久一点" />
+                <figcaption>解析需要几秒：<b>①</b> 中间显示正在连接线路　<b>②</b> 状态栏显示正在解析；线路慢的时候会久一点</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-02-error.webp" alt="一直转圈或黑屏就点右上角「换线路」。失败页也能直接：① 重试 ② 换线路 ③ 官网观看 ④ 线路管理" />
+                <figcaption>一直转圈或黑屏就点右上角「换线路」。失败页也能直接：<b>①</b> 重试　<b>②</b> 换线路　<b>③</b> 官网观看　<b>④</b> 线路管理</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>复制的必须是<strong>某一集的播放页链接</strong>，不要复制平台首页或搜索页。</li>
-                <li>链接粘贴后，左侧标签会显示识别到的平台，比如「芒果TV」。</li>
-                <li>线路默认用当前选中的一条；不确定就保持默认，失败会自动换线（可在设置里关闭）。</li>
-                <li>一直转圈或黑屏：点播放区右上角「换线路」，软件会按顺序试下一条。</li>
+                <li>注意：复制的<strong>必须是某一集的播放页</strong>，不要复制平台首页、搜索页或者分享页。</li>
+                <li>把链接粘贴到输入框，左边的平台标签会自动变成对应的平台（比如「芒果TV」）。</li>
+                <li>线路一般不用改，保持默认就行；不确定的话，失败会自动换线。</li>
+                <li>解析需要几秒，状态栏会显示正在解析；画面出来以后就可以直接看了。</li>
+                <li>如果一直转圈或者黑屏，点播放区右上角的「换线路」，它会按列表顺序试下一条；也可以在设置里打开「解析失败自动换线」。</li>
+                <li>所有线路都失败时，先确认链接是某一集的播放页，再换线路，或者到「线路管理 → 在线更新线路」更新一次。</li>
               </ul>
-              <div class="guide-tip">也可以直接按 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd> 把剪贴板里的链接粘贴并解析，不用先点输入框。</div>
+              <div class="guide-tip">快捷操作：按 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd>，可以把剪贴板里的链接直接粘贴并解析，不用先点输入框。</div>
             </section>
 
             <section class="guide-section" id="guide-browser">
               <h3><span class="guide-step">3</span>内置浏览器找剧 · 自动解析</h3>
               <p>不想来回复制链接，就直接在软件里点平台卡片找剧。点开某一集，软件会自动把这一集送去解析。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-03-browser.webp" alt="内置浏览器打开平台官网并自动解析" />
-                <figcaption><b>①</b> 平台标签页　<b>②</b> 地址栏/前进后退　<b>③</b> 自动解析开关　<b>④</b> 解析本集</figcaption>
+                <img src="assets/guide/guide-03-browser.webp" alt="① 平台标签页（打开过的平台会留着） ② 地址栏 / 前进后退 / 刷新 ③ 自动解析开关 ④ 解析本集" />
+                <figcaption><b>①</b> 平台标签页（打开过的平台会留着）　<b>②</b> 地址栏 / 前进后退 / 刷新　<b>③</b> 自动解析开关　<b>④</b> 解析本集</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-03-addr.webp" alt="① 后退 ② 前进 ③ 刷新 ④ 地址栏（可以直接输入网址） ⑤ 自动解析 ⑥ 解析本集" />
+                <figcaption><b>①</b> 后退　<b>②</b> 前进　<b>③</b> 刷新　<b>④</b> 地址栏（可以直接输入网址）　<b>⑤</b> 自动解析　<b>⑥</b> 解析本集</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-03-find.webp" alt="右上角「找剧」：① 输入剧名 ② 勾选要搜的平台 ③ 单集结果点一下直接解析 ④ 平台没给结果时可以点「打开平台页」手动搜" />
+                <figcaption>右上角「找剧」：<b>①</b> 输入剧名　<b>②</b> 勾选要搜的平台　<b>③</b> 单集结果点一下直接解析　<b>④</b> 平台没给结果时可以点「打开平台页」手动搜</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>点顶部任意平台卡片，官网会开在软件里；登录状态会保留，会员只需登录一次。</li>
-                <li>播放中点别的平台卡片，正在播的视频会<strong>自动暂停</strong>（进度保留）；从平台页回来点播放就能接着看，不会出现「换平台后画面在后台继续出声」。</li>
-                <li>点开具体某一集后，上方会提示「正在解析」，画面自动出现在主界面。</li>
-                <li>每个平台的「自动解析」开关是分开记忆的；不想自动跳转可以单独关掉。</li>
-                <li>地址栏可以直接输入网址；<kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd> 后退、前进，<kbd>F5</kbd> 刷新。</li>
+                <li>点顶部任意平台卡片，平台官网会<strong>直接开在软件里</strong>，不会跳到系统浏览器；上方是标签栏，打开过的平台会留在标签里，点标签就能切换。</li>
+                <li>地址栏可以输入网址，也有后退、前进和刷新；快捷键是 <kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd> 和 <kbd>F5</kbd>。</li>
+                <li>登录状态会保存在本机，会员只需要登录一次；登录、支付这类页面会单独弹出小窗，不会打断播放。</li>
+                <li>每个平台都有一个「自动解析」开关，并且<strong>分开记忆</strong>。开着自动解析时，点开具体某一集，软件会自动把这一集送到主界面播放，不用再复制链接。</li>
+                <li>不想自动跳转，就把这个开关单独关掉，再点「解析本集」也可以手动解析。</li>
+                <li>播放中切到别的平台，正在播的视频会<strong>自动暂停</strong>，进度保留，回来点播放就能接着看。</li>
+                <li>顶部还有一个「找剧」：输入剧名、勾选平台，会同时搜索多个平台并列出结果。点单集结果直接解析，点整部剧的结果会打开选集页；平台要求验证码时，可以点「打开平台页」手动搜索。</li>
               </ul>
-              <div class="guide-tip">遇到登录、支付或授权页面时，软件会单独弹一个小窗，不会打断当前播放。</div>
+              <div class="guide-tip">遇到登录、支付或授权页面时，软件会单独弹出一个小窗，不会打断当前播放。</div>
+              <div class="guide-tip">「找剧」搜不到结果，多半是平台限制了聚合搜索：点该平台标题右侧的「打开平台页」，在平台页里自己搜。</div>
             </section>
 
             <section class="guide-section" id="guide-episodes">
               <h3><span class="guide-step">4</span>选集与自动连播</h3>
-              <p>解析成功后，视频下方会出现整部剧的选集。当前这一集是高亮的，点任意一集就能切换，不用再回平台页面。</p>
+              <p>解析成功以后，视频下面会出现整部剧的选集。当前这一集是高亮的，点任意一集就能切换，不用再回平台页面。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-04-episodes.webp" alt="选集条、上一集下一集和自动连播" />
-                <figcaption><b>①</b> 自动连播　<b>②</b> 当前集高亮　<b>③</b> 下一集（旁边是上一集）　<b>④</b> 播放区右上角的刷新 / 换线路 / 下载 / 全屏</figcaption>
+                <img src="assets/guide/guide-04-episodes.webp" alt="① 选集条 ② 自动连播 ③ 当前集高亮 ④ 上一集 ⑤ 下一集 ⑥ 正序 / 倒序 ⑦ 收起 / 展开" />
+                <figcaption><b>①</b> 选集条　<b>②</b> 自动连播　<b>③</b> 当前集高亮　<b>④</b> 上一集　<b>⑤</b> 下一集　<b>⑥</b> 正序 / 倒序　<b>⑦</b> 收起 / 展开</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-02-error.webp" alt="解析出错时，错误页可以直接① 重试 ② 换线路 ③ 官网观看 ④ 线路管理" />
+                <figcaption>解析出错时，错误页可以直接<b>①</b> 重试 <b>②</b> 换线路 <b>③</b> 官网观看 <b>④</b> 线路管理</figcaption>
               </figure>
               <ul class="guide-points">
                 <li>「自动连播」默认开启：这一集播完会自动播放下一集，内置播放器和网页线路都支持。</li>
-                <li>用键盘也能换集：<kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd>，或者 <kbd>[</kbd> / <kbd>]</kbd>。</li>
-                <li>选集可以切「正序 / 倒序」，也可以「收起」，给视频留出更大的画面。</li>
-                <li>选集列表会记住，下次从观看历史点回来还能直接换集。</li>
+                <li>也可以点「上一集」「下一集」，或者用键盘的 <kbd>[</kbd> / <kbd>]</kbd>、<kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd>。</li>
+                <li>选集可以切<strong>正序 / 倒序</strong>，也可以<strong>收起</strong>，给视频留出更大的画面。</li>
+                <li>选集列表会记住，下次从观看历史点回来，不用重新抓取，直接就能换集。</li>
+                <li>视频下面还能「复制链接」或者「重新解析」；解析出错时，错误页可以直接重试、换线路、去官网观看，或者打开线路管理。</li>
               </ul>
-              <div class="guide-tip">如果不想自动连播，取消勾选「自动连播」即可；这个设置会记住，下次打开还是关的。</div>
+              <div class="guide-tip">不想连播就取消勾选「自动连播」，这个设置会记住，下次打开还是关的。</div>
             </section>
 
             <section class="guide-section" id="guide-history">
               <h3><span class="guide-step">5</span>观看历史：一部剧只记一条</h3>
-              <p>观看历史现在<strong>按作品记录</strong>：同一部剧只保留一条，记的是你最近一次看到的集数，以及这一集看到了百分之多少。之前看完的集数不再重复占位置。</p>
+              <p>看过的内容会记录在右边的观看历史里。现在同一部剧<strong>只保留一条</strong>，记的是最近看到第几集，以及这一集看了多少。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-05-history.webp" alt="观看历史：每部剧一条，显示最近集数和进度" />
-                <figcaption><b>①</b> 每部剧一条：最近集数 + 进度 + 「继续」　<b>②</b> 搜索　<b>③</b> 排序 / 分组</figcaption>
+                <img src="assets/guide/guide-05-history.webp" alt="① 观看历史列表 ② 一部剧一条：最近集数 + 「继续」 ③ 这一集的观看进度" />
+                <figcaption><b>①</b> 观看历史列表　<b>②</b> 一部剧一条：最近集数 + 「继续」　<b>③</b> 这一集的观看进度</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-05-tools.webp" alt="① 搜索（剧名 / 集数 / 平台） ② 三种排序 ③ 清空全部 ④ 单条删除" />
+                <figcaption><b>①</b> 搜索（剧名 / 集数 / 平台）　<b>②</b> 三种排序　<b>③</b> 清空全部　<b>④</b> 单条删除</figcaption>
               </figure>
               <ul class="guide-points">
                 <li>点一条记录，会直接打开<strong>最近看的那一集</strong>，并从上次的进度继续。</li>
-                <li>进度每隔几秒自动保存；网页解析线路也会记录进度。</li>
-                <li>搜索框可以按剧名、集数或平台过滤；排序支持「最近」「继续观看」「按平台」。</li>
+                <li>进度每隔几秒自动保存，网页解析线路也会记录进度。</li>
+                <li>搜索框可以按剧名、集数或者平台过滤；右上角可以切换三种视图：最近、继续观看和按平台。</li>
                 <li>单条记录可以删除，右上角「清空」会清掉全部历史。</li>
               </ul>
-              <div class="guide-tip">看完一集后记录会更新到下一集；如果这一集已经看完（进度 96% 以上），点记录会从头开始。</div>
+              <div class="guide-tip">提醒一下：如果这一集已经看到 96% 以上，再点记录会从头开始（当成已经看完了）。</div>
             </section>
 
             <section class="guide-section" id="guide-lines">
               <h3><span class="guide-step">6</span>解析线路与体检</h3>
-              <p>线路决定视频从哪里取。同一部剧可能有几条线路都能用，也可能有的已经失效。</p>
+              <p>解析线路决定视频从哪里取，同一部剧可能有几条线路都能用，也可能有的已经失效。灰的是没启用，红划线的是体检失败。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-06-lines.webp" alt="解析线路列表、启用状态和体检标记" />
-                <figcaption><b>①</b> 线路列表：绿点已启用，灰点未启用，红色「失效」是体检失败　<b>②</b> 隐藏失效 / 测速</figcaption>
+                <img src="assets/guide/guide-06-lines.webp" alt="① 线路列表：越靠前越先被尝试 ② 灰色 = 未启用，点一下启用 ③ 带「失效」的是体检失败 ④ 隐藏失效 ⑤ 测速" />
+                <figcaption><b>①</b> 线路列表：越靠前越先被尝试　<b>②</b> 灰色 = 未启用，点一下启用　<b>③</b> 带「失效」的是体检失败　<b>④</b> 隐藏失效　<b>⑤</b> 测速</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-06-manage.webp" alt="设置 → 解析线路（= 线路管理）：① 线路编辑 ② 新增线路 ③ 在线更新线路 ④ 清理失效线路 ⑤ 恢复内置线路 ⑥ 保存线路" />
+                <figcaption>设置 → 解析线路（= 线路管理）：<b>①</b> 线路编辑　<b>②</b> 新增线路　<b>③</b> 在线更新线路　<b>④</b> 清理失效线路　<b>⑤</b> 恢复内置线路　<b>⑥</b> 保存线路</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>灰色的是<strong>未启用</strong>，点一下就能启用；越靠前的线路会越早被尝试。</li>
-                <li>软件启动后会在后台体检线路，失效的会划线标记，也可以一键隐藏。</li>
-                <li>「线路管理」里可以增删改线路、单独测试、在线更新，或者恢复内置线路。</li>
-                <li>建议只保留自己常用的 2–4 条，顺序按成功率排。</li>
+                <li>侧栏里灰色的是<strong>没有启用</strong>，点一下就能启用；越靠前的线路会越早被尝试。</li>
+                <li>软件启动后会在后台体检线路，失效的会划线标记，也可以一键隐藏失效线路。</li>
+                <li>点「测速」可以手动测一轮；测速只代表接口能不能访问，<strong>不代表一定出画面</strong>，以实际播放为准。</li>
+                <li>「线路管理」里可以增删改线路、单独测试、调整顺序，也能在线更新线路或者恢复内置线路。</li>
+                <li>建议只留自己常用的两到四条，按成功率排序。</li>
+                <li>线路还分类型：<strong>网页线路</strong>在内置浏览器里播放，<strong>接口线路</strong>会把流地址交给内置播放器（只有接口线路能下载、能记录进度）。</li>
+                <li>芒果TV 有内置原生解析，国内网络优先使用，登录会员以后可以解 VIP；腾讯视频也有原生解析，但默认只作为第三方线路都失败后的备用；爱奇艺和优酷暂时没有可用的原生解析。</li>
+                <li>第三方线路来自公开接口，随时可能失效；如果所有线路都失败，可以先在线更新一次线路。</li>
               </ul>
-              <div class="guide-tip">「测速」结果只代表当前网络下接口能不能访问，不代表一定出画面；以实际播放为准。</div>
+              <div class="guide-tip">别把线路留太多：线路越多，失败时自动换线越慢。留 2–4 条常用、按成功率排序最好用。</div>
             </section>
 
             <section class="guide-section" id="guide-download">
               <h3><span class="guide-step">7</span>下载到电脑</h3>
-              <p>内置播放器能拿到的视频流，可以点「下载」保存到电脑。</p>
+              <p>内置播放器能拿到视频流的时候，可以点播放区上方的「下载」保存到电脑。按钮上会显示百分比，再点一次可以取消。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-07-download.webp" alt="下载按钮与下载目录设置" />
-                <figcaption><b>①</b> 下载按钮（按钮上显示进度，再点一次取消）</figcaption>
+                <img src="assets/guide/guide-07-download.webp" alt="① 下载（按钮上显示百分比，再点一次取消） ② 刷新（重新加载当前画面） ③ 浏览器打开（用系统浏览器打开当前链接）" />
+                <figcaption><b>①</b> 下载（按钮上显示百分比，再点一次取消）　<b>②</b> 刷新（重新加载当前画面）　<b>③</b> 浏览器打开（用系统浏览器打开当前链接）</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-07-dir.webp" alt="设置 → 播放 → 下载 / 离线：点①「打开下载目录」就能找到下载好的文件" />
+                <figcaption>设置 → 播放 → 下载 / 离线：点<b>①</b>「打开下载目录」就能找到下载好的文件</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>下载按钮上会显示百分比；下载过程中再点一次可以取消。</li>
-                <li>HLS 分片会自动合并成一个文件，不需要额外装 ffmpeg。</li>
-                <li>在「设置 → 播放 → 下载 / 离线」里可以打开下载目录。</li>
-                <li>网页解析线路（第三方解析页）拿不到真实地址，不能下载；会员加密内容也不支持。</li>
+                <li>HLS 分片会<strong>自动合并成一个文件</strong>，不需要另外安装 ffmpeg。</li>
+                <li>下载完成以后，在「设置 → 播放」里点「打开下载目录」，就能找到文件。</li>
+                <li>下载目录优先放在程序安装目录旁边（「音视频解析下载」，老用户沿用「视频解析下载」）；安装位置不可写、或者被杀毒软件拦截时，会自动改用系统下载目录。</li>
+                <li>要注意：<strong>网页解析线路拿不到真实地址，不能下载</strong>；会员加密内容也不支持。</li>
+                <li>下载按钮是灰色的时候，换到接口线路或者平台原生线路再试。</li>
+                <li>画面卡住、或者网页线路播不动的时候，可以先点「刷新」重新加载当前画面。</li>
+                <li>「浏览器打开」会用系统浏览器打开当前链接，遇到登录或者支付会更方便。</li>
               </ul>
-              <div class="guide-tip">下载目录优先用程序安装目录旁的「音视频解析下载」文件夹（老用户沿用「视频解析下载」，更新 / 卸载不会删）；安装位置不可写或系统安全软件拦截写入时，会自动改用系统下载目录或软件配置目录里的 downloads。</div>
+              <div class="guide-tip">短视频、音乐和长视频共用同一个下载文件夹，但按平台 / 类型分开存放，不会混在一起：短视频按平台名，短剧放剧名文件夹，音乐放在「音乐」子文件夹。</div>
             </section>
 
             <section class="guide-section" id="guide-fullscreen">
               <h3><span class="guide-step">8</span>全屏与键盘快捷键</h3>
-              <p>点播放区右上角「全屏」或直接按 <kbd>F11</kbd>，窗口会铺满屏幕并进入影院模式：顶部工具栏变淡，把鼠标移到屏幕顶部才会出现。</p>
+              <p>想看大画面，点播放区右上角的「全屏」，或者直接按 <kbd>F11</kbd>。全屏后顶部工具栏会变淡，鼠标移到屏幕上边缘才会出现，可以换线路或者下载。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-08-fullscreen.webp" alt="影院模式下的全屏播放和键盘快捷键" />
-                <figcaption><b>①</b> 全屏时「自动连播」同样生效；左下角是键盘快捷键</figcaption>
+                <img src="assets/guide/guide-08-full.webp" alt="① 全屏后顶部工具栏变淡（鼠标移到上边缘才出现） ② 选集条 ③ 全屏下「自动连播」同样生效" />
+                <figcaption><b>①</b> 全屏后顶部工具栏变淡（鼠标移到上边缘才出现）　<b>②</b> 选集条　<b>③</b> 全屏下「自动连播」同样生效</figcaption>
               </figure>
-              <div class="keymap">
-                <span><kbd>空格</kbd>暂停 / 播放</span>
-                <span><kbd>←</kbd><kbd>→</kbd>快退 / 快进 10 秒</span>
-                <span><kbd>↑</kbd><kbd>↓</kbd>音量</span>
-                <span><kbd>M</kbd>静音</span>
-                <span><kbd>Esc</kbd>退出全屏</span>
-                <span><kbd>F11</kbd>切换全屏</span>
-              </div>
               <ul class="guide-points">
-                <li>全屏后键盘同样可用：空格暂停、左右方向键快退快进、上下方向键调音量。</li>
-                <li>网页解析线路（解析页里的播放器）也支持这些键，不需要先用鼠标点一下画面。</li>
-                <li>视频播完会自动播放下一集（「自动连播」勾选时）。</li>
-                <li>如果视频本身进入了网页全屏，先按 <kbd>Esc</kbd> 退出网页全屏，再按一次退出软件全屏。</li>
+                <li>键盘操作全程可用：空格暂停或播放，左右方向键快退快进十秒，上下方向键调音量，<kbd>M</kbd> 静音，<kbd>Esc</kbd> 退出全屏。</li>
+                <li>这些按键对<strong>网页解析线路也生效</strong>，不需要先用鼠标点一下画面。</li>
+                <li>如果视频本身进入了网页全屏，先按一次 <kbd>Esc</kbd> 退出网页全屏，再按一次才是退出软件全屏。</li>
+                <li>全屏状态下「自动连播」同样有效，播完会自动下一集。</li>
               </ul>
+              <div class="keymap">
+                <span><kbd>空格</kbd> 暂停 / 播放</span>
+                <span><kbd>←</kbd><kbd>→</kbd> 快退 / 快进 10 秒</span>
+                <span><kbd>↑</kbd><kbd>↓</kbd> 音量</span>
+                <span><kbd>M</kbd> 静音</span>
+                <span><kbd>Esc</kbd> 退出全屏</span>
+                <span><kbd>F11</kbd> 切换全屏</span>
+              </div>
               <div class="guide-tip">全屏时顶部工具栏只是变淡了，鼠标移到屏幕上边缘就会重新出现，可以点「换线路」或「下载」。</div>
             </section>
 
-            <section class="guide-section" id="guide-settings">
-              <h3><span class="guide-step">9</span>设置、更新与常见问题</h3>
-              <p>右上角「设置」里可以调整播放和更新行为；「关于」页能打开配置目录、日志目录和项目主页。</p>
+            <section class="guide-section" id="guide-cast">
+              <h3><span class="guide-step">9</span>投屏到大屏</h3>
+              <p>解析成功以后，播放区右上角的「投屏」可以把画面送到电视、投影或者机顶盒。电脑和电视必须连同一个 Wi-Fi；电脑第一次弹出防火墙提示时，一定要点「允许」。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-09-settings.webp" alt="设置页面：自动换线、托盘、线路体检、下载目录" />
-                <figcaption><b>①</b> 解析失败自动换线　<b>②</b> 启动时自动测速线路　<b>③</b> 打开下载目录</figcaption>
+                <img src="assets/guide/guide-09-cast-devices.webp" alt="① 搜索设备（同一个网络里的电视 / 投影会出现） ② 设备列表，点设备名就开始投屏" />
+                <figcaption><b>①</b> 搜索设备（同一个网络里的电视 / 投影会出现）　<b>②</b> 设备列表，点设备名就开始投屏</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-09-cast-active.webp" alt="投屏开始以后本机自动暂停，电视端可以：① 当前投屏设备 ② 快退 10 秒 ③ 暂停 / 继续 ④ 快进 10 秒 ⑤ 停止投屏" />
+                <figcaption>投屏开始以后本机自动暂停，电视端可以：<b>①</b> 当前投屏设备 <b>②</b> 快退 10 秒 <b>③</b> 暂停 / 继续 <b>④</b> 快进 10 秒 <b>⑤</b> 停止投屏</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-09-cast-qr.webp" alt="没有 DLNA 接收端的电视：① 手机扫码打开同一画面 ② 大屏浏览器地址 ③ 复制地址" />
+                <figcaption>没有 DLNA 接收端的电视：<b>①</b> 手机扫码打开同一画面 <b>②</b> 大屏浏览器地址 <b>③</b> 复制地址</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-09-cast-hint.webp" alt="① 789 这类网页线路要先在网页里点播放，程序才会去抓真实流地址；投屏期间电脑端不能退出软件 ② 抓不到时可以把这个地址复制到电视浏览器" />
+                <figcaption><b>①</b> 789 这类网页线路要先在网页里点播放，程序才会去抓真实流地址；投屏期间电脑端不能退出软件　<b>②</b> 抓不到时可以把这个地址复制到电视浏览器</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>点「搜索设备」，同一个网络里的电视会出现在列表里，点设备名就开始投屏；投屏开始以后，<strong>本机自动暂停</strong>，避免两边同时出声。</li>
+                <li>电视端可以暂停、继续、快退快进十秒和停止投屏；换集或者换清晰度会自动重新推一次。</li>
+                <li>没有 DLNA 接收端的电视，可以手机扫弹窗里的二维码，或者把地址复制到电视浏览器打开；大屏页点「全屏播放」以后会隐藏页头页脚，视频铺满屏幕。</li>
+                <li>用 789 这类网页线路时，要先在网页里点播放，等画面出来再点投屏，程序会去抓真实的流地址；万一抓不到，弹窗会生成当前解析页的二维码，手机扫码可以直接打开。</li>
+                <li>投屏期间电脑端不能退出软件，也不要切到别的视频——电视是从电脑这里拉流的。</li>
+                <li>网页解析线路本身拿不到地址时，投屏按钮会是灰的，换到内置播放器线路再投。</li>
+              </ul>
+              <div class="guide-tip">投屏后电视没画面：先确认电脑和电视在同一个 Wi-Fi、防火墙已允许；再看电脑端是不是切换了视频或关掉了程序。</div>
+              <div class="guide-tip">Android 电视 / 机顶盒一般自带「投屏」接收；苹果手机投屏用的是 AirPlay，不在本功能的 DLNA 范围里。</div>
+            </section>
+
+            <section class="guide-section" id="guide-settings">
+              <h3><span class="guide-step">10</span>设置、更新与登录限制</h3>
+              <p>右上角的「设置」分四页：解析线路、播放、更新和关于。「登录与限制」单独一个入口，按平台列出限制。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-10-play.webp" alt="播放页：① 解析失败自动切换下一条线路 ② 关闭窗口时最小化到托盘 ③ 启动时自动测速线路 ④ 打开下载目录" />
+                <figcaption>播放页：<b>①</b> 解析失败自动切换下一条线路　<b>②</b> 关闭窗口时最小化到托盘　<b>③</b> 启动时自动测速线路　<b>④</b> 打开下载目录</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-10-update.webp" alt="更新页：① 当前版本 ② 启动时自动检查更新 ③ 立即检查更新 ④ 更新状态" />
+                <figcaption>更新页：<b>①</b> 当前版本　<b>②</b> 启动时自动检查更新　<b>③</b> 立即检查更新　<b>④</b> 更新状态</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-10-about.webp" alt="关于页：① 项目主页 ② 打开配置目录 ③ 打开日志目录 ④ 重建桌面快捷方式" />
+                <figcaption>关于页：<b>①</b> 项目主页　<b>②</b> 打开配置目录　<b>③</b> 打开日志目录　<b>④</b> 重建桌面快捷方式</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-10-auth.webp" alt="登录与限制：① 长视频平台列表 ② 去登录（已登录会变灰） ③ 限制与说明 ④ 登录只在内置窗口进行" />
+                <figcaption>登录与限制：<b>①</b> 长视频平台列表　<b>②</b> 去登录（已登录会变灰）　<b>③</b> 限制与说明　<b>④</b> 登录只在内置窗口进行</figcaption>
               </figure>
               <ul class="guide-points">
                 <li><strong>解析失败自动换线</strong>：一条线路失败会自动尝试下一条，建议保持开启。</li>
-                <li><strong>关闭窗口时最小化到托盘</strong>：后台继续播放/下载，双击托盘图标恢复窗口。</li>
+                <li><strong>关闭窗口时最小化到托盘</strong>：后台继续播放 / 下载，双击托盘图标恢复窗口。</li>
                 <li><strong>启动时自动测速线路</strong>：失效线路会被标记并排到最后，不阻塞播放。</li>
-                <li><strong>检查更新</strong>：设置 → 更新，可以手动检查新版本；软件启动时也会自动检查。</li>
-                <li><strong>登录与限制</strong>：右上角「登录与限制」列出各平台的试看 / 会员 / 地区 / 清晰度限制和「去登录」入口（已登录的平台按钮会变灰）。网页线路不需要平台登录，所以解析时不会弹登录提示。</li>
+                <li>「更新」页可以看到当前版本，也能手动检查新版本；软件启动时也会自动检查，后台下载完成后提示重启安装。</li>
+                <li>「关于」页可以打开配置目录、日志目录、项目主页，也可以重建桌面快捷方式。</li>
+                <li>「登录与限制」里按平台列出了试看、会员、地区和清晰度限制，也能直接点「去登录」；已经登录的平台，按钮会变灰。</li>
+                <li>网页线路不需要平台登录，所以解析时不会弹登录提示。</li>
               </ul>
               <div class="faq">
                 <h4>常见问题</h4>
                 <dl>
                   <dt>所有线路都没能解析成功</dt>
-                  <dd>链接是否有效、是否是某一集的播放页；换一条线路，或在「线路管理 → 在线更新线路」拉一次最新线路，稍后再试。</dd>
+                  <dd>先确认链接是某一集的播放页；换一条线路，或在「线路管理 → 在线更新线路」拉一次最新线路，稍后再试。</dd>
                   <dt>提示地区限制 / 会员 / 登录</dt>
-                  <dd>芒果TV 等平台会按网络地区判断；换成中国大陆网络，或先在软件内置窗口登录会员，再回来解析。</dd>
+                  <dd>芒果TV 等平台会按网络地区判断：换成中国大陆网络，或先在软件内置窗口登录会员，再回来解析。</dd>
                   <dt>画面卡顿、进度条拖不动</dt>
-                  <dd>换一条线路；第三方解析页的清晰度和稳定性由线路决定。下载到本地再播放会更稳。</dd>
+                  <dd>换一条线路；第三方解析页的清晰度和稳定性由线路决定，下载到本地再播放会更稳。</dd>
                   <dt>下载按钮是灰的</dt>
                   <dd>网页解析线路拿不到真实视频地址，不能下载；换到接口线路或平台原生线路再试。</dd>
                   <dt>更新后旧设置还在吗</dt>
                   <dd>配置、观看历史和下载目录都保存在本机，覆盖安装新版本不会清空。</dd>
                 </dl>
               </div>
-              <div class="guide-tip">第三方线路来源公开、质量参差，请只用于个人学习与合法观看；支持正版请使用平台官方客户端。</div>
+              <div class="guide-tip">记住一句话：第三方线路只用于个人学习，支持正版请使用官方客户端。</div>
+            </section>
+
+            <section class="guide-section" id="guide-guide">
+              <h3><span class="guide-step">11</span>图文教程与常见问题</h3>
+              <p>如果忘了某个操作，点右上角「使用教程」，就是你现在看的这份图文说明：左侧目录可以直接跳到对应章节，每张图都用红框和编号标了重点。播放区为空的时候，中间也有「第一次用？打开图文教程」的入口。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-11-guide.webp" alt="① 左侧目录，点一下跳到对应章节 ② 红框 + 编号标出这一步的重点 ③ 图下的要点和注意事项" />
+                <figcaption><b>①</b> 左侧目录，点一下跳到对应章节　<b>②</b> 红框 + 编号标出这一步的重点　<b>③</b> 图下的要点和注意事项</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-11-faq.webp" alt="① 常见问题（每个章节末尾） ② 目录会跟着滚动高亮当前章节" />
+                <figcaption><b>①</b> 常见问题（每个章节末尾）　<b>②</b> 目录会跟着滚动高亮当前章节</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-11-night.webp" alt="① 第三方解析平台在晚上十点半以后基本会停止工作，失败页会直接提示，第二天再试" />
+                <figcaption><b>①</b> 第三方解析平台在晚上十点半以后基本会停止工作，失败页会直接提示，第二天再试</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>遇到所有线路都失败，先确认链接是某一集的播放页，再换线路或者在线更新线路。</li>
+                <li>提示地区限制或者会员，就换成中国大陆网络，或者先在软件里登录会员。</li>
+                <li>画面卡顿、进度条拖不动，换一条线路，或者下载到本地再看。</li>
+                <li>第三方解析平台在晚上十点半以后基本会停止工作，长视频解析失败页会直接提示，第二天再试。</li>
+                <li>更新新版本不会清空设置、历史和下载目录，覆盖安装就可以。</li>
+              </ul>
+              <div class="guide-tip">同一套内容也做成了视频教程：遇到看不懂的步骤，可以按章节回看视频里的实际操作。</div>
             </section>
 
             <section class="guide-section" id="guide-short">
-              <h3><span class="guide-step">10</span>短视频与短剧下载</h3>
-              <p>顶部把「长视频」切到「短视频」，就会进入一套完全独立的界面；长视频的线路、历史、播放器都不受影响。</p>
+              <h3><span class="guide-step">12</span>短视频与短剧下载</h3>
+              <p>顶部把「长视频」切到「短视频」，就会进入一套完全独立的界面；长视频的线路、历史、播放器都不受影响。平台有五个：抖音、哔哩哔哩、AcFun、红果短剧和快手。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-10-short.webp" alt="短视频界面：平台入口、链接输入框、视频下方的清晰度和下载按钮、右侧下载队列" />
-                <figcaption><b>①</b> 平台卡片（右上角是登录状态）　<b>②</b> 粘贴链接 + 解析视频　<b>③</b> 视频下方的清晰度 / 下载 MP4　<b>④</b> 右侧下载记录（↗ 定位文件，× 删除记录并删文件）与短视频历史</figcaption>
+                <img src="assets/guide/guide-12-short.webp" alt="① 五个平台卡片（右上角是登录状态） ② 粘贴链接 + 解析视频" />
+                <figcaption><b>①</b> 五个平台卡片（右上角是登录状态）　<b>②</b> 粘贴链接 + 解析视频</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-12-result.webp" alt="① 清晰度 / 播放 / 下载 MP4 / 投屏 / 打开原平台 ② 视频在上方播放 ③ 平台说明" />
+                <figcaption><b>①</b> 清晰度 / 播放 / 下载 MP4 / 投屏 / 打开原平台　<b>②</b> 视频在上方播放　<b>③</b> 平台说明</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-12-series.webp" alt="短剧 / 合集：① 全选 ② 一键下载全集 ③ 分集勾选 ④ 总集数" />
+                <figcaption>短剧 / 合集：<b>①</b> 全选　<b>②</b> 一键下载全集　<b>③</b> 分集勾选　<b>④</b> 总集数</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-12-queue.webp" alt="下载队列：① ↗ 在文件夹中定位 ② × 删除记录并删文件 ③ 清空记录 ④ 打开下载目录 ⑤ 重启前没下完的任务显示「已中断」" />
+                <figcaption>下载队列：<b>①</b> ↗ 在文件夹中定位　<b>②</b> × 删除记录并删文件　<b>③</b> 清空记录　<b>④</b> 打开下载目录　<b>⑤</b> 重启前没下完的任务显示「已中断」</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-12-history.webp" alt="短视频历史：① 点一条重新解析 ② 单条删除 ③ 清空 ④ 条数" />
+                <figcaption>短视频历史：<b>①</b> 点一条重新解析　<b>②</b> 单条删除　<b>③</b> 清空　<b>④</b> 条数</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>支持<strong>抖音、哔哩哔哩、AcFun、红果短剧、快手</strong>；分享短链（v.douyin.com、b23.tv、v.kuaishou.com）可以直接粘贴。</li>
-                <li>解析成功后视频在上方播放，清晰度和「播放 / 下载 MP4 / 打开原平台」在视频下方；内容变长时整个页面一起上下滚动，没有单独的小滚动条。</li>
-                <li>短剧 / 合集会在下方列出分集：点「全选」→「一键下载全集」，会自动创建以剧名命名的文件夹，分集按集数命名保存；已经下过的同名文件会自动跳过，不会重复下第二遍。</li>
-                <li>右侧「下载队列」会记住下载过的视频（关掉软件再打开也还在）：点 <b>↗</b> 在文件夹中定位文件，点 <b>×</b> 删除这条记录并同时删除对应的视频文件；「清空记录」会一次清掉已完成 / 已中断的记录和文件，正在下载的任务不受影响。重启前没下完的任务会显示「已中断」，重新下载即可。</li>
-                <li>红果短剧网页版只提供前几集，后面的分集平台播放页直接返回 404（登录也不会放开），完整剧集需要用红果 App；「一键下载全集」只会列出能下载的集数。</li>
-                <li>B 站登录后通常能下载到 1080P：1080P 是音视频分离流，程序会自动合并成一个 MP4（不需要 ffmpeg）；1080P60 / 4K 等大会员画质暂不支持。</li>
-                <li>右上角「登录与限制」按平台列出限制，并可直接点「去登录」（已登录的平台按钮会变灰）；解析前如果检测到未登录，也会先提醒一次。</li>
-                <li>解析失败时，可以先进入原平台页面确认视频能正常播放，再复制当前页面链接回来重试。</li>
-                <li>右侧「短视频历史」和长视频观看历史分开存：解析成功的视频会记一条，点一下可以直接重新解析，也能单条删除或清空。</li>
+                <li>抖音、B站、快手的<strong>分享短链可以直接粘贴</strong>，比如 v.douyin.com、b23.tv、v.kuaishou.com；粘贴后点「解析视频」，解析成功后视频在上方播放。</li>
+                <li>视频下面是清晰度选择，以及「播放」「下载 MP4」「投屏」和「打开原平台」；内容变长的时候，整个页面一起上下滚动，没有单独的小滚动条。</li>
+                <li>短剧或者合集会在下面列出分集：点「全选」，再点「一键下载全集」。程序会自动创建以剧名命名的文件夹，分集按集数命名；已经下过的同名文件会自动跳过。</li>
+                <li>右侧「下载队列」会记住下载过的视频，关掉软件再打开还在：点 <b>↗</b> 在文件夹中定位文件，点 <b>×</b> 删除这条记录并同时删除对应的视频文件。</li>
+                <li>「清空记录」会清掉已完成和已中断的记录与文件，正在下载的任务不受影响；重启前没下完的任务会显示「已中断」。</li>
+                <li>B站登录后通常能下到 1080P；1080P 是音视频分离流，程序会自动合并成 MP4，不需要 ffmpeg。1080P60 和 4K 这类大会员画质<strong>暂不支持</strong>。</li>
+                <li>红果短剧网页版只开放前几集，完整剧集需要用红果 App，一键下载全集只会列出能下载的集数。</li>
+                <li>解析失败时，先打开原平台确认视频能正常播放，再复制当前页面链接回来重试；换了链接以后，点「重新解析」就能再试，不用重新粘贴。</li>
+                <li>右侧「短视频历史」和长视频历史分开存，点一下可以重新解析，也能单条删除或清空；右上角「登录与限制」可以查看每个短视频平台的限制，也能直接去登录，解析前如果没登录会先提醒一次。</li>
+                <li>短视频和长视频共用同一个下载文件夹，但按平台分开保存；短剧单独放在剧名文件夹里，不会混在一起。</li>
               </ul>
-              <div class="guide-tip">短视频和长视频共用程序安装目录旁的「音视频解析下载」文件夹（老用户沿用「视频解析下载」），但短视频按平台名保存、短剧单独放在剧名文件夹里，不会混在一起；音乐单独放在「音乐」子文件夹。</div>
-            </section>
-
-            <section class="guide-section" id="guide-cast">
-              <h3><span class="guide-step">11</span>投屏到大屏</h3>
-              <p>解析成功后，播放区右上角的「投屏」可以把画面送到电视、投影或机顶盒；电视上没有 DLNA 接收端时，手机扫码或用电视浏览器打开弹窗里的地址也能播放。</p>
-              <figure class="guide-figure">
-                <img src="assets/guide/guide-11-cast.webp" alt="投屏弹窗：搜索设备、设备列表、投屏控制、手机扫码和大屏浏览器地址" />
-                <figcaption><b>①</b> 搜索设备　<b>②</b> 点一下投屏到这个设备　<b>③</b> 投屏中的播放控制　<b>④</b> 手机扫码 / 电视浏览器直接打开的地址</figcaption>
-              </figure>
-              <ul class="guide-points">
-                <li>电脑和电视必须连同一个 Wi-Fi；电脑上如果弹出防火墙提示，请选择「允许」。</li>
-                <li>点「搜索设备」后，同一网络里的电视 / 投影会出现在列表里；点设备名就开始投屏，本机自动暂停，避免两边同时出声。</li>
-                <li>手机和电脑在同一个 Wi-Fi 时，直接扫弹窗里的二维码，就能在手机浏览器打开当前画面；也可以复制地址发到手机 / 平板。大屏页点「全屏播放」后会隐藏页头页脚、视频铺满屏幕。</li>
-                <li>789 等网页解析线路：先在网页里点一下播放，等画面出来后再点「投屏」，程序会从网页播放器请求里抓真实 m3u8/mp4 再推给电视；万一抓不到，弹窗会生成当前解析页的二维码，手机扫码可直接用浏览器打开。</li>
-                <li>投屏后可以暂停 / 继续、快退 / 快进 10 秒、停止投屏；换集或换清晰度会自动把新的画面重新推到电视上。</li>
-                <li>电视没有「投屏 / DLNA」接收端时，把弹窗里的地址复制到电视浏览器（或平板）打开，也能直接播；这个地址需要电脑端保持运行。</li>
-                <li>网页解析线路（第三方解析页）拿不到真实流地址，投屏按钮是灰的；换到内置播放器线路再投屏。</li>
-              </ul>
-              <div class="guide-tip">投屏期间电脑端不要退出软件、也不要切到别的视频：电视是从电脑这里的代理拉流，软件关掉画面就会停。</div>
+              <div class="guide-tip">抖音、快手有风控：解析失败先进内置窗口打开平台页、登录一次再回来重试，成功率会高很多。</div>
+              <div class="guide-tip">下载卡在最后几秒不动，一般是 CDN 限速，等一会儿或点 × 后重新下载即可。</div>
             </section>
 
             <section class="guide-section" id="guide-music">
-              <h3><span class="guide-step">12</span>音乐搜索、歌词与下载</h3>
-              <p>顶部切到「音乐」，就进入和长视频 / 短视频完全独立的一套界面。五个平台的歌都能搜，播放器按原平台的样式做：大封面、模糊背景、逐行滚动的歌词，右侧是搜索结果、播放记录、收藏和下载记录。</p>
+              <h3><span class="guide-step">13</span>音乐搜索、歌词与下载</h3>
+              <p>顶部切到「音乐」，是第三套完全独立的界面。平台有酷我、酷狗、QQ音乐、网易云和汽水音乐，点卡片切换。选平台，输入歌名或者歌手，点搜索，右侧会列出结果。</p>
               <figure class="guide-figure">
-                <img src="assets/guide/guide-12-music.webp" alt="音乐模式：五个平台卡片、搜索框、播放器、滚动歌词和右侧列表" />
-                <figcaption><b>①</b> 五个音乐平台，点卡片切换　<b>②</b> 搜索 / 粘贴汽水分享链接　<b>③</b> 收藏、音质、下载 MP3 / FLAC / 歌词　<b>④</b> 搜索结果 / 播放记录 / 收藏 / 下载记录</figcaption>
+                <img src="assets/guide/guide-13-music.webp" alt="① 五个音乐平台，点卡片切换 ② 搜索 / 粘贴汽水分享链接 ③ 右侧结果列表" />
+                <figcaption><b>①</b> 五个音乐平台，点卡片切换　<b>②</b> 搜索 / 粘贴汽水分享链接　<b>③</b> 右侧结果列表</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-13-player.webp" alt="① 大封面 + 模糊背景 ② 逐行滚动歌词（点一行跳到那一句） ③ 播放控制 / 进度 / 音量 ④ 收藏 / 音质 / 下载 MP3 / FLAC / 歌词" />
+                <figcaption><b>①</b> 大封面 + 模糊背景　<b>②</b> 逐行滚动歌词（点一行跳到那一句）　<b>③</b> 播放控制 / 进度 / 音量　<b>④</b> 收藏 / 音质 / 下载 MP3 / FLAC / 歌词</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-13-tabs.webp" alt="① 搜索结果 / 播放记录 / 我的收藏 / 下载记录四栏 ② 列表 ③ 列表头（条数、清空）" />
+                <figcaption><b>①</b> 搜索结果 / 播放记录 / 我的收藏 / 下载记录四栏　<b>②</b> 列表　<b>③</b> 列表头（条数、清空）</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-13-downloads.webp" alt="下载记录：① ↗ 定位文件 ② × 删除记录并删音频和歌词 ③ 清空记录 ④ 已中断的任务" />
+                <figcaption>下载记录：<b>①</b> ↗ 定位文件　<b>②</b> × 删除记录并删音频和歌词　<b>③</b> 清空记录　<b>④</b> 已中断的任务</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-13-via.webp" alt="① 「换源」标记：没有会员权限时从别的源取到同名歌曲 ② 来源说明（登录会员可以用平台原音源）" />
+                <figcaption><b>①</b> 「换源」标记：没有会员权限时从别的源取到同名歌曲　<b>②</b> 来源说明（登录会员可以用平台原音源）</figcaption>
               </figure>
               <ul class="guide-points">
-                <li>选平台 → 输入歌名 / 歌手 → 点「搜索」；右侧点歌曲开始播放。</li>
-                <li>播放器下方歌词会跟着进度一行一行滚动，点任意一行可以跳到那一句；某个平台的歌词接口缺歌词时，会自动从 QQ 音乐 / 网易云 / 酷我 / 无损音乐源补全。</li>
-                <li>「♡ 收藏」把歌收进「我的收藏」；每播放一首会自动写进「播放记录」，和长视频的观看历史分开。</li>
-                <li>下载支持 MP3 和 FLAC（平台有损 / 无损权限不同，没有无损时会自动改用 320K MP3），歌词会一起保存成同名 <b>.lrc</b> 文件，统一放在「音乐」文件夹里、按平台分目录。</li>
-                <li>「下载记录」会一直留着（退出重进也不会清空）：点记录可以在文件夹中定位歌曲，点 <b>×</b> 删除记录并同时删掉这首歌的音频和 .lrc 歌词；「清空记录」会一次清掉已完成 / 已中断的记录和文件。</li>
-                <li>会员歌曲：点「登录会员」在弹出的平台官网登录，关闭窗口后登录状态会保存；没有会员时，程序会先通过公开无损音乐源（flac.music.hi.cn）找同名 FLAC / 320K，再退到酷我同名源，播放器上会标「换源」。</li>
-                <li>汽水音乐网页版不开放搜索，请在汽水 App 里复制歌曲分享链接再粘贴解析；网页版只给 30 秒试听，完整版会尝试换源。</li>
+                <li>点歌曲开始播放；播放器会显示大封面、模糊背景和逐行滚动的歌词。歌词会跟着进度滚动，点任意一行可以跳到那一句；歌词缺的时候会自动从其他平台补全。</li>
+                <li>点「收藏」把歌收进我的收藏；每播放一首会自动写进播放记录，和视频历史分开。</li>
+                <li>右侧可以在搜索结果、播放记录、我的收藏和下载记录之间切换。</li>
+                <li>下载支持 MP3 和 FLAC，也会一起保存同名的 lrc 歌词，统一放在「音乐」文件夹里，按平台分目录。</li>
+                <li>下载记录会一直保留：箭头定位文件，叉删除记录并同时删掉音频和歌词；清空记录会清掉已完成和已中断的任务。</li>
+                <li>会员歌曲可以先点「登录会员」，在平台官网登录，关闭窗口后登录状态会保存。</li>
+                <li>没有会员权限的时候，程序会先通过公开无损音乐源找同名 FLAC 或 320K，再退到酷我同名源，播放器上会标「换源」。</li>
+                <li>汽水音乐网页版不开放搜索，要在汽水 App 里复制歌曲分享链接再粘贴解析；网页版只给三十秒试听，完整版会尝试换源。</li>
+                <li>音乐和视频下载分开存放，路径是下载目录下的「音乐」，再按平台名分子文件夹。</li>
               </ul>
-              <div class="guide-tip">音乐和视频下载分开存放：音乐在「音视频解析下载\音乐\平台名\歌名 - 歌手.mp3」，旁边就是同名的 .lrc 歌词。</div>
+              <div class="guide-tip">网易云 / QQ 音乐的歌词偶尔会缺行，点「下载歌词」拿到的是程序补全后的版本。</div>
+              <div class="guide-tip">「换源」换来的音质可能和平台标称不同，介意就登录会员后用原平台音源。</div>
+            </section>
+
+            <section class="guide-section" id="guide-faq">
+              <h3><span class="guide-step">14</span>常见问题速查</h3>
+              <p>按现象查：下面每一条都对应上面某个章节里的注意事项，点左侧目录可以回到对应步骤。</p>
+              <div class="faq">
+                <h4>常见问题</h4>
+                <dl>
+                  <dt>装的时候提示「Windows 已保护你的电脑」</dt>
+                  <dd>点「更多信息」→「仍要运行」。软件没有购买数字签名，这个提示是正常的，不是病毒。</dd>
+                  <dt>解析一直转圈 / 黑屏</dt>
+                  <dd>点右上角「换线路」；都失败就到「线路管理 → 在线更新线路」，或确认链接是某一集的播放页。</dd>
+                  <dt>提示地区限制 / 需要会员</dt>
+                  <dd>换成中国大陆网络；会员内容先在内置窗口登录，或在「登录与限制」里点「去登录」。</dd>
+                  <dt>晚上十点半以后全都解析失败</dt>
+                  <dd>第三方解析平台夜间会停止工作，失败页会提示，第二天再试即可。</dd>
+                  <dt>画面卡顿、进度条拖不动</dt>
+                  <dd>换线路，或下载到本地再看；网页线路的清晰度和稳定性由线路决定。</dd>
+                  <dt>下载按钮是灰的</dt>
+                  <dd>网页解析线路拿不到真实地址：换到接口线路或平台原生线路再试。</dd>
+                  <dt>下载到一半失败 / 中断</dt>
+                  <dd>短视频点 × 删掉记录后重新下载；长视频点「下载」按钮重新开始。</dd>
+                  <dt>投屏搜不到电视</dt>
+                  <dd>电脑和电视要在同一个 Wi-Fi；第一次运行要点「允许」防火墙；电视上要打开「投屏 / DLNA」接收。</dd>
+                  <dt>投屏后电视卡 / 停</dt>
+                  <dd>电脑端不能退出软件，也不要切到别的视频；电视是从电脑这里拉流的。</dd>
+                  <dt>短视频 1080P 下载的是两个文件</dt>
+                  <dd>不会：B站 1080P 是音视频分离流，程序会自动合并成一个 MP4，不需要 ffmpeg。</dd>
+                  <dt>红果短剧只有前几集</dt>
+                  <dd>红果网页版只开放前几集，完整剧集要用红果 App，一键下载全集只列能下载的集数。</dd>
+                  <dt>音乐没有会员，只有试听</dt>
+                  <dd>程序会先换源（公开无损源 → 酷我同名源）；仍不行就点「登录会员」用平台音源。</dd>
+                  <dt>更新后设置 / 历史丢了</dt>
+                  <dd>不会丢：覆盖安装保留配置、历史和下载目录；如果确实丢了，检查「设置 → 关于 → 打开配置目录」是否存在。</dd>
+                  <dt>想彻底卸载</dt>
+                  <dd>控制面板卸载即可；下载目录里的文件不会被删除，需要手动清理。</dd>
+                </dl>
+              </div>
+              <div class="guide-tip">还是解决不了：在「设置 → 关于」里点「打开日志目录」，把最近的日志发给作者，能更快定位问题。</div>
             </section>
           </div>
         </div>
       </div>
     </div>
-
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
     <script src="vendor/hls.min.js"></script>

@@ -2642,6 +2642,25 @@ body.cinema .video-view video {
   color: var(--muted);
 }
 
+/* 长章节内的小标题（一节里分几段讲时用） */
+.guide-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 10px;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}
+
+.guide-section h4::before {
+  content: '';
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 .guide-quick {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

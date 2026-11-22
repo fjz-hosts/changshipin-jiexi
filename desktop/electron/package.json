@@ -1,7 +1,7 @@
 {
   "name": "changshipin-jiexi",
   "productName": "音视频解析",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "音视频解析 · 长视频（爱奇艺 / 腾讯视频 / 优酷 / 芒果TV）、短视频（抖音 / B站 / AcFun / 红果短剧 / 快手）与音乐（酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水）链接解析下载",
   "author": {
     "name": "fjz-hosts"

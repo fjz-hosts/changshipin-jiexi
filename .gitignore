@@ -27,3 +27,10 @@ desktop.ini
 .vscode/
 .idea/
 .codegraph/
+
+# Python 缓存
+__pycache__/
+
+# 视频教程成片（50MB+，单独分发，不入库）
+视频教程/*.mp4
+视频教程/*.srt

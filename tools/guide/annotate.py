@@ -160,8 +160,12 @@ def annotate(shot_key, raw_path, meta, dsc=2):
     if meta.get('legend'):
         img = draw_legend(img, dsc)
 
-    target = TARGET_WIDTH.get(shot_key, 1600)
-    if img.width > target:
+    target = meta.get('width') or TARGET_WIDTH.get(shot_key, 1600)
+    if meta.get('width'):
+        # 明确指定宽度的（侧栏 / 弹窗局部截图）严格按该宽度输出，方便排版
+        ratio = target / img.width
+        img = img.resize((target, max(1, int(round(img.height * ratio)))), Image.LANCZOS)
+    elif img.width > target:
         ratio = target / img.width
         img = img.resize((target, int(round(img.height * ratio))), Image.LANCZOS)
     elif img.width < 900:
@@ -229,7 +233,7 @@ def main():
             print('missing', raw_path)
             continue
         img = annotate(key, raw_path, meta)
-        name = SHOT_NAMES.get(key, f'guide-{key}')
+        name = meta.get('name') or SHOT_NAMES.get(key, f'guide-{key}')
         preview = os.path.join(OUT, f'{name}.png')
         img.save(preview)
         webp = os.path.join(ASSETS, f'{name}.webp')

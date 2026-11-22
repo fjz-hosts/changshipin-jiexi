@@ -6,6 +6,7 @@
 """
 
 import html as html_lib
+import json
 import os
 import re
 import subprocess
@@ -20,9 +21,18 @@ PRINT_HTML = os.path.join(WORK, 'print.html')
 OUT_PDF = os.path.join(ROOT, 'docs', '长视频解析-图文使用教程.pdf')
 ELECTRON = os.path.join(ROOT, 'desktop', 'electron', 'node_modules', 'electron', 'dist', 'electron.exe')
 PRINT_JS = os.path.join(ROOT, 'tools', 'guide', 'print_pdf.js')
+PKG = os.path.join(ROOT, 'desktop', 'electron', 'package.json')
 
 TITLE = '音视频解析 · 图文使用教程'
-SUBTITLE = '从粘贴链接到全屏播放，一步一步来'
+SUBTITLE = '从安装、粘贴链接到下载、投屏和音乐，一步一步来'
+
+
+def app_version():
+    try:
+        with open(PKG, encoding='utf-8') as f:
+            return json.load(f).get('version', '1.3.4')
+    except Exception:
+        return '1.3.4'
 
 
 def strip_tags(text):
@@ -58,7 +68,9 @@ def build():
         toc.append((m.group(1), number, strip_tags(rest)))
 
     today = date.today().strftime('%Y-%m-%d')
-    hero = os.path.join(ASSETS, 'guide-08-fullscreen.webp').replace('\\', '/')
+    version = app_version()
+    figures = sum(section.count('<figure class="guide-figure">') for section in sections)
+    hero = os.path.join(ASSETS, 'guide-08-full.webp').replace('\\', '/')
     hero_uri = 'file:///' + hero.lstrip('/')
 
     toc_html = '\n'.join(
@@ -209,14 +221,14 @@ def build():
 </head>
 <body>
   <section class="cover">
-    <div><span class="cover-mark">音视频解析 · v1.3.2</span></div>
+    <div><span class="cover-mark">音视频解析 · v{version}</span></div>
     <h1>{html_lib.escape(TITLE)}</h1>
     <p class="sub">{html_lib.escape(SUBTITLE)}</p>
     <p class="meta">Windows 10 / 11 · 爱奇艺 · 腾讯视频 · 优酷 · 芒果TV · 酷我 / 酷狗 / QQ音乐 / 网易云 / 汽水　|　{html_lib.escape(today)}</p>
     <div class="cover-line"></div>
     <div class="cover-facts">
-      <div><b>13 个章节</b><span>从安装、粘贴链接到线路、下载、全屏和音乐</span></div>
-      <div><b>12 张实拍截图</b><span>红框、编号和聚光灯标出每一步的重点</span></div>
+      <div><b>{len(sections)} 个章节</b><span>安装、主界面、粘贴链接、找剧、选集、历史、线路、下载、全屏、投屏、设置、教程、短视频、音乐、常见问题</span></div>
+      <div><b>{figures} 张实拍截图</b><span>红框 + 编号标出每一个按钮和注意事项</span></div>
       <div><b>常见问题速查</b><span>线路失效、地区限制、下载、更新都有说明</span></div>
     </div>
     <div class="cover-hero">
@@ -239,7 +251,7 @@ def build():
     <p>软件内：「设置 → 关于」可以打开配置目录、日志目录和项目主页；遇到解析失败时，先换线路，再试「在线更新线路」。</p>
   </div>
 
-  <div class="doc-foot">音视频解析 · 图文使用教程 · v1.3.2 · 共 {len(sections)} 节</div>
+  <div class="doc-foot">音视频解析 · 图文使用教程 · v{version} · 共 {len(sections)} 节 / {figures} 张截图</div>
 </body>
 </html>'''
 

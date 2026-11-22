@@ -146,30 +146,49 @@ node tools\cdp-test11.mjs   # 切换平台 / 模式时暂停播放
   重装 node_modules 会丢，别再为它反复折腾本机打包，直接用 CI。
 - 本机出现过 `2tX9W8.exe` / `XPSPLOG.dll` 反复崩溃、SmartScreen 卡住未签名安装器的情况；遇到就改用 CI 产物或隔离目录验证。
 
-## 6. 界面改动必须同步更新图文教程
+## 6. 界面改动必须同步更新图文教程（要详细，参考视频教程）
 
 改界面（布局、按钮、平台卡片、弹窗、提示条、文案）之后，**同一版必须重新生成「使用教程 · 图文版」的截图和 PDF**，
 不能只改代码。用户明确要求过这一条：界面已经改了、教程里还是旧界面，算没做完。
 
+**教程的详细程度以 18 分钟视频教程为准**（用户 2026-11 明确要求）：15 节、45 张图，
+每一句解说词都要在图文里出现，每个按钮 / 每个注意事项都要有对应截图。新增功能时同样补图、补文字，
+不要退回「一章一张截图」的简版。
+
 ```powershell
 cd F:\Desktop\长视频解析
 
-# 1. 没有演示视频时先生成（需要 ffmpeg 和 Pillow）
+# 1. 没有演示视频 / 演示音频时先生成（需要 ffmpeg 和 Pillow）
 python tools\guide\make_poster.py
 
-# 2. 真实启动开发版抓图（01–09 长视频 + 10 短视频），输出 .tmp\guide\raw\*.png 和 shots.json
-python tools\guide\capture.py
+# 2. 真实启动开发版抓图（长视频 + 短视频 + 音乐 + 弹窗 + 教程自身），
+#    输出 .tmp\guide\raw\*.png 和 .tmp\guide\shots.json
+python tools\guide\capture_full.py
+#    教程页面自己改过之后，那两张图要单独补（否则截到的是旧教程）
+python tools\guide\capture_full.py g-guide
 
 # 3. 加红框 / 编号，写回 desktop\electron\src\renderer\assets\guide\guide-*.webp
 python tools\guide\annotate.py
 
-# 4. 重新导出 docs\长视频解析-图文使用教程.pdf
+# 4. 生成应用内教程正文（改 tools\guide\guide_content.py，再重写 index.html 的 guide-modal）
+python tools\guide\build_guide.py
+
+# 5. 重新导出 docs\长视频解析-图文使用教程.pdf
 python tools\guide\make_pdf.py
+
+# 6. 自检（含「图文教程：入口 / 章节 / 配图加载」）
+powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 ```
 
-- 应用内教程正文在 `desktop/electron/src/renderer/index.html` 的 `guide-*` 区块；截图里的编号 ①②③ 必须和正文对得上，
-  界面元素挪了位置就顺手把 alt / figcaption / 列表说明一起改。
-- 新增一张教程截图：在 `tools\guide\capture.py` 里加一段截屏 + `shots[...]` 配置（`raw`、`boxes`、`dim`），
-  再到 `tools\guide\annotate.py` 的 `SHOT_NAMES` / `TARGET_WIDTH` 里登记，才会生成对应的 `guide-XX-*.webp`。
-- `capture.py` 用 `.tmp\guide\userdata` 和本地 `poster.mp4` 演示，不碰正式安装目录；短视频那张是注入的演示结果，不联网。
-- 发版前 `desktop\verify.ps1` 会检查教程章节和图片能加载；截图没更新就当作没改完，别发版。
+- **正文只有一个来源**：`tools\guide\guide_content.py`（15 节，每节的 lead / figures / points / tips / faq）。
+  改文案改这个文件，然后跑 `build_guide.py`，**不要手改 index.html 里的 guide 区块**（会被覆盖）。
+- 截图清单在 `tools\guide\capture_full.py`：每张图 = 一段状态脚本 + `boxes`（红框和编号）+ 可选 `crop` / `width`。
+  新增一张图：加一个 `snap(...)` 调用（`key` / `name` / `boxes` / `crop`），然后在 `guide_content.py` 里引用
+  `name` 对应的 webp；`annotate.py` 会按 `shots.json` 里的 `name` 生成 `guide-XX-*.webp`。
+- 图里的编号 ①②③ 是 `boxes` 里的 label，figcaption 里的编号必须和它一一对应；界面元素挪了位置就同时改 box 和文案。
+- `capture_full.py` 用 `.tmp\guide\userdata` 和本地 `poster.mp4` / `short-poster.mp4` / `demo.mp3` 演示，不碰正式安装目录；
+  短视频、投屏、音乐、找剧都是注入的演示数据，不联网（内置浏览器那张除外，它会真的打开芒果TV首页）。
+- **不要给教程图片加 `loading="lazy"`**：`verify.ps1` 会检查 45 张图是否全部解码，lazy 会让它判失败。
+- `desktop\verify.ps1` 的「图文教程：入口 / 章节 / 配图加载」一项会核对 `sections` / `navs` / `images` / `loaded`；
+  截图或正文没更新，这一项就会挂，别发版。
+
