@@ -283,28 +283,42 @@ body.short-scroll .statusbar {
   background: var(--danger);
 }
 
-/* ---------------- 快捷入口 ---------------- */
+/* ---------------- 平台快捷入口（长视频 / 短视频 / 音乐共用同一套外框，高度一致） ---------------- */
 
 .quick-row {
   flex: none;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012));
 }
 
 .quick-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+  height: 18px;
   margin-bottom: 8px;
+  overflow: hidden;
 }
 
 .quick-head > span {
+  flex: none;
   font-size: 11px;
   letter-spacing: 2.4px;
   color: var(--faint);
+  white-space: nowrap;
 }
 
 .quick-head small {
+  flex: 1;
+  min-width: 0;
   font-size: 11.5px;
+  line-height: 18px;
   color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .platform-grid {
@@ -532,6 +546,28 @@ body.short-scroll .statusbar {
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
+}
+
+/* Windows 的下拉弹层默认是白底，只继承文字颜色时未选中项几乎看不见。
+   这里把选项的背景和文字都显式定死，深色弹层里每一项都清晰可读。 */
+.select option,
+.mini-select option,
+.line-row select option {
+  background-color: #0c1420;
+  color: #e9eef7;
+}
+
+.select option:checked,
+.mini-select option:checked {
+  background-color: #1c5138;
+  color: #f2fff9;
+}
+
+.select option:disabled,
+.mini-select option:disabled,
+.line-row select option:disabled {
+  background-color: #0a1018;
+  color: rgba(233, 238, 247, 0.42);
 }
 
 .parse-btn {
@@ -2181,8 +2217,46 @@ body.cinema .video-view video {
 /* ---------------- 观看历史 ---------------- */
 
 .history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   position: relative;
-  padding: 8px 9px;
+  padding: 7px 8px;
+}
+
+.history-cover {
+  flex: none;
+  width: 78px;
+  height: 50px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+
+.history-cover.ph {
+  display: grid;
+  place-items: center;
+  color: var(--brand, var(--accent));
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background:
+    radial-gradient(circle at 28% 18%, color-mix(in srgb, var(--brand, #37e08b) 34%, transparent), transparent 66%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.history-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-body .history-top {
+  min-width: 0;
+}
+
+.history-body .history-url {
+  max-width: 100%;
 }
 
 .history-title {
@@ -2927,6 +3001,17 @@ body.cinema .video-view video {
 
 .short-platform-card.active {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 55%, transparent), 0 14px 30px -22px var(--brand);
+}
+
+/* 短视频五个平台品牌色都偏红，五个「进入」全是红的显得很吵；
+   这里统一成中性色，悬停时再提亮。 */
+.short-platform-card .card-go {
+  color: rgba(233, 238, 247, 0.55);
+  opacity: 1;
+}
+
+.short-platform-card:hover .card-go {
+  color: var(--text);
 }
 
 .short-parse-row {

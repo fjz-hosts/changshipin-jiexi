@@ -34,3 +34,8 @@ __pycache__/
 # 视频教程成片（50MB+，单独分发，不入库）
 视频教程/*.mp4
 视频教程/*.srt
+
+# 旧版教程成片 / 临时导出（同样不入库）
+docs/*.mp4
+docs/*.srt
+.trae-html-share-packages/

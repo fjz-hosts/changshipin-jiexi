@@ -1064,6 +1064,102 @@ async function resolvePageTitle(rawUrl) {
   return cleaned
 }
 
+// 观看历史封面：读平台页面的 og:image / twitter:image。抓不到就返回空，
+// 渲染层会用平台色占位图，不影响历史记录本身。
+const coverCache = new Map()
+
+async function resolvePageCover(rawUrl) {
+  if (!isHttpUrl(rawUrl)) return ''
+  const cached = coverCache.get(rawUrl)
+  if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.cover
+  const platform = detectPlatformByUrl(rawUrl)
+  let cover = ''
+  try {
+    const response = await net.fetch(rawUrl, {
+      redirect: 'follow',
+      headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6' },
+    })
+    if (response.ok) {
+      const text = await response.text()
+      const patterns = [
+        /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)/i,
+        /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i,
+      ]
+      for (const pattern of patterns) {
+        const match = text.match(pattern)
+        if (match && match[1]) {
+          cover = match[1].trim()
+          break
+        }
+      }
+    }
+  } catch {
+    /* 没有封面也能正常看历史 */
+  }
+  // 有些平台对普通请求返回风控页，读不到 og:image；用隐藏窗口渲染一次再读。
+  if (!cover && platform) {
+    cover = await new Promise((resolve) => {
+      let win = null
+      let settled = false
+      const finish = (value = '') => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        try {
+          win?.destroy()
+        } catch {
+          /* 忽略 */
+        }
+        resolve(String(value || ''))
+      }
+      const timer = setTimeout(finish, 8000)
+      try {
+        win = new BrowserWindow({
+          show: false,
+          skipTaskbar: true,
+          width: 900,
+          height: 700,
+          webPreferences: {
+            partition: platform.partition,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        })
+        win.webContents.on('did-finish-load', async () => {
+          try {
+            const value = await win.webContents.executeJavaScript(
+              `(() => {
+                const meta = document.querySelector(
+                  'meta[property="og:image"], meta[name="og:image"], meta[name="twitter:image"], meta[property="twitter:image"]',
+                );
+                return meta ? meta.content : '';
+              })()`,
+            )
+            finish(value)
+          } catch {
+            finish('')
+          }
+        })
+        win.webContents.on('did-fail-load', () => finish(''))
+        win.loadURL(rawUrl).catch(() => finish(''))
+      } catch {
+        finish('')
+      }
+    })
+  }
+  if (cover) {
+    try {
+      cover = new URL(cover, rawUrl).href
+    } catch {
+      cover = ''
+    }
+  }
+  if (!/^https?:\/\//i.test(cover)) cover = ''
+  if (cover) coverCache.set(rawUrl, { cover, at: Date.now() })
+  return cover
+}
+
 // 短视频平台的内置窗口登录态：解析高清 / 会员内容时需要带上这些 Cookie
 async function readPartitionCookie(partition, homeUrl) {
   try {
@@ -1210,6 +1306,8 @@ function registerIpc() {
   ipcMain.handle('player:state', () => readPlayerSnapshot())
 
   ipcMain.handle('page:title', async (_event, url) => resolvePageTitle(normalizeUrlText(url)))
+
+  ipcMain.handle('page:cover', async (_event, url) => resolvePageCover(normalizeUrlText(url)))
 
   // 选集：按平台从页面 / 官方接口取分集列表（QQ、芒果、优酷不需要打开页面，爱奇艺会开一个隐藏页读 tvid）
   ipcMain.handle('series:resolve', async (_event, payload = {}) => {

@@ -30,6 +30,15 @@
     kuaishou: (q) => `https://www.kuaishou.com/search/video?searchKey=${encodeURIComponent(q)}`,
   }
 
+  // 音乐平台：登录与限制弹窗、登录入口共用；图标与主进程 music.js 的清单一致
+  const MUSIC_PLATFORMS = [
+    { key: 'kuwo', name: '酷我音乐', short: '酷我', color: '#ffc233', icon: 'assets/platform-kuwo.png', note: '会员 / 版权歌曲可能只给试听；没有会员时自动换源到同名歌曲' },
+    { key: 'kugou', name: '酷狗音乐', short: '酷狗', color: '#2ca2ff', icon: 'assets/platform-kugou.png', note: '部分 VIP / 版权歌曲需要登录；没有会员时自动换源' },
+    { key: 'qqmusic', name: 'QQ音乐', short: 'QQ', color: '#31c27c', icon: 'assets/platform-qqmusic.png', note: '部分 VIP / 版权歌曲需要登录；没有会员时自动换源' },
+    { key: 'netease', name: '网易云音乐', short: '网易云', color: '#ff5a5f', icon: 'assets/platform-netease.png', note: '部分 VIP / 版权歌曲需要登录；歌词缺失时会自动补全' },
+    { key: 'qishui', name: '汽水音乐', short: '汽水', color: '#ff7a45', icon: 'assets/platform-qishui.png', note: '网页版不开放搜索、不支持登录；请在汽水 App 复制分享链接再解析，通常只有 30 秒试听' },
+  ]
+
   // 各平台「需要登录 / 特殊限制」的提前说明；登录状态由主进程读 Cookie 判断
   const LOGIN_NOTES = {
     iqiyi: { name: '爱奇艺', note: 'VIP / 付费 / 云影院 / 超前点播需登录会员或购买；免费内容不受影响' },
@@ -98,6 +107,8 @@
     lastWebviewSave: 0,
     lastWebviewProgress: 0,
     guideNavTimer: 0,
+    guideMode: 'image',
+    guideVideoId: '',
     historySort: 'recent',
     historyQuery: '',
     historyCollapsed: new Set(),
@@ -417,7 +428,12 @@
   }
 
   function browserMeta(key) {
-    return PLATFORMS.find((item) => item.key === key) || SHORT_PLATFORMS.find((item) => item.key === key) || null
+    return (
+      PLATFORMS.find((item) => item.key === key) ||
+      SHORT_PLATFORMS.find((item) => item.key === key) ||
+      MUSIC_PLATFORMS.find((item) => item.key === key) ||
+      null
+    )
   }
 
   function webviewTitle(webview) {
@@ -1389,6 +1405,7 @@
     if (state.browserOpen) return
     if (!$('#modal').hidden || !$('#search-modal').hidden) return
     if (document.querySelector('#guide-modal') && !$('#guide-modal').hidden) return
+    if (document.querySelector('#changelog-modal') && !$('#changelog-modal').hidden) return
     if (isTypingTarget(event.target)) return
     const key = event.key
     if (key === 'Escape' || key === 'F11' || key === 'F5' || key === 'Tab') return
@@ -2019,6 +2036,20 @@
     if (!$('#auth-modal').hidden) renderAuthLists()
   }
 
+  // 音乐平台的登录状态由音乐模块维护（Cookie 存在 config.json），
+  // 这里合并进来，让「登录与限制」里的音乐一行也能显示已登录 / 去登录置灰。
+  async function refreshMusicAuthStatus() {
+    try {
+      const list = await window.desktop.musicPlatforms()
+      for (const platform of list || []) {
+        if (!platform?.key) continue
+        state.authStatus[platform.key] = { loggedIn: Boolean(platform.loggedIn) }
+      }
+    } catch {
+      /* 音乐状态拿不到就按未登录显示 */
+    }
+  }
+
   function renderAuthBadges() {
     $$('.login-chip').forEach((chip) => {
       const key = chip.dataset.auth
@@ -2058,6 +2089,7 @@
   function renderAuthLists() {
     const longBox = $('#auth-long-list')
     const shortBox = $('#auth-short-list')
+    const musicBox = $('#auth-music-list')
     if (longBox) {
       longBox.innerHTML = PLATFORMS.map((platform) =>
         authRowHtml(platform.key, LOGIN_NOTES[platform.key].name, LOGIN_NOTES[platform.key].note),
@@ -2068,10 +2100,14 @@
         authRowHtml(platform.key, LOGIN_NOTES[platform.key].name, LOGIN_NOTES[platform.key].note),
       ).join('')
     }
+    if (musicBox) {
+      musicBox.innerHTML = MUSIC_PLATFORMS.map((platform) => authRowHtml(platform.key, platform.name, platform.note)).join('')
+    }
   }
 
   async function openAuthModal() {
     await refreshAuthStatus()
+    await refreshMusicAuthStatus()
     renderAuthLists()
     $('#auth-modal').hidden = false
   }
@@ -2104,6 +2140,7 @@
     if (state.browserOpen) hideBrowser({ mute: true })
     document.body.classList.toggle('mode-short', next === 'short')
     document.body.classList.toggle('mode-music', next === 'music')
+    document.body.classList.toggle('music-scroll', next === 'music')
     $$('.long-only').forEach((node) => {
       node.hidden = next !== 'long'
     })
@@ -3066,6 +3103,17 @@
     } catch {
       /* 历史记录失败无关紧要 */
     }
+    // 观看历史封面：解析成功时顺手抓一次平台海报，抓到就写回历史，卡片左图右文更好认
+    window.desktop
+      .pageCover(state.currentVideoUrl)
+      .then((cover) => {
+        if (!cover) return null
+        return window.desktop.updateHistory({ url: state.currentVideoUrl, cover }).then((history) => {
+          state.config.history = history
+          renderHistory()
+        })
+      })
+      .catch(() => {})
     // 手动粘贴的链接没有页面标题：后台补一次，拿到后回填到观看历史
     if (!title) {
       const targetUrl = state.currentVideoUrl
@@ -3287,24 +3335,44 @@
     li.className = 'history-item'
     if (resumable) li.classList.add('resumable')
     const fallbackName = platform?.name || '视频'
+    const initial = platform?.short || (platform?.name || '视').slice(0, 1)
+    const cover = String(item.cover || '')
     li.innerHTML = `
-      <div class="history-top">
-        <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
-          title || `${fallbackName} · 未命名视频`,
-        )}</span>
-        <span class="history-time">${timeAgo(item.at)}</span>
+      ${
+        cover
+          ? `<img class="history-cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />`
+          : `<span class="history-cover ph" style="--brand:${platform?.color || '#37e08b'}">${escapeHtml(initial)}</span>`
+      }
+      <div class="history-body">
+        <div class="history-top">
+          <span class="history-title" title="${escapeHtml(item.url)}">${escapeHtml(
+            title || `${fallbackName} · 未命名视频`,
+          )}</span>
+          <span class="history-time">${timeAgo(item.at)}</span>
+        </div>
+        <div class="history-meta">
+          ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(platform.name)}</span>` : ''}
+          ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
+          <span class="history-line">${escapeHtml(item.lineName || '')}</span>
+          ${resumable ? '<span class="history-resume">继续</span>' : ''}
+          ${percent ? `<span class="history-percent">已看 ${percent}%</span>` : ''}
+        </div>
+        ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
+        ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
       </div>
-      <div class="history-meta">
-        ${platform ? `<span class="history-platform" style="color:${platform.color}">${escapeHtml(platform.name)}</span>` : ''}
-        ${episode ? `<span class="history-episode">${escapeHtml(episode)}</span>` : ''}
-        <span class="history-line">${escapeHtml(item.lineName || '')}</span>
-        ${resumable ? '<span class="history-resume">继续</span>' : ''}
-        ${percent ? `<span class="history-percent">已看 ${percent}%</span>` : ''}
-      </div>
-      ${percent ? `<div class="history-progress"><i style="width:${percent}%"></i></div>` : ''}
-      ${title ? '' : `<div class="history-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</div>`}
       <button class="history-del" title="删除这部作品的记录">×</button>
     `
+    // 平台海报可能拒绝外链或被 CDN 拦截：加载失败就退回平台色占位图，不留破图
+    const coverImage = li.querySelector('img.history-cover')
+    if (coverImage) {
+      coverImage.addEventListener('error', () => {
+        const placeholder = document.createElement('span')
+        placeholder.className = 'history-cover ph'
+        placeholder.style.setProperty('--brand', platform?.color || '#37e08b')
+        placeholder.textContent = initial
+        coverImage.replaceWith(placeholder)
+      })
+    }
     li.addEventListener('click', () => {
       $('#url-input').value = item.url
       updateBadge()
@@ -3412,7 +3480,22 @@
     list.scrollTop = scrollTop
   }
 
-  // 旧版本只存了网址；启动后在后台补一次标题，最多 4 条，避免拖慢启动
+  // 旧版本只存了网址；启动后在后台补一次标题和封面，最多 4 条，避免拖慢启动
+  async function backfillHistoryCovers() {
+    const history = state.config?.history || []
+    const missing = history.filter((item) => !item.cover).slice(0, 3)
+    for (const item of missing) {
+      try {
+        const cover = await window.desktop.pageCover(item.url)
+        if (!cover) continue
+        state.config.history = await window.desktop.updateHistory({ url: item.url, cover })
+        renderHistory()
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+
   async function backfillHistoryTitles() {
     const history = state.config?.history || []
     const missing = history.filter((item) => !cleanTitle(item.title)).slice(0, 4)
@@ -3479,12 +3562,17 @@
   // 图文教程
   // ---------------------------------------------------------------------------
 
-  function openGuide(section = 'intro') {
+  function openGuide(section = 'intro', mode = 'image') {
     const modal = $('#guide-modal')
     if (!modal) return
     modal.hidden = false
-    setGuideSection(section)
-    setTimeout(() => setGuideSection(section), 40)
+    setGuideMode(mode)
+    if (mode === 'video') {
+      if (!state.guideVideoId) selectGuideVideo('00', { autoplay: false })
+    } else {
+      setGuideSection(section)
+      setTimeout(() => setGuideSection(section), 40)
+    }
     try {
       $('#guide-close').focus()
     } catch {
@@ -3496,6 +3584,145 @@
     const modal = $('#guide-modal')
     if (!modal) return
     modal.hidden = true
+    pauseGuideVideo()
+  }
+
+  // 图文 / 视频两个页签：同一套弹窗，左侧目录各自独立
+  function setGuideMode(mode) {
+    const next = mode === 'video' ? 'video' : 'image'
+    state.guideMode = next
+    const imagePane = $('#guide-image-pane')
+    const videoPane = $('#guide-video-pane')
+    if (imagePane) imagePane.hidden = next !== 'image'
+    if (videoPane) videoPane.hidden = next !== 'video'
+    $$('#guide-mode-switch button').forEach((button) => {
+      button.classList.toggle('active', button.dataset.guideMode === next)
+    })
+    if (next !== 'video') pauseGuideVideo()
+    else if (!state.guideVideoId) selectGuideVideo('00', { autoplay: false })
+  }
+
+  function pauseGuideVideo() {
+    const video = $('#guide-video')
+    if (!video) return
+    try {
+      video.pause()
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  function selectGuideVideo(id, { autoplay = true } = {}) {
+    const nav = $('#guide-video-nav')
+    const video = $('#guide-video')
+    if (!nav || !video) return
+    const button = nav.querySelector(`button[data-video="${id}"]`) || nav.querySelector('button[data-video]')
+    if (!button) return
+    state.guideVideoId = button.dataset.video
+    const file = button.dataset.file || ''
+    const poster = button.dataset.poster || ''
+    const posterBox = $('#guide-video-poster')
+    const posterImage = $('#guide-video-poster-img')
+    if (posterImage && poster) posterImage.setAttribute('src', `assets/video-guide/${poster}`)
+    if (posterBox) posterBox.hidden = false
+    if (file) {
+      const src = `assets/video-guide/${file}`
+      if (video.getAttribute('src') !== src) {
+        video.setAttribute('src', src)
+        video.setAttribute('poster', `assets/video-guide/${poster}`)
+        video.load()
+      }
+      video.currentTime = 0
+    }
+    nav.querySelectorAll('button[data-video]').forEach((item) => {
+      item.classList.toggle('active', item === button)
+    })
+    const title = $('#guide-video-title')
+    if (title) title.textContent = button.dataset.title || ''
+    const meta = $('#guide-video-desc')
+    if (meta) {
+      meta.textContent = `第 ${Number(button.dataset.video) + 1} / ${nav.querySelectorAll('button[data-video]').length} 节 · ${button.dataset.duration || ''} · ${button.dataset.desc || ''}`
+    }
+    const imageButton = $('#guide-video-to-image')
+    if (imageButton) {
+      imageButton.dataset.guide = button.dataset.guide || ''
+      imageButton.hidden = !button.dataset.guide
+    }
+    const prev = $('#guide-video-prev')
+    const next = $('#guide-video-next')
+    const index = Number(button.dataset.video)
+    if (prev) prev.disabled = index <= 0
+    if (next) next.disabled = index >= nav.querySelectorAll('button[data-video]').length - 1
+    if (autoplay) video.play().catch(() => {})
+  }
+
+  function stepGuideVideo(delta) {
+    const nav = $('#guide-video-nav')
+    if (!nav) return
+    const buttons = Array.from(nav.querySelectorAll('button[data-video]'))
+    const index = buttons.findIndex((item) => item.dataset.video === state.guideVideoId)
+    const target = buttons[index + delta]
+    if (target) selectGuideVideo(target.dataset.video)
+  }
+
+  // ---------------------------------------------------------------------------
+  // 更新日志
+  // ---------------------------------------------------------------------------
+
+  function changelogData() {
+    return Array.isArray(window.APP_CHANGELOG) ? window.APP_CHANGELOG : []
+  }
+
+  function openChangelog(version = '') {
+    const modal = $('#changelog-modal')
+    if (!modal) return
+    renderChangelog(version)
+    modal.hidden = false
+    try {
+      $('#changelog-close').focus()
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  function closeChangelog() {
+    const modal = $('#changelog-modal')
+    if (!modal) return
+    modal.hidden = true
+  }
+
+  function renderChangelog(version) {
+    const data = changelogData()
+    const nav = $('#changelog-nav')
+    const content = $('#changelog-content')
+    if (!nav || !content) return
+    if (!data.length) {
+      nav.innerHTML = ''
+      content.innerHTML = '<div class="empty-row">暂无更新日志</div>'
+      return
+    }
+    const currentVersion = String(state.info?.version || '')
+    const selected =
+      data.find((entry) => version && entry.version === version) ||
+      data.find((entry) => entry.version === currentVersion) ||
+      data[0]
+    nav.innerHTML = data
+      .map(
+        (entry) =>
+          `<button data-version="${escapeHtml(entry.version)}" class="${entry === selected ? 'active' : ''}">v${escapeHtml(entry.version)}${
+            entry === data[0] ? '<em>最新</em>' : ''
+          }</button>`,
+      )
+      .join('')
+    content.innerHTML = `
+      <div class="changelog-version">
+        <h3>v${escapeHtml(selected.version)}${selected === data[0] ? '<em>最新版本</em>' : ''}</h3>
+        <p class="changelog-title">${selected.title}</p>
+        <ul>${selected.items.map((item) => `<li>${item}</li>`).join('')}</ul>
+      </div>
+      <div class="changelog-tip">更新日志会随每个版本同步更新。升级不会清空设置、观看历史和下载目录；需要旧版本时可以在 GitHub Releases 里找到。</div>
+    `
+    content.scrollTop = 0
   }
 
   function setGuideSection(id) {
@@ -4132,7 +4359,14 @@
       const loginButton = event.target.closest('[data-login]')
       if (loginButton) {
         const key = loginButton.dataset.login
+        const musicPlatform = MUSIC_PLATFORMS.find((item) => item.key === key)
         closeAuthModal()
+        if (musicPlatform) {
+          switchMode('music')
+          // 汽水网页版不支持登录，音乐后台会给出对应提示
+          window.MusicUI?.login(key)
+          return
+        }
         openBrowser(key)
         toast(`已打开${browserMeta(key)?.name || '平台'}：登录后回到界面，状态会自动更新`, 'ok', 5000)
         return
@@ -4532,6 +4766,44 @@
         syncGuideNav()
       })
     })
+    $('#guide-mode-switch').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-guide-mode]')
+      if (!button) return
+      setGuideMode(button.dataset.guideMode)
+    })
+    $('#guide-video-nav').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-video]')
+      if (button) selectGuideVideo(button.dataset.video)
+    })
+    $('#guide-video-poster').addEventListener('click', () => {
+      $('#guide-video').play().catch(() => {})
+    })
+    $('#guide-video').addEventListener('play', () => {
+      const poster = $('#guide-video-poster')
+      if (poster) poster.hidden = true
+    })
+    $('#guide-video-prev').addEventListener('click', () => stepGuideVideo(-1))
+    $('#guide-video-next').addEventListener('click', () => stepGuideVideo(1))
+    $('#guide-video-to-image').addEventListener('click', (event) => {
+      const target = event.currentTarget.dataset.guide
+      if (!target) return
+      setGuideMode('image')
+      setTimeout(() => setGuideSection(target), 30)
+    })
+
+    // 更新日志
+    $('#btn-open-changelog').addEventListener('click', () => {
+      closeModal()
+      openChangelog()
+    })
+    $('#changelog-close').addEventListener('click', closeChangelog)
+    $('#changelog-modal').addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeChangelog()
+    })
+    $('#changelog-nav').addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-version]')
+      if (button) renderChangelog(button.dataset.version)
+    })
 
     $('#btn-open-repo').addEventListener('click', () => window.desktop.openExternal(state.info?.repo || 'https://github.com/fjz-hosts/changshipin-jiexi'))
     $('#btn-open-userdata').addEventListener('click', () => window.desktop.openUserData())
@@ -4555,6 +4827,12 @@
         return
       }
       if (event.key === 'Escape') {
+        const changelog = document.querySelector('#changelog-modal')
+        if (changelog && !changelog.hidden) {
+          event.preventDefault()
+          closeChangelog()
+          return
+        }
         const guide = document.querySelector('#guide-modal')
         if (guide && !guide.hidden) {
           event.preventDefault()
@@ -4861,6 +5139,7 @@
       updateNativeButton()
       renderCast()
       backfillHistoryTitles()
+      backfillHistoryCovers()
       renderUpdateState(await window.desktop.getUpdateState())
       if (state.config.lastUrl) {
         $('#url-input').value = state.config.lastUrl

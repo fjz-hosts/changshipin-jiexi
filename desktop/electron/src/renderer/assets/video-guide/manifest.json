@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "source": "视频教程/长视频解析-视频教程.mp4",
+  "chapters": [
+    {
+      "id": "00",
+      "title": "00 开始之前",
+      "file": "guide-video-00.mp4",
+      "poster": "guide-video-00.jpg",
+      "duration": 101.36,
+      "durationText": "1:41"
+    },
+    {
+      "id": "01",
+      "title": "01 认识主界面",
+      "file": "guide-video-01.mp4",
+      "poster": "guide-video-01.jpg",
+      "duration": 71.18,
+      "durationText": "1:11"
+    },
+    {
+      "id": "02",
+      "title": "02 粘贴链接解析",
+      "file": "guide-video-02.mp4",
+      "poster": "guide-video-02.jpg",
+      "duration": 61.5,
+      "durationText": "1:01"
+    },
+    {
+      "id": "03",
+      "title": "03 内置浏览器与找剧",
+      "file": "guide-video-03.mp4",
+      "poster": "guide-video-03.jpg",
+      "duration": 82.8,
+      "durationText": "1:23"
+    },
+    {
+      "id": "04",
+      "title": "04 选集与自动连播",
+      "file": "guide-video-04.mp4",
+      "poster": "guide-video-04.jpg",
+      "duration": 57.82,
+      "durationText": "0:58"
+    },
+    {
+      "id": "05",
+      "title": "05 观看历史",
+      "file": "guide-video-05.mp4",
+      "poster": "guide-video-05.jpg",
+      "duration": 46.14,
+      "durationText": "0:46"
+    },
+    {
+      "id": "06",
+      "title": "06 解析线路与体检",
+      "file": "guide-video-06.mp4",
+      "poster": "guide-video-06.jpg",
+      "duration": 80.22,
+      "durationText": "1:20"
+    },
+    {
+      "id": "07",
+      "title": "07 下载到电脑",
+      "file": "guide-video-07.mp4",
+      "poster": "guide-video-07.jpg",
+      "duration": 64.51,
+      "durationText": "1:05"
+    },
+    {
+      "id": "08",
+      "title": "08 全屏与快捷键",
+      "file": "guide-video-08.mp4",
+      "poster": "guide-video-08.jpg",
+      "duration": 48.68,
+      "durationText": "0:49"
+    },
+    {
+      "id": "09",
+      "title": "09 投屏到大屏",
+      "file": "guide-video-09.mp4",
+      "poster": "guide-video-09.jpg",
+      "duration": 85.51,
+      "durationText": "1:26"
+    },
+    {
+      "id": "10",
+      "title": "10 设置、更新与登录限制",
+      "file": "guide-video-10.mp4",
+      "poster": "guide-video-10.jpg",
+      "duration": 82.64,
+      "durationText": "1:23"
+    },
+    {
+      "id": "11",
+      "title": "11 图文教程与常见问题",
+      "file": "guide-video-11.mp4",
+      "poster": "guide-video-11.jpg",
+      "duration": 56.79,
+      "durationText": "0:57"
+    },
+    {
+      "id": "12",
+      "title": "12 短视频与短剧下载",
+      "file": "guide-video-12.mp4",
+      "poster": "guide-video-12.jpg",
+      "duration": 154.49,
+      "durationText": "2:34"
+    },
+    {
+      "id": "13",
+      "title": "13 音乐搜索、歌词与下载",
+      "file": "guide-video-13.mp4",
+      "poster": "guide-video-13.jpg",
+      "duration": 109.3,
+      "durationText": "1:49"
+    },
+    {
+      "id": "14",
+      "title": "14 结束语 · 感谢观看",
+      "file": "guide-video-14.mp4",
+      "poster": "guide-video-14.jpg",
+      "duration": 36.74,
+      "durationText": "0:37"
+    }
+  ]
+}

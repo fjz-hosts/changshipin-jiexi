@@ -123,6 +123,7 @@ node tools\cdp-test11.mjs   # 切换平台 / 模式时暂停播放
 - 不要用 PowerShell 5.1 无 BOM 写 `.ps1` / `使用说明.txt`；README 不带 BOM。
 - 版本号只改 `desktop\electron\package.json` 的 `version`；CI 会按 workflow 输入的版本号重新设置。
 - 发版记录同步更新：`README.md` 的更新记录、`项目开发交接文档.md` 的版本历史/安装路径/Release 链接。
+- **更新日志是应用内功能，必须同步**：每次发版在 `desktop/electron/src/renderer/changelog.js` 的 `window.APP_CHANGELOG` **最前面**加一条当前版本（版本号与 package.json 一致，写清楚具体改了什么），否则用户点「设置 → 关于 → 更新日志」看不到本次内容。README / 交接文档也要同步。
 - **不要再加入手机端**：用户已明确不要手机版，也不再需要扫码下载。
 
 ## 5. 本机环境已知问题
@@ -151,9 +152,13 @@ node tools\cdp-test11.mjs   # 切换平台 / 模式时暂停播放
 改界面（布局、按钮、平台卡片、弹窗、提示条、文案）之后，**同一版必须重新生成「使用教程 · 图文版」的截图和 PDF**，
 不能只改代码。用户明确要求过这一条：界面已经改了、教程里还是旧界面，算没做完。
 
-**教程的详细程度以 18 分钟视频教程为准**（用户 2026-11 明确要求）：15 节、45 张图，
+**教程的详细程度以 18 分钟视频教程为准**（用户 2026-11 明确要求）：15 节、46 张图，
 每一句解说词都要在图文里出现，每个按钮 / 每个注意事项都要有对应截图。新增功能时同样补图、补文字，
 不要退回「一章一张截图」的简版。
+
+视频教程现在也内嵌在「使用教程」里（图文 / 视频两个页签，15 个章节点播）。改视频后要跑
+`python tools\guide\split_video.py` 重新切节并更新 `assets/video-guide/manifest.json`，再按下面 6 步重出教程；
+`build_guide.py` 会自动读取 manifest 生成视频页签。
 
 ```powershell
 cd F:\Desktop\长视频解析
@@ -164,7 +169,7 @@ python tools\guide\make_poster.py
 # 2. 真实启动开发版抓图（长视频 + 短视频 + 音乐 + 弹窗 + 教程自身），
 #    输出 .tmp\guide\raw\*.png 和 .tmp\guide\shots.json
 python tools\guide\capture_full.py
-#    教程页面自己改过之后，那两张图要单独补（否则截到的是旧教程）
+#    教程页面自己改过之后，那三张图要单独补（否则截到的是旧教程）
 python tools\guide\capture_full.py g-guide
 
 # 3. 加红框 / 编号，写回 desktop\electron\src\renderer\assets\guide\guide-*.webp
@@ -188,7 +193,7 @@ powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 - 图里的编号 ①②③ 是 `boxes` 里的 label，figcaption 里的编号必须和它一一对应；界面元素挪了位置就同时改 box 和文案。
 - `capture_full.py` 用 `.tmp\guide\userdata` 和本地 `poster.mp4` / `short-poster.mp4` / `demo.mp3` 演示，不碰正式安装目录；
   短视频、投屏、音乐、找剧都是注入的演示数据，不联网（内置浏览器那张除外，它会真的打开芒果TV首页）。
-- **不要给教程图片加 `loading="lazy"`**：`verify.ps1` 会检查 45 张图是否全部解码，lazy 会让它判失败。
+- **不要给教程图片加 `loading="lazy"`**：`verify.ps1` 会检查 46 张图是否全部解码，lazy 会让它判失败。
 - `desktop\verify.ps1` 的「图文教程：入口 / 章节 / 配图加载」一项会核对 `sections` / `navs` / `images` / `loaded`；
   截图或正文没更新，这一项就会挂，别发版。
 

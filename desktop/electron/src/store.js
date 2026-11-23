@@ -117,6 +117,7 @@ function normalizeHistory(raw) {
         lineName: cleanText(item.lineName, 40),
         title: seriesBaseTitle(title) || title,
         episode: cleanText(item.episode, 30) || episodeText(title),
+        cover: cleanText(item.cover, 1200),
         progress: Math.max(0, Number(item.progress) || 0),
         duration: Math.max(0, Number(item.duration) || 0),
         at: Number(item.at) || Date.now(),
@@ -141,6 +142,7 @@ function normalizeHistory(raw) {
       lineName: item.lineName || previous.lineName,
       title: item.title || previous.title,
       episode: item.episode || previous.episode,
+      cover: item.cover || previous.cover,
       progress: item.progress,
       duration: item.duration,
       at: item.at,
@@ -454,6 +456,7 @@ class Store {
       lineName: cleanText(entry.lineName, 40),
       title,
       episode,
+      cover: cleanText(entry.cover, 1200),
       progress: Math.max(0, Number(entry.progress) || 0),
       duration: Math.max(0, Number(entry.duration) || 0),
       at: Date.now(),
@@ -469,6 +472,7 @@ class Store {
       const hadTitle = Boolean(item.title)
       if (!item.title) item.title = previous.title
       if (!item.episode) item.episode = previous.episode
+      if (!item.cover) item.cover = previous.cover
       if (!item.platform) item.platform = previous.platform
       if (!item.lineId) item.lineId = previous.lineId
       if (!item.lineName) item.lineName = previous.lineName
@@ -500,6 +504,8 @@ class Store {
     }
     const episode = cleanText(entry.episode, 30)
     if (episode) item.episode = episode
+    const cover = cleanText(entry.cover, 1200)
+    if (cover) item.cover = cover
     if (Number.isFinite(Number(entry.progress))) item.progress = Math.max(0, Number(entry.progress))
     if (Number.isFinite(Number(entry.duration))) item.duration = Math.max(0, Number(entry.duration))
     this._write()

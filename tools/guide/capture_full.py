@@ -313,7 +313,9 @@ def capture_playing(c, http_port):
     snap(c, 'g-history', 'guide-05-history',
          [box(c, '.history-panel', 0),
           box(c, '#history-list .history-item', 1),
-          box(c, '#history-list .history-item .history-progress', 2, badge='right')],
+          box(c, '#history-list .history-item .history-cover', 2),
+          box(c, '#history-list .history-item .history-meta', 3, badge='right'),
+          box(c, '#history-list .history-item .history-progress', 4, badge='right')],
          dim=0.42, crop=hist_crop, width=800)
 
     snap(c, 'g-history-tools', 'guide-05-tools',
@@ -810,7 +812,9 @@ def capture_music(c, http_port):
       document.querySelector('#music-seek').value = '178';
       window.MusicUI.setActiveLyric(8);
       document.querySelector('#music-panel').scrollTop = 0;
-      window.scrollTo(0, 0);
+      const note = document.querySelector('#music-note');
+      if (note) note.hidden = true;
+      window.scrollTo(0, 210);
       document.querySelector('#status-text').textContent = '正在播放：晴天 - 周杰伦';
       await new Promise((resolve) => setTimeout(resolve, 700));
       return ok;
@@ -818,12 +822,15 @@ def capture_music(c, http_port):
                json.dumps(MUSIC_RESULT, ensure_ascii=False),
                json.dumps(MUSIC_RESULTS, ensure_ascii=False)), 1.6)
 
+    js(c, "const note = document.querySelector('#music-note'); if (note) note.style.display = 'none'; window.scrollTo(0, 210); true", 0.6)
+
     snap(c, 'g-music-player', 'guide-13-player',
-         [box(c, '.music-cover-box', 1),
-          box(c, '#music-lyrics', 2),
-          box(c, '.music-controls', 3, badge='top'),
-          box(c, '.music-actions', 4, badge='top')],
-         dim=0.26, crop={'x': 0, 'y': 120, 'w': 1290, 'h': 640})
+         [box(c, '#music-player', 1),
+          box(c, '.music-cover-box', 2),
+          box(c, '#music-lyrics', 3),
+          box(c, '.music-controls', 4, badge='top'),
+          box(c, '.music-actions', 5, badge='top')],
+         dim=0.26, crop={'x': 0, 'y': 0, 'w': 1278, 'h': 779})
 
     snap(c, 'g-music-tabs', 'guide-13-tabs',
          [box(c, '#music-tabs', 1, badge='top'),
@@ -853,7 +860,7 @@ def capture_music(c, http_port):
           box(c, '.music-download-row.interrupted', 4, badge='right')],
          dim=0.22, **panel_shot(c, '.music-list-panel', 800))
 
-    # 换源标记 + 汽水说明
+    # 换源标记（正常播放时不显示黄色提示，只有播放失败才出现）
     js(c, """(() => {
       const tab = document.querySelector('#music-tabs button[data-mtab="results"]');
       if (tab) tab.click();
@@ -864,21 +871,15 @@ def capture_music(c, http_port):
         via.classList.add('on');
       }
       const note = document.querySelector('#music-note');
-      if (note) {
-        note.hidden = false;
-        note.textContent = '已通过公开无损音乐源取到同名单曲（FLAC）；没有会员权限时会先换源，再退回酷我同名源。';
-      }
+      if (note) note.hidden = true;
       return true;
     })()""", 1.0)
     source = rect(c, '.music-source-row')
-    note = rect(c, '#music-note')
     via_crop = None
-    if source and note:
-        via_crop = {'x': source['x'] - 20, 'y': source['y'] - 14, 'w': 620, 'h': (note['y'] + note['h']) - source['y'] + 30}
+    if source:
+        via_crop = {'x': source['x'] - 20, 'y': source['y'] - 14, 'w': 660, 'h': 96}
     snap(c, 'g-music-via', 'guide-13-via',
-         [box(c, '#music-via', 1, badge='top'),
-          box(c, '#music-note', 2, badge='top'),
-          box(c, '#music-login', 0)],
+         [box(c, '#music-via', 1, badge='top')],
          dim=0.16, crop=via_crop)
 
 
@@ -895,10 +896,31 @@ def capture_guide(c):
       return true;
     })()""", 0.6)
     snap(c, 'g-guide', 'guide-11-guide',
-         [box(c, '#guide-nav', 1, badge='right'),
-          box(c, '#guide-main .guide-figure', 2),
-          box(c, '#guide-main .guide-points', 3, badge='right')],
+         [box(c, '#guide-mode-switch', 1, badge='top'),
+          box(c, '#guide-nav', 2, badge='right'),
+          box(c, '#guide-main .guide-figure', 3),
+          box(c, '#guide-main .guide-points', 4, badge='right')],
          dim=0.16, crop=modal_crop(c, '#guide-modal'))
+
+    # 视频教程页签：视频按章节拆开，左侧目录 + 播放器
+    js(c, """(() => {
+      document.querySelector('#guide-mode-switch button[data-guide-mode="video"]')?.click();
+      return true;
+    })()""", 1.2)
+    js(c, """(() => {
+      const poster = document.querySelector('#guide-video-poster');
+      if (poster) poster.hidden = false;
+      const video = document.querySelector('#guide-video');
+      if (video) { try { video.pause(); video.currentTime = 0; } catch (e) {} }
+      return true;
+    })()""", 0.5)
+    snap(c, 'g-video', 'guide-11-video',
+         [box(c, '#guide-mode-switch', 1, badge='top'),
+          box(c, '#guide-video-nav', 2, badge='right'),
+          box(c, '.guide-video-box', 3),
+          box(c, '.guide-video-actions', 4, badge='top')],
+         dim=0.16, crop=modal_crop(c, '#guide-modal'))
+    js(c, "document.querySelector('#guide-mode-switch button[data-guide-mode=\"image\"]')?.click(); true", 0.8)
 
     js(c, """(() => {
       const content = document.querySelector('#guide-content');

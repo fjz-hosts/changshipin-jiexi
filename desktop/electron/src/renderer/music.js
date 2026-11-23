@@ -189,7 +189,8 @@
           <button class="music-card-main" data-action="select" title="${escapeHtml(platform.hint || platform.name)}">
             <span class="music-logo" aria-hidden="true"><img src="${MUSIC_ICONS[platform.key] || 'assets/app-icon.png'}" alt="" /></span>
             <span class="music-card-meta"><b>${escapeHtml(platform.short || platform.name)}</b></span>
-            <em class="music-login-chip" data-login-chip="${platform.key}">未登录</em>
+            <em class="music-login-chip" data-login-chip="${platform.key}" title="点这里打开平台官网登录会员">未登录</em>
+            <span class="music-card-go">进入</span>
           </button>
         </div>`,
       )
@@ -221,11 +222,6 @@
       : '搜索歌名 / 歌手 / 专辑'
     const button = $('#music-search-btn span')
     if (button) button.textContent = platform.searchable === false ? '解析链接' : '搜索'
-    const login = $('#music-login')
-    if (login) {
-      login.hidden = platform.searchable === false
-      login.textContent = platform.loggedIn ? '会员已登录' : '登录会员'
-    }
   }
 
   function selectPlatform(key) {
@@ -537,10 +533,10 @@
       bg.hidden = true
     }
     const note = $('#music-note')
-    const noteText = result.note || ''
-    note.textContent = noteText
-    note.title = noteText
-    note.hidden = !noteText
+    // 正常播放时不显示「原平台没有给出完整音源…」这类提示，播放器保持干净；
+    // 只有音源真的加载失败时才在下面的 error 事件里给出对应说明。
+    note.textContent = ''
+    note.hidden = true
     renderQualityOptions(result)
     updateFavoriteButton()
     renderLyrics(mergeTranslations(parseLrc(result.lyric), result.translation))
@@ -983,6 +979,11 @@
     $('#music-platform-grid')?.addEventListener('click', (event) => {
       const card = event.target.closest('.music-platform-card')
       if (!card) return
+      if (event.target.closest('[data-login-chip]')) {
+        selectPlatform(card.dataset.platform)
+        doLogin()
+        return
+      }
       if (event.target.closest('[data-action="select"]')) selectPlatform(card.dataset.platform)
     })
     $('#music-search-btn')?.addEventListener('click', doSearch)
@@ -1019,7 +1020,6 @@
       $('#music-search-input').focus()
       updateBadge()
     })
-    $('#music-login')?.addEventListener('click', doLogin)
     $('#music-error-login')?.addEventListener('click', doLogin)
     $('#music-error-retry')?.addEventListener('click', () => {
       if (state.pendingSong) playSong(state.pendingSong)
@@ -1180,6 +1180,8 @@
       })
       audio.addEventListener('play', () => {
         $('#music-toggle').textContent = '⏸'
+        const note = $('#music-note')
+        if (note) note.hidden = true
       })
       audio.addEventListener('pause', () => {
         $('#music-toggle').textContent = '▶'
@@ -1190,6 +1192,14 @@
       })
       audio.addEventListener('error', () => {
         if (!audio.src) return
+        const note = $('#music-note')
+        const platform = platformInfo(state.current?.platform)
+        if (note) {
+          note.textContent = platform?.searchable === false
+            ? '这个汽水分享链接的音频已经播不了了：请回汽水 App 重新复制分享链接再解析。'
+            : '这首暂时播不了：音源可能已过期。可以点「重试」、换一首，或点平台卡片登录会员后再试。'
+          note.hidden = false
+        }
         toast('音频加载失败：音源可能已过期，点「重试」或换一首歌', 'warn', 5600)
       })
     }
@@ -1306,6 +1316,10 @@
     pause,
     openLink,
     renderDemo,
+    login: async (key) => {
+      if (key) selectPlatform(key)
+      await doLogin()
+    },
     setActiveLyric: (index) => {
       const line = state.lyricLines[Number(index)]
       if (line) updateActiveLyric(Number(line.time) + 0.01)
