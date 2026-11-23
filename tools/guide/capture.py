@@ -60,7 +60,7 @@ HISTORY = [
     ('https://v.qq.com/x/cover/mzc002001w361jz/x4102olnagg.html', '尚公主 第2集', '第2集', 2100, 2764),
     ('https://v.youku.com/v_show/id_XNjU3MzkyOTA0NA==.html', '嫁金钗 第1集', '第1集', 600, 2700),
     ('https://www.iqiyi.com/v_1pwgh2hpp98.html', '折月亮 第11集', '第11集', 800, 2695),
-    ('https://www.mgtv.com/b/817372/24773905.html', '今天是太阳雨 第5集', '第5集', 1600, 2727),
+    ('https://www.mgtv.com/b/817372/24773638.html', '今天是太阳雨 第5集', '第5集', 1600, 2727),
 ]
 
 
@@ -254,6 +254,9 @@ def fix_config():
     with open(path, encoding='utf-8') as f:
         cfg = json.load(f)
     now = int(time.time() * 1000)
+    # 教程截图里让「今天是太阳雨」「庆余年」排在最前面，正好能同时看到这两张封面
+    priority = ('今天是太阳雨', '庆余年')
+    cfg['history'].sort(key=lambda item: 0 if any(name in item.get('title', '') for name in priority) else 1)
     offsets = [12 * 60, 55 * 60, 2 * 3600, 3 * 3600, 26 * 3600, 50 * 3600]
     for item, off in zip(cfg['history'], offsets):
         item['at'] = now - off * 1000
@@ -266,6 +269,8 @@ def fix_config():
 
 
 def setup_video(c, http_port):
+    c.ev("window.__app.switchMode('long', { force: true }); window.scrollTo(0, 0); true")
+    time.sleep(0.8)
     c.ev(f"""(() => {{
       const s = window.__app.getState();
       const v = document.querySelector('#video');

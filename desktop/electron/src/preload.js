@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('desktop', {
   playerCommand: (payload) => ipcRenderer.invoke('player:command', payload),
   playerState: () => ipcRenderer.invoke('player:state'),
   pageTitle: (url) => ipcRenderer.invoke('page:title', url),
-  pageCover: (url) => ipcRenderer.invoke('page:cover', url),
+  pageCover: (url, title = '') => ipcRenderer.invoke('page:cover', url, title),
   resolveSeries: (payload) => ipcRenderer.invoke('series:resolve', payload),
   downloadCurrent: (payload) => ipcRenderer.invoke('download:start', payload),
   cancelDownload: (id) => ipcRenderer.invoke('download:cancel', id),

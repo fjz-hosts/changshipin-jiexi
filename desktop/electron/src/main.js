@@ -41,7 +41,7 @@ const {
   PREVIEW_MAX_SECONDS,
   SAMPLE_URL,
 } = require('./lines')
-const { resolveSeries } = require('./series')
+const { resolveSeries, resolvePlatformCover } = require('./series')
 const { DownloadManager } = require('./download')
 const { PLATFORMS, detectPlatformByUrl, platformByKey } = require('./platforms')
 const { SHORT_PLATFORMS, resolveShort, detectShortPlatform } = require('./shortvideo')
@@ -1068,33 +1068,41 @@ async function resolvePageTitle(rawUrl) {
 // 渲染层会用平台色占位图，不影响历史记录本身。
 const coverCache = new Map()
 
-async function resolvePageCover(rawUrl) {
+async function resolvePageCover(rawUrl, title = '') {
   if (!isHttpUrl(rawUrl)) return ''
   const cached = coverCache.get(rawUrl)
   if (cached && Date.now() - cached.at < 30 * 60 * 1000) return cached.cover
   const platform = detectPlatformByUrl(rawUrl)
   let cover = ''
+  // 平台官方接口最可靠：腾讯 / 芒果的播放页本身没有 og:image，爱奇艺页面会返回风控页。
   try {
-    const response = await net.fetch(rawUrl, {
-      redirect: 'follow',
-      headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6' },
-    })
-    if (response.ok) {
-      const text = await response.text()
-      const patterns = [
-        /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)/i,
-        /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i,
-      ]
-      for (const pattern of patterns) {
-        const match = text.match(pattern)
-        if (match && match[1]) {
-          cover = match[1].trim()
-          break
+    cover = await resolvePlatformCover(rawUrl, title)
+  } catch {
+    /* 下面继续尝试页面 meta */
+  }
+  if (!cover) {
+    try {
+      const response = await net.fetch(rawUrl, {
+        redirect: 'follow',
+        headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6' },
+      })
+      if (response.ok) {
+        const text = await response.text()
+        const patterns = [
+          /<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)/i,
+          /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i,
+        ]
+        for (const pattern of patterns) {
+          const match = text.match(pattern)
+          if (match && match[1]) {
+            cover = match[1].trim()
+            break
+          }
         }
       }
+    } catch {
+      /* 没有封面也能正常看历史 */
     }
-  } catch {
-    /* 没有封面也能正常看历史 */
   }
   // 有些平台对普通请求返回风控页，读不到 og:image；用隐藏窗口渲染一次再读。
   if (!cover && platform) {
@@ -1307,7 +1315,7 @@ function registerIpc() {
 
   ipcMain.handle('page:title', async (_event, url) => resolvePageTitle(normalizeUrlText(url)))
 
-  ipcMain.handle('page:cover', async (_event, url) => resolvePageCover(normalizeUrlText(url)))
+  ipcMain.handle('page:cover', async (_event, url, title = '') => resolvePageCover(normalizeUrlText(url), String(title || '')))
 
   // 选集：按平台从页面 / 官方接口取分集列表（QQ、芒果、优酷不需要打开页面，爱奇艺会开一个隐藏页读 tvid）
   ipcMain.handle('series:resolve', async (_event, payload = {}) => {

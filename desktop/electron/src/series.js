@@ -519,6 +519,125 @@ async function fetchMgtvEpisodes(url, { pageTitle = '', cookie = '' } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// 观看历史封面：各平台页面不给 og:image 时，从官方接口取一张海报
+// ---------------------------------------------------------------------------
+
+function firstMatch(text, pattern) {
+  const match = String(text || '').match(pattern)
+  return match ? String(match[1] || '').replace(/\\\//g, '/').trim() : ''
+}
+
+async function fetchQQCover(url) {
+  const cid = qqCoverId(url)
+  if (!cid) return ''
+  const headers = {
+    'content-type': 'application/json',
+    referer: `https://v.qq.com/x/cover/${cid}.html`,
+    accept: 'application/json, text/plain, */*',
+    'user-agent': UA,
+  }
+  const body = JSON.stringify({
+    page_params: {
+      req_from: 'web_vsite',
+      page_id: 'vsite_episode_list',
+      page_type: 'detail_operation',
+      id_type: '1',
+      page_size: '1',
+      cid,
+      vid: '',
+      lid: '',
+      page_num: '0',
+      page_context: '',
+      detail_page_type: '1',
+      req_type: '6',
+      req_from_second_type: '',
+      year: '',
+      tab_type: '',
+      chapter_name: '',
+      is_nocopyright: 'false',
+    },
+    has_cache: 1,
+  })
+  const response = await fetchJson(QQ_PAGE_URL, { method: 'POST', headers, body })
+  // 接口里每集带 image_url（竖版海报）；不依赖具体层级，直接取第一个。
+  return firstMatch(JSON.stringify(response.json || {}), /"image_url"\s*:\s*"([^"]+)"/i)
+}
+
+async function fetchMgtvCover(url) {
+  const videoId = mgtvVideoId(url)
+  if (!videoId) return ''
+  const response = await fetchJson(
+    `https://pcweb.api.mgtv.com/episode/list?_support=10000000&version=5.5.35&video_id=${videoId}&page=1&size=100`,
+    {
+      headers: {
+        referer: url,
+        accept: 'application/json, text/plain, */*',
+        'user-agent': UA,
+      },
+    },
+  )
+  const list = Array.isArray(response.json?.data?.list) ? response.json.data.list : []
+  if (!list.length) return ''
+  const hit = list.find((item) => String(item.video_id) === String(videoId)) || list[0]
+  // 接口给的是 220x125 的剧集缩略图；历史卡片只有 78x50，够用。
+  return clean(hit?.img, 1000)
+}
+
+async function fetchIqiyiCover(title) {
+  const keyword = clean(title, 60)
+    .replace(/第\s*\d+\s*[集期话回].*$/, '')
+    .replace(/[-_|].*$/, '')
+    .trim()
+  if (!keyword) return ''
+  const target =
+    'https://mesh.if.iqiyi.com/portal/lw/search/homePageV3?key=' +
+    encodeURIComponent(keyword) +
+    '&pageNum=1&pageSize=10&source=default'
+  const response = await fetchJson(target, {
+    headers: { referer: 'https://www.iqiyi.com/', 'user-agent': UA, accept: 'application/json' },
+  })
+  const templates = response.json?.data?.templates || []
+  const normalize = (value) => clean(value, 120).replace(/[\s·:：_\-—,，.。!！?？、/\\()（）《》「」【】]/g, '')
+  const wanted = normalize(keyword)
+  for (const template of templates) {
+    const album = template?.albumInfo
+    if (!album) continue
+    const name = normalize(album.title || album.name)
+    // 搜索接口可能把「庆余年 第二季」写成「庆余年第二季」，比较时去掉空格和标点
+    if (name && wanted && !name.includes(wanted) && !wanted.includes(name)) continue
+    const image = clean(album.imgH || album.img || album.image, 1000)
+    if (image) return image
+  }
+  return ''
+}
+
+async function fetchYoukuCover(url) {
+  const response = await fetchText(url, {
+    headers: { referer: 'https://www.youku.com/', 'user-agent': UA },
+    timeout: 12000,
+  })
+  if (!response.ok) return ''
+  return (
+    firstMatch(response.text, /<meta[^>]+(?:property|name)=["']og:image["'][^>]+content=["']([^"']+)/i) ||
+    firstMatch(response.text, /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i)
+  )
+}
+
+async function resolvePlatformCover(url, title = '') {
+  const platform = detectPlatformByUrl(String(url || ''))
+  if (!platform || platform.key === 'browser') return ''
+  try {
+    if (platform.key === 'qq') return await fetchQQCover(url)
+    if (platform.key === 'mgtv') return await fetchMgtvCover(url)
+    if (platform.key === 'iqiyi') return await fetchIqiyiCover(title)
+    if (platform.key === 'youku') return await fetchYoukuCover(url)
+  } catch {
+    /* 封面失败不影响播放 / 历史 */
+  }
+  return ''
+}
+
+// ---------------------------------------------------------------------------
 // 对外入口
 // ---------------------------------------------------------------------------
 
@@ -560,6 +679,7 @@ async function resolveSeries({ url, hint = {}, force = false } = {}) {
 
 module.exports = {
   resolveSeries,
+  resolvePlatformCover,
   fetchIqiyiEpisodes,
   fetchQQEpisodes,
   fetchYoukuEpisodes,

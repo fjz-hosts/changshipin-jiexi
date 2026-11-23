@@ -306,6 +306,7 @@ def capture_playing(c, http_port):
           box(c, '#episode-toggle', 6, badge='top')],
          dim=0.34, crop=ep_crop)
 
+    js(c, "const l=document.querySelector('#history-list'); if (l) l.scrollTop = 0; true", 0.4)
     hist = rect(c, '.history-panel')
     hist_crop = None
     if hist:

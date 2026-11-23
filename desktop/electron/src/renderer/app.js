@@ -3105,7 +3105,7 @@
     }
     // 观看历史封面：解析成功时顺手抓一次平台海报，抓到就写回历史，卡片左图右文更好认
     window.desktop
-      .pageCover(state.currentVideoUrl)
+      .pageCover(state.currentVideoUrl, title)
       .then((cover) => {
         if (!cover) return null
         return window.desktop.updateHistory({ url: state.currentVideoUrl, cover }).then((history) => {
@@ -3126,6 +3126,17 @@
           return window.desktop.updateHistory({ url: targetUrl, title: cleaned, episode: ep }).then((history) => {
             state.config.history = history
             renderHistory()
+            // 爱奇艺等平台的封面需要剧名：标题补全后再抓一次
+            window.desktop
+              .pageCover(targetUrl, cleaned)
+              .then((cover) => {
+                if (!cover) return null
+                return window.desktop.updateHistory({ url: targetUrl, cover }).then((next) => {
+                  state.config.history = next
+                  renderHistory()
+                })
+              })
+              .catch(() => {})
             if (state.currentVideoUrl === targetUrl) {
               state.currentTitle = cleaned
               state.currentEpisode = ep
@@ -3483,10 +3494,10 @@
   // 旧版本只存了网址；启动后在后台补一次标题和封面，最多 4 条，避免拖慢启动
   async function backfillHistoryCovers() {
     const history = state.config?.history || []
-    const missing = history.filter((item) => !item.cover).slice(0, 3)
+    const missing = history.filter((item) => !item.cover).slice(0, 12)
     for (const item of missing) {
       try {
-        const cover = await window.desktop.pageCover(item.url)
+        const cover = await window.desktop.pageCover(item.url, item.title)
         if (!cover) continue
         state.config.history = await window.desktop.updateHistory({ url: item.url, cover })
         renderHistory()
