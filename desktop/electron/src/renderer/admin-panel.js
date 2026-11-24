@@ -40,7 +40,15 @@
       return
     }
     const url = `${base}/admin/`
-    if (state.loadedUrl !== url) {
+    // 面板是远端页面，后台改版后不能让客户端一直显示旧内容：
+    // 每次打开都重新加载一次（已登录状态在分区里，不用重新输密码）。
+    if (state.loadedUrl === url) {
+      try {
+        view.reload()
+      } catch {
+        view.src = url
+      }
+    } else {
       state.loadedUrl = url
       showFallback(false)
       view.src = url

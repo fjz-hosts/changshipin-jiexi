@@ -40,7 +40,22 @@ app.use('/api/feedback', feedbackRouter)
 app.use('/api/telemetry', telemetryRouter)
 app.use('/api/admin', adminRouter)
 
-app.use('/admin', express.static(path.join(config.publicDir, 'admin'), { index: 'index.html' }))
+// 后台页面会被桌面端的 webview 内嵌，改版后不能让客户端继续用缓存的旧页面：
+// HTML / CSS / JS 一律 no-store，只有图标这类静态资源允许短缓存。
+app.use(
+  '/admin',
+  express.static(path.join(config.publicDir, 'admin'), {
+    index: 'index.html',
+    etag: true,
+    setHeaders: (res, filePath) => {
+      if (/\.(?:html|css|js)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-store, must-revalidate')
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+      }
+    },
+  }),
+)
 
 app.use('/api', (_req, res) => res.status(404).json({ ok: false, error: '接口不存在' }))
 

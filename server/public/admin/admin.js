@@ -628,12 +628,16 @@
   function showLogin() {
     $('#login-view').hidden = false
     $('#app-view').hidden = true
+    window.scrollTo(0, 0)
+    $('#login-password').value = ''
+    $('#login-account')?.focus()
   }
 
   function showApp() {
     $('#login-view').hidden = true
     $('#app-view').hidden = false
     $('#admin-name').textContent = state.user?.username || state.user?.email || ''
+    window.scrollTo(0, 0)
     startAutoRefresh()
   }
 

@@ -14,7 +14,9 @@ export function getPool() {
     ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
     max: Number(process.env.PG_POOL_MAX) || 5,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
+    // Supabase 免费实例偶尔会冷启动，10 秒容易直接超时，放宽到 20 秒
+    connectionTimeoutMillis: 20_000,
+    keepAlive: true,
   })
   pool.on('error', (error) => {
     console.error('[db] 空闲连接异常', error?.message || error)

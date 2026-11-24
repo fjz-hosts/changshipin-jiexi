@@ -16,6 +16,12 @@
   box-sizing: border-box;
 }
 
+/* 关键：登录页和数据面板是两屏，靠 hidden 切换；不写这条会被下面的 display 规则覆盖，
+   两屏会上下叠在一起，得往下滚才能看到面板。 */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -92,9 +98,9 @@ select:focus {
   font-size: 13px;
 }
 
-/* 登录 */
+/* 登录：独立一屏，登录成功后整屏换成数据面板 */
 .login-wrap {
-  min-height: 100%;
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -105,18 +111,37 @@ select:focus {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 26px 24px;
+  padding: 28px 24px;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  text-align: left;
+}
+
+.login-logo {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  margin: 0 auto 16px;
+  box-shadow: 0 10px 24px rgba(52, 179, 241, 0.28);
 }
 
 .login-card h1 {
   font-size: 18px;
   margin: 0 0 6px;
+  text-align: center;
 }
 
 .login-card p {
   margin: 0 0 18px;
   font-size: 13px;
+  text-align: center;
+}
+
+.login-card p.error {
+  margin: 10px 0 0;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--red);
 }
 
 .login-card label {
@@ -163,14 +188,12 @@ select:focus {
 }
 
 .brand-badge {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 32px;
+  height: 32px;
   border-radius: 9px;
-  background: linear-gradient(145deg, #34b3f1, #7c5cff);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 15px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .brand strong {
