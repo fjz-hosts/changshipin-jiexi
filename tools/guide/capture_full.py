@@ -414,6 +414,45 @@ def capture_playing(c, http_port):
          dim=0.2, crop=modal_crop(c, '#modal'))
     click(c, '#modal-close', 0.6)
 
+    # 登录闸门 + 反馈页签（v1.5.0 新增）
+    js(c, """(() => {
+      document.querySelectorAll('.modal-mask').forEach((m) => { m.hidden = true });
+      const gate = document.querySelector('#account-gate');
+      gate.hidden = false;
+      document.querySelector('#gate-msg').textContent = '';
+      return true;
+    })()""", 0.9)
+    snap(c, 'g-gate', 'guide-14-login',
+         [box(c, '#gate-tabs', 1, badge='top'),
+          box(c, '#gate-account', 2),
+          box(c, '#gate-password', 3),
+          box(c, '#gate-password-form button[type="submit"]', 4, badge='right'),
+          box(c, '#gate-tabs button[data-gate-tab="register"]', 5, badge='top')],
+         dim=0.16, crop=panel_shot(c, '.gate-shell', width=900).get('crop'))
+    js(c, "document.querySelector('#account-gate').hidden = true; true", 0.6)
+
+    click(c, '#btn-settings', 0.8)
+    click(c, '#modal-tabs button[data-tab="feedback"]', 0.9)
+    js(c, """(() => {
+      const box = document.querySelector('#fb-mine');
+      if (box) {
+        box.innerHTML = '<div class="fb-item">' +
+          '<header><span class="fb-tag replied">已回复</span><span class="fb-tag">功能建议</span><span>★ 5</span><span>2026/11/24 12:40</span></header>' +
+          '<div class="content">希望增加一个「按平台筛选历史」的开关。</div>' +
+          '<div class="reply"><b>作者回复</b> · 2026/11/24 13:05<br>已记录，下个版本加上。</div>' +
+          '</div>';
+      }
+      return true;
+    })()""", 0.5)
+    snap(c, 'g-feedback', 'guide-14-feedback',
+         [box(c, '#fb-type', 1, badge='right'),
+          box(c, '#fb-rating', 2, badge='right'),
+          box(c, '#fb-content', 3),
+          box(c, '#fb-form button[type="submit"]', 4, badge='top'),
+          box(c, '#fb-mine', 5)],
+         dim=0.2, crop=modal_crop(c, '#modal'))
+    click(c, '#modal-close', 0.6)
+
     # 下载目录（播放页的下载 / 离线分组）
     click(c, '#btn-settings', 0.8)
     click(c, '#modal-tabs button[data-tab="play"]', 0.7)

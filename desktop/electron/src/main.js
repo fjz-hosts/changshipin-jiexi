@@ -29,6 +29,8 @@ const { Store } = require('./store')
 const { StreamProxy } = require('./proxy')
 const { CastManager } = require('./cast')
 const { UpdateManager } = require('./updater')
+const { AccountManager } = require('./account')
+const { apiBase } = require('./api-config')
 const {
   DEFAULT_LINES,
   UA,
@@ -138,6 +140,7 @@ let caster = null
 let updater = null
 let downloader = null
 let musicDownloader = null
+let account = null
 let lastStream = null
 let quitting = false
 let trayNoticeShown = false
@@ -1263,6 +1266,22 @@ function isFinishedDownload(item) {
   return Boolean(item) && item.status !== 'queued' && item.status !== 'running'
 }
 
+// 账号类 IPC 统一兜底：把异常转成 {ok:false,error}，避免渲染层拿到一句
+// "Error invoking remote method" 这种没法展示的消息。
+async function accountCall(fn) {
+  if (!account) return { ok: false, error: '账号模块还没准备好' }
+  try {
+    return await fn(account)
+  } catch (error) {
+    return {
+      ok: false,
+      error: String(error?.message || error).slice(0, 160),
+      network: Boolean(error?.network),
+      status: Number(error?.status) || 0,
+    }
+  }
+}
+
 function registerIpc() {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -1273,10 +1292,44 @@ function registerIpc() {
     userData: userDataDir,
     logDir: LOG_DIR,
     sampleUrl: SAMPLE_URL,
+    // 冒烟测试 / 本地联调时跳过登录闸门
+    smoke: isSmoke,
+    skipLogin: process.env.CHANGSPIN_SKIP_LOGIN === '1',
     // 下载目录（界面 / 自动化测试用它定位记录对应的文件）
     downloadDir: downloader?.folder || '',
     musicDir: musicDownloader?.folder || '',
   }))
+
+  // 账号 / 反馈 / 使用统计（服务端在 server/，客户端只通过 HTTPS 调接口）
+  ipcMain.handle('account:state', () => (account ? account.getState() : { configured: false, hasSession: false }))
+  ipcMain.handle('account:bootstrap', () => accountCall((manager) => manager.bootstrap()))
+  ipcMain.handle('account:refresh', () => accountCall((manager) => manager.refresh()))
+  ipcMain.handle('account:login', (_event, payload = {}) => accountCall((manager) => manager.login(payload)))
+  ipcMain.handle('account:login-code', (_event, payload = {}) => accountCall((manager) => manager.loginWithCode(payload)))
+  ipcMain.handle('account:register', (_event, payload = {}) => accountCall((manager) => manager.register(payload)))
+  ipcMain.handle('account:send-code', (_event, payload = {}) =>
+    accountCall((manager) => manager.sendCode(String(payload.purpose || 'login'), String(payload.email || ''))),
+  )
+  ipcMain.handle('account:reset-password', (_event, payload = {}) =>
+    accountCall((manager) => manager.resetPassword(payload)),
+  )
+  ipcMain.handle('account:change-password', (_event, payload = {}) =>
+    accountCall((manager) => manager.changePassword(payload)),
+  )
+  ipcMain.handle('account:logout', () => accountCall((manager) => manager.logout()))
+  ipcMain.handle('account:feedback-submit', (_event, payload = {}) =>
+    accountCall((manager) => manager.submitFeedback(payload)),
+  )
+  ipcMain.handle('account:feedback-mine', () => accountCall((manager) => manager.myFeedback()))
+  ipcMain.handle('account:feedback-unread', () => accountCall((manager) => manager.unreadCount()))
+  ipcMain.handle('account:feedback-seen', (_event, ids = []) => accountCall((manager) => manager.markFeedbackSeen(ids)))
+  ipcMain.handle('account:track', (_event, payload = {}) => {
+    account?.track(String(payload.event || ''), payload)
+    return { ok: true }
+  })
+  ipcMain.handle('account:telemetry', (_event, enabled) =>
+    accountCall((manager) => manager.setTelemetryEnabled(enabled)),
+  )
 
   ipcMain.handle('config:get', () => store.snapshot())
 
@@ -1343,6 +1396,27 @@ function registerIpc() {
     const lines = store.get('lines') || []
     const line = lines.find((item) => item.id === payload.lineId) || lines.find((item) => item.enabled)
     if (!line) return { ok: false, error: '没有可用的解析线路，请先在「线路管理」里启用一条线路' }
+    // 上报：平台 / 线路类型 / 成功失败 / 耗时 / 标题（不存完整带参数的链接）
+    const started = Date.now()
+    const platformInfo = detectPlatformByUrl(url)
+    const trackParse = (result, extra = {}) => {
+      account?.track('parse', {
+        platform: platformInfo?.name || '',
+        lineKind: line.kind || '',
+        result,
+        durationMs: Date.now() - started,
+        url,
+        ...extra,
+      })
+      if (result === 'fail') {
+        account?.track('error', {
+          platform: platformInfo?.name || '',
+          lineKind: line.kind || '',
+          errorCode: String(extra.errorCode || '解析失败'),
+          url,
+        })
+      }
+    }
     try {
       let cookieHeader = ''
       if (line.kind === 'mgtv' || line.kind === 'native') {
@@ -1365,6 +1439,7 @@ function registerIpc() {
       if (result.kind === 'page') {
         clearParseMedia()
         log(`解析 ${line.name} → 页面 ${result.url}`)
+        trackParse('ok')
         return { ok: true, kind: 'page', url: result.url, line: publicLine(line), platform: detectPlatformByUrl(url)?.name || '未知' }
       }
       if (result.kind === 'stream') {
@@ -1393,6 +1468,7 @@ function registerIpc() {
           duration: Number(media.duration) || 0,
         }
         log(`解析 ${line.name} → 流地址 ${result.streamUrl}（${media.duration || '?'} 秒${trial ? ' · 试看' : ''}）`)
+        trackParse('ok', { title: result.title || '' })
         return {
           ok: true,
           kind: 'stream',
@@ -1409,9 +1485,11 @@ function registerIpc() {
       if (result.kind === 'none') {
         log(`解析失败 ${line.name}：${result.error || '没有返回可播放地址'}`)
       }
+      trackParse('fail', { errorCode: result.error || '线路没有返回可播放地址' })
       return { ok: false, error: result.error || '线路没有返回可播放的地址' }
     } catch (error) {
       log(`解析失败 ${line.name}：${error?.message || error}`)
+      trackParse('fail', { errorCode: String(error?.message || error) })
       return { ok: false, error: String(error?.message || error).slice(0, 160) }
     }
   })
@@ -1429,6 +1507,13 @@ function registerIpc() {
       lineName: lastStream.lineName,
     })
     if (result.ok) log(`[下载] 开始 ${title}（${lastStream.lineName}）`)
+    account?.track('download', {
+      platform: lastStream.platform || '',
+      title,
+      result: result.ok ? 'ok' : 'fail',
+      url: lastStream.videoUrl || '',
+      errorCode: result.ok ? '' : result.error || '下载器拒绝任务',
+    })
     return result
   })
 
@@ -1551,6 +1636,12 @@ function registerIpc() {
       deviceId: String(payload.deviceId || ''),
     })
     if (result.ok) log(`[投屏] 已推送到「${result.device?.name || '设备'}」`)
+    account?.track('cast', {
+      platform: '投屏',
+      title: String(payload.title || ''),
+      result: result.ok ? 'ok' : 'fail',
+      errorCode: result.ok ? '' : result.error || '投屏失败',
+    })
     return result
   })
 
@@ -1720,12 +1811,41 @@ function registerIpc() {
           `[短视频] ${platform.name} 解析成功：${proxied.title}，${proxied.qualities.length} 个清晰度，` +
             `${proxied.episodes?.length || 0} 集，${Date.now() - started}ms`,
         )
+        account?.track('short_resolve', {
+          platform: platform.name,
+          subPlatform: platform.key,
+          result: 'ok',
+          durationMs: Date.now() - started,
+          title: proxied.title || '',
+          url,
+        })
         return proxied
       }
       log(`[短视频] ${platform.name} 解析失败：${result.error || '未知错误'}，${Date.now() - started}ms`)
+      account?.track('short_resolve', {
+        platform: platform.name,
+        subPlatform: platform.key,
+        result: 'fail',
+        durationMs: Date.now() - started,
+        errorCode: result.error || '解析失败',
+        url,
+      })
+      account?.track('error', {
+        platform: platform.name,
+        errorCode: String(result.error || '短视频解析失败'),
+        url,
+      })
       return result
     } catch (error) {
       log(`[短视频] ${platform.name} 解析异常：${error?.stack || error}`)
+      account?.track('short_resolve', {
+        platform: platform.name,
+        subPlatform: platform.key,
+        result: 'fail',
+        durationMs: Date.now() - started,
+        errorCode: String(error?.message || error),
+        url,
+      })
       return { ok: false, error: String(error?.message || error).slice(0, 160) }
     }
   })
@@ -1750,6 +1870,14 @@ function registerIpc() {
       dash: payload.dash && typeof payload.dash === 'object' ? payload.dash : null,
     })
     if (result.ok) log(`[短视频下载] 开始 ${payload.title || url}`)
+    account?.track('short_download', {
+      platform: String(payload.platform || platform?.name || '短视频'),
+      subPlatform: platform?.key || '',
+      title: String(payload.title || ''),
+      result: result.ok ? 'ok' : 'fail',
+      url: payload.pageUrl || payload.referer || '',
+      errorCode: result.ok ? '' : result.error || '下载器拒绝任务',
+    })
     return result
   })
 
@@ -1819,6 +1947,13 @@ function registerIpc() {
     try {
       const result = await searchMusic({ platform, keyword, cookie })
       log(`[音乐] ${platform} 搜索「${keyword}」：${result.ok ? result.songs.length : 0} 条，${Date.now() - started}ms`)
+      account?.track('music_search', {
+        platform,
+        title: keyword,
+        result: result.ok ? 'ok' : 'fail',
+        durationMs: Date.now() - started,
+        errorCode: result.ok ? '' : result.error || '搜索失败',
+      })
       return result
     } catch (error) {
       log(`[音乐] 搜索异常：${error?.stack || error}`)
@@ -1844,6 +1979,13 @@ function registerIpc() {
         `[音乐] ${platform} ${result.ok ? '解析成功' : '解析失败'}：${song.title || song.id} ${result.via || ''} ` +
           `${Date.now() - started}ms ${result.error || ''}`,
       )
+      account?.track('music_resolve', {
+        platform,
+        title: String(song.title || song.name || ''),
+        result: result.ok ? 'ok' : 'fail',
+        durationMs: Date.now() - started,
+        errorCode: result.ok ? '' : result.error || '解析失败',
+      })
       return attachMusicProxy(result)
     } catch (error) {
       log(`[音乐] 解析异常：${error?.stack || error}`)
@@ -1886,6 +2028,12 @@ function registerIpc() {
       result.preview = Boolean(resolved.preview)
       result.format = resolved.format || format
     }
+    account?.track('music_download', {
+      platform,
+      title: String(resolved.title || song.title || song.name || ''),
+      result: result.ok ? 'ok' : 'fail',
+      errorCode: result.ok ? '' : result.error || '下载器拒绝任务',
+    })
     return result
   })
 
@@ -2022,6 +2170,13 @@ app.on('before-quit', () => {
   } catch (error) {
     log(`[退出] caster.dispose 失败：${error?.message || error}`)
   }
+  try {
+    // 尽量把没发出去的上报发掉；发不出去也没关系，队列在本地文件里，下次启动接着发
+    account?.flush().catch(() => {})
+    account?.dispose()
+  } catch (error) {
+    log(`[退出] account 清理失败：${error?.message || error}`)
+  }
 })
 
 app.on('activate', () => {
@@ -2030,6 +2185,8 @@ app.on('activate', () => {
 
 app.whenReady().then(async () => {
   store = new Store(userDataDir)
+  // 账号模块要早于窗口创建：渲染进程一加载就会查询登录状态
+  account = new AccountManager({ userDataDir, apiBase, version: app.getVersion() })
   // 解析页 / 官网窗口都使用普通浏览器 UA
   try {
     session.fromPartition('persist:parse').setUserAgent(UA)
@@ -2095,6 +2252,7 @@ app.whenReady().then(async () => {
   createMainWindow()
   buildMenu()
   createTray()
+  account?.track('launch')
 
   if (store.get('autoUpdate') !== false) {
     updater.init()

@@ -152,7 +152,7 @@ node tools\cdp-test11.mjs   # 切换平台 / 模式时暂停播放
 改界面（布局、按钮、平台卡片、弹窗、提示条、文案）之后，**同一版必须重新生成「使用教程 · 图文版」的截图和 PDF**，
 不能只改代码。用户明确要求过这一条：界面已经改了、教程里还是旧界面，算没做完。
 
-**教程的详细程度以 18 分钟视频教程为准**（用户 2026-11 明确要求）：15 节、46 张图，
+**教程的详细程度以 18 分钟视频教程为准**（用户 2026-11 明确要求）：16 节、48 张图，
 每一句解说词都要在图文里出现，每个按钮 / 每个注意事项都要有对应截图。新增功能时同样补图、补文字，
 不要退回「一章一张截图」的简版。
 
@@ -193,7 +193,9 @@ powershell -ExecutionPolicy Bypass -File desktop\verify.ps1
 - 图里的编号 ①②③ 是 `boxes` 里的 label，figcaption 里的编号必须和它一一对应；界面元素挪了位置就同时改 box 和文案。
 - `capture_full.py` 用 `.tmp\guide\userdata` 和本地 `poster.mp4` / `short-poster.mp4` / `demo.mp3` 演示，不碰正式安装目录；
   短视频、投屏、音乐、找剧都是注入的演示数据，不联网（内置浏览器那张除外，它会真的打开芒果TV首页）。
-- **不要给教程图片加 `loading="lazy"`**：`verify.ps1` 会检查 46 张图是否全部解码，lazy 会让它判失败。
+- **不要给教程图片加 `loading="lazy"`**：`verify.ps1` 会检查 48 张图是否全部解码，lazy 会让它判失败。
+- 教程截图会带 `CHANGSPIN_SKIP_LOGIN=1` 启动（见 `tools/guide/capture.py` 的 `launch()`），
+  否则登录闸门会挡住主界面；登录页那张图是在截图会话里临时取消 `#account-gate` 的 hidden 后拍的。
 - `desktop\verify.ps1` 的「图文教程：入口 / 章节 / 配图加载」一项会核对 `sections` / `navs` / `images` / `loaded`；
   截图或正文没更新，这一项就会挂，别发版。
 

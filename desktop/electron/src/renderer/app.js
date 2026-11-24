@@ -5083,6 +5083,11 @@
   async function init() {
     try {
       state.info = await window.desktop.info()
+      // 启动即登录：闸门通过后才继续加载业务数据；冒烟测试 / 本地联调可以跳过
+      if (!state.info.smoke && !state.info.skipLogin) {
+        const gate = await window.AccountUI?.ensure?.()
+        if (gate && gate.ok === false) return
+      }
       state.config = await window.desktop.getConfig()
       $('#version-text').textContent = `v${state.info.version}`
       $('#set-version').textContent = `v${state.info.version}`

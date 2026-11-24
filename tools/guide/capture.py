@@ -160,6 +160,8 @@ def launch(userdata):
     env = dict(os.environ)
     env.pop('ELECTRON_RUN_AS_NODE', None)
     env['CHANGSPIN_USERDATA'] = userdata
+    # 教程截图不经过登录闸门（登录页单独截图），否则主界面初始化会被挡住
+    env['CHANGSPIN_SKIP_LOGIN'] = '1'
     return subprocess.Popen(
         [EXE, '.', f'--remote-debugging-port={PORT}', '--remote-allow-origins=*', '--no-sandbox', '--disable-gpu'],
         cwd=ELECTRON_DIR,

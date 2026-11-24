@@ -13,6 +13,77 @@
     <link rel="stylesheet" href="guide-changelog.css" />
   </head>
   <body>
+    <!-- 登录闸门：未登录时挡住主界面 -->
+    <div class="account-gate" id="account-gate" hidden>
+      <div class="gate-shell">
+        <aside class="gate-brand">
+          <img src="assets/app-icon.png" alt="" />
+          <h1>音视频解析</h1>
+          <p>登录后即可解析、下载，并直接把问题和修改建议发给作者。</p>
+          <ul>
+            <li>长视频 · 短视频 · 音乐 一站解析</li>
+            <li>反馈在「设置 → 反馈」，作者回复能直接看到</li>
+            <li>登录状态加密保存在本机，30 天内免登录</li>
+          </ul>
+          <small>账号服务：<span id="gate-api">—</span></small>
+        </aside>
+        <section class="gate-card">
+          <nav class="gate-tabs" id="gate-tabs">
+            <button type="button" data-gate-tab="password" class="active">密码登录</button>
+            <button type="button" data-gate-tab="code">验证码登录</button>
+            <button type="button" data-gate-tab="register">注册</button>
+            <button type="button" data-gate-tab="reset">找回密码</button>
+          </nav>
+
+          <form class="gate-pane" id="gate-password-form" data-gate-pane="password">
+            <label>邮箱 / 用户名<input id="gate-account" autocomplete="username" placeholder="you@example.com" /></label>
+            <label>密码<input id="gate-password" type="password" autocomplete="current-password" /></label>
+            <button class="primary-sm gate-submit" type="submit">登录</button>
+          </form>
+
+          <form class="gate-pane" id="gate-code-form" data-gate-pane="code" hidden>
+            <label>邮箱<input id="gate-code-email" type="email" autocomplete="email" /></label>
+            <div class="gate-inline">
+              <label>验证码<input id="gate-code-value" inputmode="numeric" maxlength="6" placeholder="6 位数字" /></label>
+              <button type="button" class="ghost-sm" id="gate-code-send">发送验证码</button>
+            </div>
+            <button class="primary-sm gate-submit" type="submit">登录</button>
+          </form>
+
+          <form class="gate-pane" id="gate-register-form" data-gate-pane="register" hidden>
+            <label>邮箱<input id="gate-reg-email" type="email" autocomplete="email" /></label>
+            <div class="gate-inline">
+              <label>验证码<input id="gate-reg-code" inputmode="numeric" maxlength="6" /></label>
+              <button type="button" class="ghost-sm" id="gate-reg-send">发送验证码</button>
+            </div>
+            <label>用户名<input id="gate-reg-name" maxlength="20" placeholder="2–20 位，可用中文" /></label>
+            <label>密码（至少 6 位）<input id="gate-reg-password" type="password" autocomplete="new-password" /></label>
+            <button class="primary-sm gate-submit" type="submit">注册并登录</button>
+          </form>
+
+          <form class="gate-pane" id="gate-reset-form" data-gate-pane="reset" hidden>
+            <label>注册邮箱<input id="gate-reset-email" type="email" autocomplete="email" /></label>
+            <div class="gate-inline">
+              <label>验证码<input id="gate-reset-code" inputmode="numeric" maxlength="6" /></label>
+              <button type="button" class="ghost-sm" id="gate-reset-send">发送验证码</button>
+            </div>
+            <label>新密码（至少 6 位）<input id="gate-reset-password" type="password" autocomplete="new-password" /></label>
+            <button class="primary-sm gate-submit" type="submit">重置密码</button>
+          </form>
+
+          <p class="gate-msg" id="gate-msg"></p>
+          <p class="gate-foot">
+            只收集解析平台、成功率、耗时和版本号用于改进程序；不保存完整链接参数，可在「设置 → 账号」关闭统计。
+          </p>
+        </section>
+      </div>
+    </div>
+
+    <div class="offline-banner" id="offline-banner" hidden>
+      <span id="offline-text">当前处于离线模式</span>
+      <button class="ghost-sm" id="offline-close">知道了</button>
+    </div>
+
     <div class="app" id="app">
       <header class="topbar">
         <div class="brand">
@@ -709,6 +780,8 @@
           <button data-tab="lines" class="active">解析线路</button>
           <button data-tab="play">播放</button>
           <button data-tab="update">更新</button>
+          <button data-tab="account">账号</button>
+          <button data-tab="feedback">反馈</button>
           <button data-tab="about">关于</button>
         </nav>
         <div class="tab-panes">
@@ -797,6 +870,47 @@
               </div>
               <p class="muted small">版本 <span id="about-version">-</span> · MIT License</p>
             </div>
+          </section>
+
+          <section class="tab-pane" data-pane="account" hidden>
+            <div class="acct-summary" id="acct-summary"></div>
+            <div class="settings-group">修改密码</div>
+            <form class="acct-form" id="acct-password-form">
+              <label>原密码<input id="acct-old-pass" type="password" autocomplete="current-password" /></label>
+              <label>新密码（至少 6 位）<input id="acct-new-pass" type="password" autocomplete="new-password" /></label>
+              <button class="ghost-sm" type="submit">保存新密码</button>
+            </form>
+            <div class="settings-group">隐私与统计</div>
+            <label class="switch-row">
+              <input type="checkbox" id="set-telemetry" />
+              <span>匿名使用统计（平台、成功率、耗时、版本号；不含完整链接参数）</span>
+            </label>
+            <div class="row-btns">
+              <button class="ghost-sm" id="btn-open-admin" hidden>打开数据后台</button>
+              <button class="ghost-sm" id="btn-account-logout">退出登录</button>
+            </div>
+            <p class="muted small" id="acct-hint"></p>
+          </section>
+
+          <section class="tab-pane" data-pane="feedback" hidden>
+            <div class="settings-group">提交反馈 / 修改建议</div>
+            <form class="acct-form" id="fb-form">
+              <label>类型
+                <select id="fb-type">
+                  <option value="bug">故障 / BUG</option>
+                  <option value="feature">功能建议</option>
+                  <option value="experience">体验问题</option>
+                  <option value="other">其它</option>
+                </select>
+              </label>
+              <label>满意度（1–5 星，可不填）<input id="fb-rating" type="number" min="1" max="5" /></label>
+              <label>联系方式（可选）<input id="fb-contact" placeholder="QQ / 微信 / 邮箱" maxlength="120" /></label>
+              <label>内容<textarea id="fb-content" rows="5" maxlength="2000" placeholder="遇到什么问题、希望怎么改，写清楚一点更容易复现"></textarea></label>
+              <button class="primary-sm" type="submit">提交反馈</button>
+            </form>
+            <p class="muted small" id="fb-hint"></p>
+            <div class="settings-group">我的反馈</div>
+            <div class="fb-mine" id="fb-mine"><p class="muted small">还没有提交过反馈。</p></div>
           </section>
         </div>
       </div>
@@ -909,7 +1023,8 @@
             <button data-guide="guide">11 · 使用教程</button>
             <button data-guide="short">12 · 短视频与短剧</button>
             <button data-guide="music">13 · 音乐</button>
-            <button data-guide="faq">14 · 常见问题</button>
+            <button data-guide="account">14 · 账号与反馈</button>
+            <button data-guide="faq">15 · 常见问题</button>
             <div class="guide-nav-foot">按 Esc 或点右上角关闭</div>
             </nav>
             <div class="guide-content" id="guide-content">
@@ -1335,8 +1450,34 @@
               <div class="guide-tip">「换源」换来的音质可能和平台标称不同，介意就登录会员后用原平台音源。</div>
             </section>
 
+            <section class="guide-section" id="guide-account">
+              <h3><span class="guide-step">14</span>账号登录、反馈与数据后台</h3>
+              <p>从 1.5.0 开始，打开程序需要先登录。登录页有四个页签：密码登录、验证码登录、注册、找回密码。登录成功后本机记住 30 天，下次直接进入主界面。</p>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-14-login.webp" alt="① 四种登录方式页签 ② 邮箱 / 用户名 ③ 密码 ④ 登录按钮 ⑤ 没有账号就点「注册」" />
+                <figcaption><b>①</b> 四种登录方式页签　<b>②</b> 邮箱 / 用户名　<b>③</b> 密码　<b>④</b> 登录按钮　<b>⑤</b> 没有账号就点「注册」</figcaption>
+              </figure>
+              <figure class="guide-figure">
+                <img src="assets/guide/guide-14-feedback.webp" alt="① 反馈类型（故障 / 功能建议 / 体验问题 / 其它） ② 满意度 1–5 星 ③ 具体内容（至少 5 个字） ④ 提交 ⑤ 我的反馈与作者回复" />
+                <figcaption><b>①</b> 反馈类型（故障 / 功能建议 / 体验问题 / 其它）　<b>②</b> 满意度 1–5 星　<b>③</b> 具体内容（至少 5 个字）　<b>④</b> 提交　<b>⑤</b> 我的反馈与作者回复</figcaption>
+              </figure>
+              <ul class="guide-points">
+                <li>密码登录：填注册邮箱（或用户名）和密码。验证码登录：填邮箱，点「发送验证码」，把邮件里的 6 位数字填进来即可，不用记密码。</li>
+                <li>注册：先填邮箱点「发送验证码」，再填用户名（2–20 位，可用中文）、密码（至少 6 位）和验证码，注册成功会自动登录。</li>
+                <li>找回密码：填注册邮箱收验证码，再设新密码；验证码 10 分钟内有效，同一邮箱 60 秒内不能重复发送。</li>
+                <li>登录状态用 Windows 的系统安全存储加密保存在本机，30 天内免登录；换电脑或退出登录后需要重新登录。</li>
+                <li>网络不通或服务端临时不可用时，程序会进入离线模式：解析、下载、历史、音乐都照常可用，反馈和使用统计会在恢复网络后自动补传（离线宽限期 7 天）。</li>
+                <li>设置 →「账号」：查看邮箱、用户名、账号类型，修改密码，退出登录；管理员会多一个「打开数据后台」按钮。</li>
+                <li>设置 →「反馈」：选类型、打星、留联系方式、写清楚问题或建议，点提交。提交后能在同一页看到处理状态（待处理 / 处理中 / 已回复 / 已关闭）和作者的回复；有新回复时右上角「设置」按钮会显示红点。</li>
+                <li>数据后台只给管理员用：浏览器打开 https://37lmtdy5bz2ga6o5ozv.traesite.cn/admin/ ，用管理员邮箱和密码登录，可以看在线设备、今日解析量和成功率、平台分布、解析内容 Top、用户漏斗与留存、反馈中心，以及线路质量和错误 Top。</li>
+                <li>隐私：默认只上报平台、线路类型、成功失败、耗时、标题、域名和客户端版本，不保存完整带参数的链接；在「设置 → 账号」里可以随时关闭匿名使用统计。</li>
+              </ul>
+              <div class="guide-tip">收不到验证码：先看垃圾邮件；同一邮箱 60 秒内只能发一次，验证码 10 分钟后过期，过期就重新发送。</div>
+              <div class="guide-tip">反馈被回复后会出现在「设置 → 反馈 → 我的反馈」里，红点表示还有未读回复；点开这一页就会自动标记已读。</div>
+            </section>
+
             <section class="guide-section" id="guide-faq">
-              <h3><span class="guide-step">14</span>常见问题速查</h3>
+              <h3><span class="guide-step">15</span>常见问题速查</h3>
               <p>按现象查：下面每一条都对应上面某个章节里的注意事项，点左侧目录可以回到对应步骤。</p>
               <div class="faq">
                 <h4>常见问题</h4>
@@ -1427,6 +1568,7 @@
     <script src="vendor/hls.min.js"></script>
     <script src="changelog.js"></script>
     <script src="music.js"></script>
+    <script src="account-ui.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
