@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
-const { safeStorage } = require('electron')
+const { safeStorage, nativeImage, dialog } = require('electron')
 
 const REQUEST_TIMEOUT = 12000
 const HEARTBEAT_MS = 60 * 1000
@@ -39,6 +39,10 @@ class AccountManager {
     this.osLabel = `${process.platform} ${os.release()}`.slice(0, 64)
     this.file = path.join(userDataDir, 'account.json')
     this.telemetryFile = path.join(userDataDir, 'telemetry.json')
+    this.avatarFile = path.join(userDataDir, 'avatar.png')
+    this.avatarMetaFile = path.join(userDataDir, 'avatar.json')
+    this.avatarMeta = readJson(this.avatarMetaFile, { email: '', source: '' })
+    this.avatarCache = { mtime: 0, dataUrl: '' }
     this.token = ''
     this.user = null
     this.savedAt = 0
@@ -90,6 +94,142 @@ class AccountManager {
       this.telemetry.queue = this.telemetry.queue.slice(-MAX_QUEUE)
     }
     writeJson(this.telemetryFile, this.telemetry)
+  }
+
+  // ---------- 头像 ----------
+  // 规则：QQ 邮箱（纯数字@qq.com）用 QQ 头像；失败或非 QQ 邮箱由界面显示内置默认头像；
+  // 用户自己上传过的头像优先于这两者（头像文件 + avatar.json 里的邮箱 / 来源）。
+  _avatarEmail() {
+    return String(this.user?.email || '').trim().toLowerCase()
+  }
+
+  _saveAvatarMeta(meta) {
+    this.avatarMeta = { email: this._avatarEmail(), source: 'default', ...meta }
+    writeJson(this.avatarMetaFile, this.avatarMeta)
+  }
+
+  _dropAvatar() {
+    try {
+      fs.rmSync(this.avatarFile, { force: true })
+    } catch {
+      /* 忽略 */
+    }
+    this.avatarCache = { mtime: 0, dataUrl: '' }
+  }
+
+  avatarDataUrl() {
+    try {
+      const stat = fs.statSync(this.avatarFile)
+      if (!stat.size) return ''
+      if (this.avatarCache.mtime === stat.mtimeMs && this.avatarCache.dataUrl) return this.avatarCache.dataUrl
+      const dataUrl = `data:image/png;base64,${fs.readFileSync(this.avatarFile).toString('base64')}`
+      this.avatarCache = { mtime: stat.mtimeMs, dataUrl }
+      return dataUrl
+    } catch {
+      return ''
+    }
+  }
+
+  _squarePng(source) {
+    let image = Buffer.isBuffer(source) ? nativeImage.createFromBuffer(source) : nativeImage.createFromPath(String(source))
+    if (!image || image.isEmpty()) throw new Error('图片格式不支持或文件已损坏')
+    const { width, height } = image.getSize()
+    if (!width || !height) throw new Error('读不出图片尺寸')
+    const side = Math.min(width, height)
+    if (side > 256) {
+      image = image.resize({ width: 256, height: 256, quality: 'best' })
+    } else if (width !== height) {
+      image = image.crop({
+        x: Math.floor((width - side) / 2),
+        y: Math.floor((height - side) / 2),
+        width: side,
+        height: side,
+      })
+    }
+    return image.toPNG()
+  }
+
+  _writeAvatar(png) {
+    fs.mkdirSync(path.dirname(this.avatarFile), { recursive: true })
+    const tmp = `${this.avatarFile}.tmp`
+    fs.writeFileSync(tmp, png)
+    fs.renameSync(tmp, this.avatarFile)
+    this.avatarCache = { mtime: 0, dataUrl: '' }
+  }
+
+  // 拉 QQ 头像：q1.qlogo.cn 对不存在的号码也会返回一张默认头像，所以只要有图就接受。
+  async _fetchQqAvatar() {
+    const email = this._avatarEmail()
+    const matched = /^(\d{5,12})@qq\.com$/.exec(email)
+    if (!matched) return false
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    try {
+      const response = await fetch(`https://q1.qlogo.cn/g?b=qq&nk=${matched[1]}&s=100`, {
+        signal: controller.signal,
+        headers: { Accept: 'image/*' },
+      })
+      if (!response.ok) return false
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (buffer.length < 256) return false
+      this._writeAvatar(this._squarePng(buffer))
+      return true
+    } catch {
+      return false
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  // 登录 / 校验登录态后调用：同一邮箱非 QQ 头像每 6 小时最多尝试一次，避免每次刷新都去拉网络。
+  async ensureAvatar({ force = false } = {}) {
+    const email = this._avatarEmail()
+    if (!email) return { ok: false }
+    if (this.avatarMeta.email !== email) this._dropAvatar()
+    const source = this.avatarMeta.source || ''
+    const triedAt = Number(this.avatarMeta.triedAt) || 0
+    const hasFile = fs.existsSync(this.avatarFile)
+    if (!force && this.avatarMeta.email === email && hasFile) {
+      if (source === 'custom' || source === 'qq') return { ok: true, source }
+      if (source === 'default' && Date.now() - triedAt < 6 * 3600 * 1000) return { ok: true, source }
+    }
+    if (await this._fetchQqAvatar()) {
+      this._saveAvatarMeta({ email, source: 'qq', triedAt: Date.now() })
+      return { ok: true, source: 'qq' }
+    }
+    this._saveAvatarMeta({ email, source: 'default', triedAt: Date.now() })
+    return { ok: true, source: 'default' }
+  }
+
+  async pickAvatar() {
+    const result = await dialog.showOpenDialog({
+      title: '选择头像图片',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+    })
+    const file = !result.canceled && result.filePaths?.[0]
+    if (!file) return { ok: true, canceled: true }
+    const stat = fs.statSync(file)
+    if (stat.size > 12 * 1024 * 1024) return { ok: false, error: '图片太大（超过 12MB），换一张小一点的' }
+    try {
+      this._writeAvatar(this._squarePng(file))
+      this._saveAvatarMeta({ source: 'custom' })
+      return { ok: true, state: this.getState() }
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error).slice(0, 120) }
+    }
+  }
+
+  async resetAvatar() {
+    this._dropAvatar()
+    this._saveAvatarMeta({ email: '', source: 'default' })
+    await this.ensureAvatar({ force: true })
+    return { ok: true, state: this.getState() }
+  }
+
+  async avatarState() {
+    await this.ensureAvatar().catch(() => {})
+    return { ok: true, avatar: this.avatarDataUrl(), avatarSource: this.avatarMeta.source || '' }
   }
 
   async request(pathname, { method = 'GET', body, auth = true, timeout = REQUEST_TIMEOUT } = {}) {
@@ -151,6 +291,8 @@ class AccountManager {
       installId: this.telemetry.installId,
       telemetryEnabled: this.telemetry.enabled !== false,
       lastError: this.lastError,
+      avatar: this.avatarDataUrl(),
+      avatarSource: this.avatarMeta.email === this._avatarEmail() ? this.avatarMeta.source || '' : '',
     }
   }
 
@@ -161,6 +303,7 @@ class AccountManager {
     this.online = true
     this.lastError = ''
     this._save()
+    this.ensureAvatar().catch(() => {})
   }
 
   async login({ account, password }) {
@@ -238,6 +381,7 @@ class AccountManager {
       this.savedAt = Date.now()
       this._save()
       this._startTimers()
+      this.ensureAvatar().catch(() => {})
       return { ok: true, offline: false, user: this.user }
     } catch (error) {
       if (error.status === 401 || error.status === 403) {
@@ -265,6 +409,7 @@ class AccountManager {
       this.lastError = ''
       this.savedAt = Date.now()
       this._save()
+      this.ensureAvatar().catch(() => {})
       return { ok: true, user: this.user, unread: this.unread }
     } catch (error) {
       if (error.status === 401 || error.status === 403) {

@@ -22,6 +22,32 @@
   display: none !important;
 }
 
+/* 滚动条：和客户端「登录与限制」弹窗一致——黑色轨道 + 灰色细圆角滑块，
+   不要 Chromium 默认的浅灰宽滚动条（那条会带白边、和深色界面很突兀）。
+   注意别写 scrollbar-width/scrollbar-color：Chromium 一旦拿到标准属性就会改用
+   原生滚动条（带上下箭头），::-webkit-* 就不生效了。 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d333c;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a414c;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html,
 body {
   margin: 0;

@@ -64,12 +64,22 @@ body::before {
   height: 8px;
 }
 
+/* 固定灰色滑块 + 透明（黑）轨道：跟「登录与限制」弹窗一致，
+   不再用白色半透明，避免在浅一点的背景上发白、像一条白边。 */
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: #2d333c;
   border-radius: 999px;
 }
 
+::-webkit-scrollbar-thumb:hover {
+  background: #3a414c;
+}
+
 ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -4163,72 +4173,431 @@ body.mode-short.browser-open .short-panel {
   transform: translateX(-50%);
 }
 
-.acct-summary {
+/* ===== 设置 · 账号（顶部账号信息 + 头像，下面是改密卡片） ===== */
+.acct-pane {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.acct-summary .row {
-  display: flex;
-  justify-content: space-between;
   gap: 12px;
-  font-size: 12.5px;
-  color: var(--muted);
 }
 
-.acct-summary .row b {
+.acct-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(440px 170px at 6% -20%, rgba(55, 224, 139, 0.13), transparent 70%),
+    radial-gradient(360px 160px at 96% 120%, rgba(41, 186, 255, 0.1), transparent 70%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.acct-hero-info {
+  min-width: 0;
+}
+
+.acct-hero-email {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   color: var(--text);
-  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.acct-form {
+.acct-hero-meta {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.acct-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
   font-size: 11.5px;
   color: var(--muted);
 }
 
-.acct-form input,
-.acct-form select,
-.acct-form textarea {
-  padding: 8px 10px;
-  border: 1px solid var(--line);
+.acct-dot {
+  color: var(--faint);
+}
+
+.acct-hero-id {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.acct-hero-name {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.acct-avatar {
+  position: relative;
+  flex: none;
+  width: 62px;
+  height: 62px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: #0b1420;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.acct-avatar:hover,
+.acct-avatar:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.acct-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.acct-avatar-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  padding: 0 5px;
   border-radius: 8px;
-  background: #070d16;
+  background: rgba(3, 10, 7, 0.78);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 15px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.acct-avatar:hover .acct-avatar-badge,
+.acct-avatar:focus-visible .acct-avatar-badge {
+  opacity: 1;
+}
+
+.acct-avatar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-width: 178px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #0d1624;
+  box-shadow: 0 20px 44px -20px rgba(0, 0, 0, 0.92);
+}
+
+.acct-avatar-menu button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acct-avatar-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.acct-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.acct-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgba(55, 224, 139, 0.42);
+  border-radius: 999px;
+  background: rgba(55, 224, 139, 0.1);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.acct-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.acct-status.offline {
+  border-color: rgba(255, 196, 92, 0.4);
+  background: rgba(255, 196, 92, 0.08);
+  color: var(--warn);
+}
+
+.acct-card {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.acct-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.acct-card-head h3 {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.acct-pass-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+  align-items: end;
+}
+
+.acct-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.acct-field label {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.acct-field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
   color: var(--text);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   outline: none;
 }
 
-.acct-form textarea {
-  min-height: 96px;
-  line-height: 1.6;
+.acct-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(55, 224, 139, 0.1);
+}
+
+/* 改密卡片底部：左边小字提示、右边保存按钮，和反馈页的提交行一个排法 */
+.acct-pass-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+
+.acct-pass-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+
+.acct-pass-foot .primary-sm {
+  flex: none;
+  height: 38px;
+  min-width: 132px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.acct-privacy {
+  margin-top: 2px;
+}
+
+.acct-foot {
+  margin-top: 0;
+}
+
+/* ===== 设置 · 反馈（大标题 + 通栏字段 + 底部提交） ===== */
+.fb-title {
+  margin: 2px 0 18px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.fb-title-main {
+  color: var(--accent);
+}
+
+.fb-title-sep {
+  margin: 0 8px;
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.fb-title-sub {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.fb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fb-field > label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fb-field input,
+.fb-field select,
+.fb-field textarea {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fb-field textarea {
+  height: auto;
+  min-height: 150px;
+  padding: 12px 14px;
+  line-height: 1.7;
   resize: vertical;
 }
 
-.acct-form input:focus,
-.acct-form select:focus,
-.acct-form textarea:focus {
+.fb-field input:focus,
+.fb-field select:focus,
+.fb-field textarea:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(55, 224, 139, 0.1);
 }
 
-.acct-form button {
-  align-self: flex-start;
+.fb-select {
+  position: relative;
+}
+
+.fb-select select {
+  appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.fb-select::after {
+  content: '⌃';
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-40%) rotate(180deg);
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.fb-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 3px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.fb-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.fb-note-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 6px;
+  background: rgba(55, 224, 139, 0.14);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fb-note-text b {
+  display: block;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.fb-note-text span {
+  color: var(--faint);
+}
+
+.fb-submit {
+  flex: none;
+  height: 40px;
+  min-width: 138px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.fb-mine-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 2px 10px;
+}
+
+.fb-mine-head h3 {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+#fb-hint {
+  margin: 0;
+  min-height: 16px;
 }
 
 .fb-mine {

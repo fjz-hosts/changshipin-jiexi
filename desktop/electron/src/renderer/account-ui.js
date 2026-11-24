@@ -200,21 +200,49 @@
   }
 
   // ---------- 账号页签 ----------
+  const DEFAULT_AVATAR = 'assets/avatar-default.png'
+
+  function renderAvatar(account) {
+    const img = $('#acct-avatar-img')
+    if (!img) return
+    img.src = account?.avatar || DEFAULT_AVATAR
+    const button = $('#btn-avatar')
+    if (button) {
+      const source = account?.avatarSource
+      button.title =
+        source === 'custom' ? '自定义头像（点击更换）' : source === 'qq' ? 'QQ 头像（点击更换）' : '默认头像（点击更换）'
+    }
+  }
+
   async function loadAccountTab() {
     const account = state.account || (await refreshAccount())
-    const box = $('#acct-summary')
+    const box = $('#acct-hero-email')
     if (!box) return
     const user = account?.user
     if (!user) {
-      box.innerHTML = '<div class="row"><span>登录状态</span><b>未登录</b></div>'
+      box.textContent = '未登录'
+      $('#acct-hero-role').textContent = '普通用户'
+      $('#acct-hero-reply').textContent = '登录后可查看反馈回复'
+      $('#acct-hero-name').textContent = '—'
+      const status = $('#acct-status')
+      if (status) {
+        status.textContent = '离线'
+        status.classList.add('offline')
+      }
+      renderAvatar(null)
       return
     }
-    box.innerHTML = `
-      <div class="row"><span>邮箱</span><b>${esc(user.email)}</b></div>
-      <div class="row"><span>用户名</span><b>${esc(user.username)}</b></div>
-      <div class="row"><span>账号类型</span><b>${user.role === 'admin' ? '管理员' : '普通用户'}</b></div>
-      <div class="row"><span>反馈回复</span><b>${Number(account.unread) > 0 ? `${account.unread} 条未读` : '已全部读过'}</b></div>
-      <div class="row"><span>登录状态</span><b>${account.online ? '在线' : '离线（7 天宽限期）'}</b></div>`
+    box.textContent = user.email
+    $('#acct-hero-role').textContent = user.role === 'admin' ? '管理员' : '普通用户'
+    $('#acct-hero-reply').textContent =
+      Number(account.unread) > 0 ? `${Number(account.unread)} 条新回复` : '反馈回复 已全部读过'
+    $('#acct-hero-name').textContent = user.username || '—'
+    const status = $('#acct-status')
+    if (status) {
+      status.textContent = account.online ? '在线' : '离线'
+      status.classList.toggle('offline', !account.online)
+    }
+    renderAvatar(account)
     const telemetry = $('#set-telemetry')
     if (telemetry) telemetry.checked = account.telemetryEnabled !== false
     const admin = $('#btn-open-admin')
@@ -224,6 +252,12 @@
       admin.onclick = () => $('#btn-admin-panel')?.click()
     }
     $('#acct-hint').textContent = account.online ? '' : '当前离线：反馈会在联网后自动同步。'
+    // 头像可能要联网拉 QQ 头像：先显示缓存 / 默认，拿到后再替换
+    const avatar = await API().accountAvatarState?.()
+    if (avatar?.ok && avatar.avatar) {
+      state.account = { ...(state.account || {}), avatar: avatar.avatar, avatarSource: avatar.avatarSource }
+      renderAvatar(state.account)
+    }
   }
 
   async function loadFeedbackTab() {
@@ -398,6 +432,50 @@
         $('#acct-old-pass').value = ''
         $('#acct-new-pass').value = ''
       }
+    })
+
+    $('#btn-avatar')?.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const menu = $('#avatar-menu')
+      if (menu) menu.hidden = !menu.hidden
+    })
+
+    document.addEventListener('click', (event) => {
+      const menu = $('#avatar-menu')
+      if (!menu || menu.hidden) return
+      if (!event.target.closest('.acct-hero-id')) menu.hidden = true
+    })
+
+    $('#btn-avatar-upload')?.addEventListener('click', async () => {
+      $('#avatar-menu').hidden = true
+      const result = await API().accountAvatarPick()
+      if (result?.canceled) return
+      if (!result?.ok) {
+        $('#acct-hint').textContent = result?.error || '头像上传失败'
+        return
+      }
+      state.account = { ...(state.account || {}), ...(result.state || {}) }
+      renderAvatar(state.account)
+      $('#acct-hint').textContent = '头像已更新（只保存在本机）'
+      await refreshAccount()
+    })
+
+    $('#btn-avatar-reset')?.addEventListener('click', async () => {
+      $('#avatar-menu').hidden = true
+      const result = await API().accountAvatarReset()
+      if (!result?.ok) {
+        $('#acct-hint').textContent = result?.error || '恢复默认头像失败'
+        return
+      }
+      state.account = { ...(state.account || {}), ...(result.state || {}) }
+      renderAvatar(state.account)
+      $('#acct-hint').textContent = '已恢复默认头像'
+    })
+
+    $('#btn-acct-change-pass')?.addEventListener('click', () => {
+      const card = $('#acct-pass-card')
+      card?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      $('#acct-old-pass')?.focus()
     })
 
     $('#btn-account-logout')?.addEventListener('click', async () => {

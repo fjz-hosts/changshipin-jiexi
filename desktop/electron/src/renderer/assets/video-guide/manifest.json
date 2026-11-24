@@ -84,11 +84,11 @@
     },
     {
       "id": "10",
-      "title": "10 设置、更新与登录限制",
+      "title": "10 设置、账号与反馈、登录限制",
       "file": "guide-video-10.mp4",
       "poster": "guide-video-10.jpg",
-      "duration": 82.64,
-      "durationText": "1:23"
+      "duration": 116.05,
+      "durationText": "1:56"
     },
     {
       "id": "11",
@@ -119,7 +119,7 @@
       "title": "14 结束语 · 感谢观看",
       "file": "guide-video-14.mp4",
       "poster": "guide-video-14.jpg",
-      "duration": 36.74,
+      "duration": 36.73,
       "durationText": "0:37"
     }
   ]

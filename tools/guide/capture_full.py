@@ -434,6 +434,10 @@ def capture_playing(c, http_port):
          dim=0.16, crop=panel_shot(c, '.gate-shell', width=900).get('crop'))
     js(c, "document.querySelector('#account-gate').hidden = true; true", 0.6)
 
+    # 反馈页新版布局比旧版高（通栏字段 + 底部提交行），默认窗口高度装不下「我的反馈」，
+    # 截这张之前临时把视口加高，保证 ①–⑤ 都在同一张图里；capture() 结束时会清掉覆盖，后面恢复原尺寸。
+    c.send('Emulation.setDeviceMetricsOverride', {'width': 1440, 'height': 1000, 'deviceScaleFactor': 2, 'mobile': False})
+    time.sleep(0.8)
     click(c, '#btn-settings', 0.8)
     click(c, '#modal-tabs button[data-tab="feedback"]', 0.9)
     js(c, """(() => {

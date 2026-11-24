@@ -873,44 +873,108 @@
             </div>
           </section>
 
-          <section class="tab-pane" data-pane="account" hidden>
-            <div class="acct-summary" id="acct-summary"></div>
-            <div class="settings-group">修改密码</div>
-            <form class="acct-form" id="acct-password-form">
-              <label>原密码<input id="acct-old-pass" type="password" autocomplete="current-password" /></label>
-              <label>新密码（至少 6 位）<input id="acct-new-pass" type="password" autocomplete="new-password" /></label>
-              <button class="ghost-sm" type="submit">保存新密码</button>
-            </form>
-            <div class="settings-group">隐私与统计</div>
-            <label class="switch-row">
+          <section class="tab-pane acct-pane" data-pane="account" hidden>
+            <header class="acct-hero">
+              <div class="acct-hero-info">
+                <div class="acct-hero-email" id="acct-hero-email">未登录</div>
+                <div class="acct-hero-meta">
+                  <span id="acct-hero-role">普通用户</span>
+                  <span class="acct-dot">·</span>
+                  <span id="acct-hero-reply">反馈回复 已全部读过</span>
+                </div>
+              </div>
+              <div class="acct-hero-id">
+                <div class="acct-hero-name" id="acct-hero-name">—</div>
+                <button class="acct-avatar" id="btn-avatar" type="button" title="更换头像" aria-haspopup="true">
+                  <img id="acct-avatar-img" src="assets/avatar-default.png" alt="头像" />
+                  <span class="acct-avatar-badge">换</span>
+                </button>
+                <div class="acct-avatar-menu" id="avatar-menu" hidden>
+                  <button type="button" id="btn-avatar-upload">上传本地图片</button>
+                  <button type="button" id="btn-avatar-reset">恢复 QQ / 默认头像</button>
+                </div>
+              </div>
+            </header>
+            <div class="acct-toolbar">
+              <button class="ghost-sm" id="btn-acct-change-pass" type="button">更换密码</button>
+              <span class="acct-status" id="acct-status">在线</span>
+            </div>
+            <div class="acct-card" id="acct-pass-card">
+              <div class="acct-card-head">
+                <h3>修改密码</h3>
+              </div>
+              <form class="acct-pass-form" id="acct-password-form">
+                <div class="acct-field">
+                  <label for="acct-old-pass">原密码</label>
+                  <input id="acct-old-pass" type="password" autocomplete="current-password" placeholder="当前密码" />
+                </div>
+                <div class="acct-field">
+                  <label for="acct-new-pass">新密码（至少 6 位）</label>
+                  <input id="acct-new-pass" type="password" autocomplete="new-password" placeholder="新密码" />
+                </div>
+                <div class="acct-pass-foot">
+                  <p class="acct-pass-hint">改完下次登录生效，新密码至少 6 位</p>
+                  <button class="primary-sm" type="submit">保存新密码</button>
+                </div>
+              </form>
+            </div>
+            <label class="switch-row acct-privacy">
               <input type="checkbox" id="set-telemetry" />
               <span>匿名使用统计（平台、成功率、耗时、版本号；不含完整链接参数）</span>
             </label>
-            <div class="row-btns">
+            <div class="row-btns acct-foot">
               <button class="ghost-sm" id="btn-open-admin" hidden>打开数据面板</button>
               <button class="ghost-sm" id="btn-account-logout">退出登录</button>
             </div>
             <p class="muted small" id="acct-hint"></p>
           </section>
 
-          <section class="tab-pane" data-pane="feedback" hidden>
-            <div class="settings-group">提交反馈 / 修改建议</div>
-            <form class="acct-form" id="fb-form">
-              <label>类型
-                <select id="fb-type">
-                  <option value="bug">故障 / BUG</option>
-                  <option value="feature">功能建议</option>
-                  <option value="experience">体验问题</option>
-                  <option value="other">其它</option>
-                </select>
-              </label>
-              <label>满意度（1–5 星，可不填）<input id="fb-rating" type="number" min="1" max="5" /></label>
-              <label>联系方式（可选）<input id="fb-contact" placeholder="QQ / 微信 / 邮箱" maxlength="120" /></label>
-              <label>内容<textarea id="fb-content" rows="5" maxlength="2000" placeholder="遇到什么问题、希望怎么改，写清楚一点更容易复现"></textarea></label>
-              <button class="primary-sm" type="submit">提交反馈</button>
+          <section class="tab-pane fb-pane" data-pane="feedback" hidden>
+            <h2 class="fb-title">
+              <span class="fb-title-main">提交反馈</span>
+              <span class="fb-title-sep">/</span>
+              <span class="fb-title-sub">报告错误</span>
+            </h2>
+            <form class="fb-form" id="fb-form">
+              <div class="fb-field">
+                <label for="fb-type">类型</label>
+                <div class="fb-select">
+                  <select id="fb-type">
+                    <option value="bug">故障 / BUG</option>
+                    <option value="feature">功能建议</option>
+                    <option value="experience">体验问题</option>
+                    <option value="other">其它</option>
+                  </select>
+                </div>
+              </div>
+              <div class="fb-field">
+                <label for="fb-rating">满意度（1–5 星，可不填）</label>
+                <input id="fb-rating" type="number" min="1" max="5" placeholder="—" />
+              </div>
+              <div class="fb-field">
+                <label for="fb-contact">联系方式（可选）</label>
+                <input id="fb-contact" placeholder="QQ / 微信 / 邮箱" maxlength="120" />
+              </div>
+              <div class="fb-field">
+                <label for="fb-content">内容</label>
+                <textarea id="fb-content" rows="7" maxlength="2000" placeholder="遇到什么问题、希望怎么改，写清楚一点更容易复现"></textarea>
+              </div>
+              <div class="fb-foot">
+                <div class="fb-note">
+                  <span class="fb-note-icon">✓</span>
+                  <div class="fb-note-text">
+                    <b>自动附带版本号与系统信息</b>
+                    <span>方便定位问题，不会上传完整链接参数。</span>
+                  </div>
+                </div>
+                <button class="primary-sm fb-submit" type="submit">提交反馈</button>
+              </div>
+              <p class="muted small" id="fb-hint"></p>
             </form>
-            <p class="muted small" id="fb-hint"></p>
-            <div class="settings-group">我的反馈</div>
+            <div class="fb-mine-head">
+              <h3>我的反馈</h3>
+              <span class="muted small">作者回复会显示在这里</span>
+            </div>
             <div class="fb-mine" id="fb-mine"><p class="muted small">还没有提交过反馈。</p></div>
           </section>
         </div>
@@ -1499,7 +1563,8 @@
                 <li>找回密码：填注册邮箱收验证码，再设新密码；验证码 10 分钟内有效，同一邮箱 60 秒内不能重复发送。</li>
                 <li>登录状态用 Windows 的系统安全存储加密保存在本机，30 天内免登录；换电脑或退出登录后需要重新登录。</li>
                 <li>网络不通或服务端临时不可用时，程序会进入离线模式：解析、下载、历史、音乐都照常可用，反馈和使用统计会在恢复网络后自动补传（离线宽限期 7 天）。</li>
-                <li>设置 →「账号」：查看邮箱、用户名、账号类型，修改密码，退出登录；管理员会多一个「打开数据面板」按钮。</li>
+                <li>设置 →「账号」：顶部是邮箱、用户名、在线状态和头像——QQ 邮箱会自动取 QQ 头像，也可以点头像换成本地图片；下面是改密卡片，底部是「打开数据面板」和「退出登录」（数据面板只有管理员可见）。</li>
+                <li>头像按「自己上传的 > QQ 头像 > 内置默认头像」这个顺序显示；上传的图片只保存在本机，不会同步到服务器，点头像菜单里的「恢复 QQ / 默认头像」可以换回去。</li>
                 <li>设置 →「反馈」：选类型、打星、留联系方式、写清楚问题或建议，点提交。提交后能在同一页看到处理状态（待处理 / 处理中 / 已回复 / 已关闭）和作者的回复；有新回复时右上角「设置」按钮会显示红点。</li>
                 <li>数据后台有两个入口：程序内「设置 → 关于 → 数据面板」或「设置 → 账号 → 打开数据面板」（管理员可见，打开后要再输一次管理员账号密码）；也可以用浏览器打开 https://37lmtdy5bz2ga6o5ozv.traesite.cn/admin/ 。后台能看在线设备、今日解析量和成功率、平台分布、解析内容 Top、用户漏斗与留存、反馈中心，以及线路质量和错误 Top。</li>
                 <li>管理员账号同时也是普通用户：登录后解析、下载、播放、音乐、投屏全部照常使用，数据面板只是额外入口。</li>
@@ -1570,7 +1635,7 @@
               <button data-video="07" data-file="guide-video-07.mp4" data-poster="guide-video-07.jpg" data-title="07 下载到电脑" data-duration="1:05" data-guide="download" data-desc="下载进度、取消、HLS 合并、下载目录、不能下载的情况"><span class="gv-title">07 下载到电脑</span><span class="gv-dur">1:05</span></button>
               <button data-video="08" data-file="guide-video-08.mp4" data-poster="guide-video-08.jpg" data-title="08 全屏与快捷键" data-duration="0:49" data-guide="fullscreen" data-desc="F11、空格 / 方向键 / M / Esc、自动连播"><span class="gv-title">08 全屏与快捷键</span><span class="gv-dur">0:49</span></button>
               <button data-video="09" data-file="guide-video-09.mp4" data-poster="guide-video-09.jpg" data-title="09 投屏到大屏" data-duration="1:26" data-guide="cast" data-desc="DLNA、同一 Wi-Fi、二维码、网页线路抓流"><span class="gv-title">09 投屏到大屏</span><span class="gv-dur">1:26</span></button>
-              <button data-video="10" data-file="guide-video-10.mp4" data-poster="guide-video-10.jpg" data-title="10 设置、更新与登录限制" data-duration="1:23" data-guide="settings" data-desc="播放选项、托盘、检查更新、关于、登录与限制"><span class="gv-title">10 设置、更新与登录限制</span><span class="gv-dur">1:23</span></button>
+              <button data-video="10" data-file="guide-video-10.mp4" data-poster="guide-video-10.jpg" data-title="10 设置、账号与反馈、登录限制" data-duration="1:56" data-guide="settings" data-desc="播放选项、托盘、账号与头像、反馈、检查更新、登录与限制"><span class="gv-title">10 设置、账号与反馈、登录限制</span><span class="gv-dur">1:56</span></button>
               <button data-video="11" data-file="guide-video-11.mp4" data-poster="guide-video-11.jpg" data-title="11 图文教程与常见问题" data-duration="0:57" data-guide="guide" data-desc="图文教程 / 视频教程入口、红框标注、夜间提示"><span class="gv-title">11 图文教程与常见问题</span><span class="gv-dur">0:57</span></button>
               <button data-video="12" data-file="guide-video-12.mp4" data-poster="guide-video-12.jpg" data-title="12 短视频与短剧下载" data-duration="2:34" data-guide="short" data-desc="五个平台、清晰度、一键下载全集、下载记录"><span class="gv-title">12 短视频与短剧下载</span><span class="gv-dur">2:34</span></button>
               <button data-video="13" data-file="guide-video-13.mp4" data-poster="guide-video-13.jpg" data-title="13 音乐搜索、歌词与下载" data-duration="1:49" data-guide="music" data-desc="五个平台、滚动歌词、收藏、下载记录、换源"><span class="gv-title">13 音乐搜索、歌词与下载</span><span class="gv-dur">1:49</span></button>

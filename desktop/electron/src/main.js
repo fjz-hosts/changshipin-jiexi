@@ -1330,6 +1330,9 @@ function registerIpc() {
   ipcMain.handle('account:telemetry', (_event, enabled) =>
     accountCall((manager) => manager.setTelemetryEnabled(enabled)),
   )
+  ipcMain.handle('account:avatar-state', () => accountCall((manager) => manager.avatarState()))
+  ipcMain.handle('account:avatar-pick', () => accountCall((manager) => manager.pickAvatar()))
+  ipcMain.handle('account:avatar-reset', () => accountCall((manager) => manager.resetAvatar()))
 
   ipcMain.handle('config:get', () => store.snapshot())
 
