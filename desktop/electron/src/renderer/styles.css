@@ -559,23 +559,24 @@ body.short-scroll .statusbar {
 }
 
 /* Windows 的下拉弹层默认是白底，只继承文字颜色时未选中项几乎看不见。
-   这里把选项的背景和文字都显式定死，深色弹层里每一项都清晰可读。 */
-.select option,
-.mini-select option,
-.line-row select option {
+   这里对**所有** select 统一生效（不再逐个组件单独写），以后新增下拉框不用再配色；
+   color-scheme: dark 让原生弹层本身也走深色。 */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
   background-color: #0c1420;
   color: #e9eef7;
 }
 
-.select option:checked,
-.mini-select option:checked {
+select option:checked {
   background-color: #1c5138;
   color: #f2fff9;
 }
 
-.select option:disabled,
-.mini-select option:disabled,
-.line-row select option:disabled {
+select option:disabled {
   background-color: #0a1018;
   color: rgba(233, 238, 247, 0.42);
 }

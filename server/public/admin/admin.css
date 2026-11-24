@@ -114,6 +114,28 @@ select:focus {
   border-color: var(--accent);
 }
 
+/* 原生下拉弹层在 Windows 上默认白底，选项文字会看不清：全局深色，
+   后台新增 select 不用再单独处理。 */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: var(--panel-2);
+  color: var(--text);
+}
+
+select option:checked {
+  background-color: #1c5138;
+  color: #f2fff9;
+}
+
+select option:disabled {
+  background-color: var(--panel);
+  color: var(--muted);
+}
+
 .muted {
   color: var(--muted);
 }
