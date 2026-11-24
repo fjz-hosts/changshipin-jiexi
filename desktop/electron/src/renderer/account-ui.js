@@ -220,7 +220,8 @@
     const admin = $('#btn-open-admin')
     if (admin) {
       admin.hidden = !(user.role === 'admin' && account.apiBase)
-      admin.onclick = () => API().openExternal(`${account.apiBase}/admin/`)
+      admin.textContent = '打开数据面板'
+      admin.onclick = () => $('#btn-admin-panel')?.click()
     }
     $('#acct-hint').textContent = account.online ? '' : '当前离线：反馈会在联网后自动同步。'
   }

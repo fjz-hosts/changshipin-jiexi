@@ -4311,3 +4311,47 @@ body.mode-short.browser-open .short-panel {
     display: none;
   }
 }
+
+/* ===== 数据面板（管理员） ===== */
+.admin-modal {
+  width: min(1180px, calc(100vw - 40px));
+  height: calc(100vh - 64px);
+  max-height: none;
+}
+
+.admin-modal .modal-head {
+  gap: 12px;
+}
+
+.admin-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.admin-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-view {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #0b0f17;
+}
+
+.admin-fallback {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}

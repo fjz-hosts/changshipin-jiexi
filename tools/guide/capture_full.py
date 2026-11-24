@@ -407,10 +407,13 @@ def capture_playing(c, http_port):
 
     click(c, '#modal-tabs button[data-tab="about"]', 0.8)
     snap(c, 'g-settings-about', 'guide-10-about',
-         [box(c, '#btn-open-repo', 1, badge='top'),
-          box(c, '#btn-open-userdata', 2, badge='top'),
-          box(c, '#btn-open-logs', 3, badge='top'),
-          box(c, '#btn-create-shortcut', 4, badge='top')],
+         [box(c, '#btn-about-guide', 1, badge='top'),
+          box(c, '#btn-open-changelog', 2, badge='top'),
+          box(c, '#btn-admin-panel', 3, badge='top'),
+          box(c, '#btn-open-repo', 4, badge='top'),
+          box(c, '#btn-open-userdata', 5, badge='top'),
+          box(c, '#btn-open-logs', 6, badge='top'),
+          box(c, '#btn-create-shortcut', 7, badge='top')],
          dim=0.2, crop=modal_crop(c, '#modal'))
     click(c, '#modal-close', 0.6)
 
