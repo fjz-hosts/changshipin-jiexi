@@ -28,6 +28,37 @@ version: "1.0.0"
 
 CLI 需要已登录（`trae-deploy check` 返回 `"ok": true`）。
 
+### 凭据模型（在 DSH / 普通终端里必须看）
+
+`trae-deploy` **不是独立登录**的：它依赖 Trae Agent 会话注入的 `TRAE_*` 运行上下文，加上本机的
+`~/.trae-cn/trae-jwt-token`（JWT，约 7 天有效，Trae 运行时会自动续期）。
+在 DSH 终端里这两样都不存在，直接调用会依次报：
+
+```text
+MISSING_RUNTIME_CONTEXT: TRAE_PROJECT_ID is required; restart the deployment from Trae
+MISSING_RUNTIME_CONTEXT: TRAE_CHAT_SESSION_ID is required; restart the deployment from Trae
+MISSING_RUNTIME_CONTEXT: TRAE_REGION is required; restart the deployment from Trae
+SERVICE_401 authentication required
+```
+
+本脚本的处理方式：
+
+1. **在 Trae 里第一次运行**时，把非敏感的运行上下文（`projectId` / `region` / `brandName` / `lane`、
+   存储目录、token 路径）写到项目 `.tmp/changshipin-deploy-session.json`（已被 gitignore）；
+2. 之后在 DSH 里运行时自动读取这份文件，并注入 `TRAE_PROJECT_ID` / `TRAE_REGION` /
+   `TRAE_CHAT_SESSION_ID` / `TRAE_JWT_TOKEN_PATH` 等变量再调 CLI；
+3. **token 本身不复制、不落仓库**，始终用 Trae 维护的 `~/.trae-cn/trae-jwt-token`；
+   脚本会解析 JWT 的 `exp`，过期时直接给出「打开 Trae 续期」的提示，而不是抛 401。
+
+所以第一次使用请在本机 **Trae 里**跑一次：
+
+```powershell
+node skills\changshipin-server-deploy\scripts\deploy.mjs --auth-check
+```
+
+看到「鉴权检查通过」并生成 `.tmp/changshipin-deploy-session.json` 后，DSH 里就能一键部署了。
+如果把项目换到另一台机器，在那台机器的 Trae 里重跑一次 `--auth-check` 即可。
+
 ### 安装到 Deepseek Harness
 
 整个 `changshipin-server-deploy/` 目录就是技能本体，复制到 DSH 的技能目录即可
@@ -79,6 +110,9 @@ node skills\changshipin-server-deploy\scripts\deploy.mjs --no-wait
 
 # 只做健康检查
 node skills\changshipin-server-deploy\scripts\deploy.mjs --verify-only
+
+# 只检查 trae-deploy 凭据（在 Trae 里跑一次，生成运行上下文）
+node skills\changshipin-server-deploy\scripts\deploy.mjs --auth-check
 ```
 
 成功时输出类似：
@@ -167,6 +201,8 @@ Invoke-RestMethod "$base/api/admin/overview" -Headers @{ Authorization = "Bearer
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | `SERVICE_993511 invalid deploy site configuration` | 环境变量名含 `SECRET` / `PASSWORD`，或站点资源参数非法 | 改用 `AUTH_KEY` / `ADMIN_PASS` / `MAIL_AUTH`；脚本已自动改名 |
+| `MISSING_RUNTIME_CONTEXT: TRAE_PROJECT_ID / TRAE_CHAT_SESSION_ID / TRAE_REGION is required` | 在 DSH / 普通终端里直接调 CLI，缺 Trae 会话上下文 | 先在本机 Trae 里跑 `--auth-check` 生成 `.tmp/changshipin-deploy-session.json`；脚本会自动注入 |
+| `SERVICE_401 authentication required` | `trae-jwt-token` 不存在、过期，或 token 路径不对 | 打开 Trae CN 让它续期，再跑 `--auth-check`；不要手工复制 token 到别处 |
 | `HIGH_RISK_FILE ... prohibited path: .env.example` | 上传包里带了 `.env` / `.env.example` 等敏感文件名 | 脚本已排除所有 `.env*`；手工打包时同样要排除 |
 | 部署成功但浏览器 / 客户端拿到安全挑战页 | 站点还是 `private` | `trae-deploy sites update-config --site-id <id> --access-policy public` |
 | `PRODUCTION_RELEASE_FAILED ... 启动失败，配置不完整` | 运行时缺 `DATABASE_URL` / `AUTH_KEY` / `MAIL_AUTH` | 检查 `server/.env` 或 `deploy.config.json` 的 `env`，重新部署 |

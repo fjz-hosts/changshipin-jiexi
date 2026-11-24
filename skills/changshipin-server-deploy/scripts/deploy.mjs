@@ -55,6 +55,7 @@ function parseArgs(argv) {
     noWait: false,
     skipVerify: false,
     verifyOnly: false,
+    authCheck: false,
     title: '',
     description: '',
   }
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     else if (arg === '--no-wait') options.noWait = true
     else if (arg === '--skip-verify') options.skipVerify = true
     else if (arg === '--verify-only') options.verifyOnly = true
+    else if (arg === '--auth-check') options.authCheck = true
     else if (arg === '-h' || arg === '--help') {
       console.log(
         [
@@ -82,6 +84,7 @@ function parseArgs(argv) {
           '  --no-wait              创建部署后立即返回',
           '  --skip-verify          部署完跳过健康检查',
           '  --verify-only          只做健康检查',
+          '  --auth-check           只检查 trae-deploy 凭据是否可用',
         ].join('\n'),
       )
       process.exit(0)
@@ -147,8 +150,8 @@ function resolveCli() {
   return ''
 }
 
-function runCli(cli, args) {
-  const result = spawnSync(cli, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+function runCli(cli, args, env) {
+  const result = spawnSync(cli, args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, env })
   const stdout = String(result.stdout || '').trim()
   const stderr = String(result.stderr || '').trim()
   let json = null
@@ -164,12 +167,115 @@ function runCli(cli, args) {
   return { status: result.status ?? -1, stdout, stderr, json }
 }
 
-function cliJson(cli, args, action) {
-  const result = runCli(cli, args)
+function cliJson(cli, args, action, env) {
+  const result = runCli(cli, args, env)
   if (!result.json) {
     fail(`${action} 没有返回可解析的 JSON。\nstdout: ${result.stdout.slice(0, 500)}\nstderr: ${result.stderr.slice(0, 500)}`)
   }
   return result
+}
+
+// ---------------------------------------------------------------------------
+// 运行上下文：trae-deploy 依赖 Trae Agent 注入的 TRAE_* 变量 + 本机 JWT 文件。
+// 在 DSH / 普通终端里这些变量不存在，所以第一次在 Trae 里运行时把非敏感上下文
+// 存到 ~/.trae-cn/changshipin-deploy-session.json，之后 DSH 直接用这份文件。
+// 真实凭据始终留在 Trae 自己维护的 ~/.trae-cn/trae-jwt-token，不复制、不写入仓库。
+// ---------------------------------------------------------------------------
+function defaultTokenPath() {
+  return path.join(os.homedir(), '.trae-cn', 'trae-jwt-token')
+}
+
+function sessionFilePath(config) {
+  if (config.sessionFile) return path.resolve(projectRootForConfig, config.sessionFile)
+  // 放在项目 .tmp 下：工作区可写、已被 .gitignore 忽略，也不会被打进技能包
+  return path.join(projectRootForConfig, '.tmp', 'changshipin-deploy-session.json')
+}
+
+let projectRootForConfig = process.cwd()
+
+function readTokenExpiry(tokenPath) {
+  try {
+    const token = fs.readFileSync(tokenPath, 'utf8').trim()
+    const payload = token.split('.')[1]
+    if (!payload) return null
+    const decoded = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
+    return decoded.exp ? decoded.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+function buildRuntimeContext(config) {
+  const file = sessionFilePath(config)
+  const saved = readJson(file, {})
+  const env = process.env
+  const context = {
+    projectId: env.TRAE_PROJECT_ID || saved.projectId || '',
+    chatSessionId: env.TRAE_CHAT_SESSION_ID || saved.chatSessionId || '',
+    region: env.TRAE_REGION || saved.region || 'cn',
+    brandName: env.TRAE_BRAND_NAME || saved.brandName || '',
+    lane: env.TRAE_LANE || saved.lane || 'prod',
+    globalStorageDir: env.TRAE_GLOBAL_STORAGE_DIR || saved.globalStorageDir || '',
+    userDataDir: env.TRAE_USER_DATA_DIR || saved.userDataDir || '',
+    tokenPath: env.TRAE_JWT_TOKEN_PATH || env.TRAE_DEPLOYMENT_TOKEN_PATH || saved.tokenPath || defaultTokenPath(),
+  }
+
+  // 在 Trae 里跑时自动落盘，方便之后在 DSH 里复用；不覆盖已经存在的 token 内容
+  if (context.projectId && context.region && (!saved.projectId || saved.region !== context.region)) {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, JSON.stringify({ ...context, savedAt: new Date().toISOString() }, null, 2), 'utf8')
+      log(`已记录运行上下文：${file}（不含 token，token 仍在 ${context.tokenPath}）`)
+    } catch (error) {
+      warn(`记录运行上下文失败：${error.message}`)
+    }
+  }
+  return { context, file }
+}
+
+function cliEnv(context) {
+  const env = { ...process.env }
+  env.TRAE_PROJECT_ID = context.projectId
+  env.TRAE_REGION = context.region
+  env.TRAE_CHAT_SESSION_ID = context.chatSessionId || crypto.randomUUID()
+  env.TRAE_JWT_TOKEN_PATH = context.tokenPath
+  if (context.brandName) env.TRAE_BRAND_NAME = context.brandName
+  if (context.lane) env.TRAE_LANE = context.lane
+  if (context.globalStorageDir) env.TRAE_GLOBAL_STORAGE_DIR = context.globalStorageDir
+  if (context.userDataDir) env.TRAE_USER_DATA_DIR = context.userDataDir
+  return env
+}
+
+function checkAuth(cli, env, context) {
+  if (!fs.existsSync(context.tokenPath)) {
+    return {
+      ok: false,
+      message: `找不到 Trae 登录凭据 ${context.tokenPath}。请先在本机打开 / 登录 Trae CN，或在 Trae 里运行一次本脚本以刷新凭据。`,
+    }
+  }
+  const expiry = readTokenExpiry(context.tokenPath)
+  if (expiry && expiry < Date.now()) {
+    return {
+      ok: false,
+      message: `Trae 登录凭据已过期（${new Date(expiry).toLocaleString('zh-CN')}）。打开 Trae CN 后重新运行本脚本即可刷新。`,
+    }
+  }
+  if (!context.projectId) {
+    return {
+      ok: false,
+      message: '缺少 TRAE_PROJECT_ID：请先在 Trae 里运行一次本脚本（脚本会自动记录运行上下文），或手动在项目的 .tmp/changshipin-deploy-session.json 里补齐。',
+    }
+  }
+  const result = runCli(cli, ['check'], env)
+  if (!result.json || result.json.ok !== true) {
+    const code = result.json?.error?.code || ''
+    const message = result.json?.error?.message || result.stderr.slice(0, 200)
+    return { ok: false, message: `trae-deploy 鉴权失败${code ? `（${code}）` : ''}：${message}` }
+  }
+  if (expiry && expiry - Date.now() < 12 * 3600 * 1000) {
+    warn(`Trae 凭据将在 ${new Date(expiry).toLocaleString('zh-CN')} 过期，届时打开一次 Trae 即可续期。`)
+  }
+  return { ok: true, expiry }
 }
 
 function copySource(fromDir, toDir) {
@@ -248,27 +354,27 @@ async function verify(baseUrl) {
   return false
 }
 
-function ensureSite(cli, options, config, description) {
+function ensureSite(cli, options, config, description, cliRunEnv) {
   const siteId = options.siteId || config.siteId
   if (siteId) {
-    const result = cliJson(cli, ['sites', 'get', '--site-id', siteId], 'sites get')
+    const result = cliJson(cli, ['sites', 'get', '--site-id', siteId], 'sites get', cliRunEnv)
     if (result.json?.ok === false) fail(`站点 ${siteId} 不可用：${result.json?.error?.message || '未知错误'}`)
     const site = result.json.data
     const publicPolicy = site.access_policy === 2
     if (!publicPolicy) {
       log(`站点当前不是公开访问，切换为 public …`)
-      cliJson(cli, ['sites', 'update-config', '--site-id', siteId, '--access-policy', 'public'], 'sites update-config')
+      cliJson(cli, ['sites', 'update-config', '--site-id', siteId, '--access-policy', 'public'], 'sites update-config', cliRunEnv)
     }
     return { siteId, hostname: site.site_config?.hostname || '', accessPolicy: 2 }
   }
 
-  const list = cliJson(cli, ['sites', 'list'], 'sites list')
+  const list = cliJson(cli, ['sites', 'list'], 'sites list', cliRunEnv)
   const items = list.json?.data?.items || []
   const matched = items.find((item) => item.display_name === config.siteName)
   if (matched) {
     if (matched.access_policy !== 2) {
       log('站点不是公开访问，切换为 public …')
-      cliJson(cli, ['sites', 'update-config', '--site-id', matched.deploy_target_id, '--access-policy', 'public'], 'sites update-config')
+      cliJson(cli, ['sites', 'update-config', '--site-id', matched.deploy_target_id, '--access-policy', 'public'], 'sites update-config', cliRunEnv)
     }
     return { siteId: matched.deploy_target_id, hostname: matched.site_config?.hostname || '', accessPolicy: 2 }
   }
@@ -278,6 +384,7 @@ function ensureSite(cli, options, config, description) {
     cli,
     ['sites', 'create', '--name', config.siteName, '--description', description, '--access-policy', 'public'],
     'sites create',
+    cliRunEnv,
   )
   const site = created.json?.data
   const newId = site?.deploy_target_id || site?.site_id || ''
@@ -302,6 +409,7 @@ async function main() {
   }
 
   const config = readJson(configPath)
+  projectRootForConfig = projectRoot
   const serverDir = path.resolve(projectRoot, config.serverDir || 'server')
   if (!fs.existsSync(path.join(serverDir, 'package.json'))) {
     fail(`服务端目录不存在或缺少 package.json：${serverDir}`)
@@ -324,6 +432,22 @@ async function main() {
   log(`CLI：${cli}`)
   log(`项目：${projectRoot}`)
   log(`服务端：${serverDir}`)
+
+  const { context, file: sessionFile } = buildRuntimeContext(config)
+  const runEnv = cliEnv(context)
+  const auth = checkAuth(cli, runEnv, context)
+  if (!auth.ok) {
+    if (options.authCheck) fail(auth.message)
+    if (!options.dryRun) fail(auth.message)
+    warn(auth.message)
+  } else {
+    log(`鉴权正常（凭据 ${context.tokenPath}${auth.expiry ? `，${new Date(auth.expiry).toLocaleString('zh-CN')} 过期` : ''}）`)
+  }
+  if (options.authCheck) {
+    log(`运行上下文文件：${sessionFile}`)
+    log('鉴权检查通过')
+    return
+  }
 
   const envFileEnv = readEnvFile(envFile)
   if (envFile && !fs.existsSync(envFile)) warn(`没有找到 ${envFile}，将只使用配置里的 env`)
@@ -385,7 +509,7 @@ async function main() {
 
   let site
   try {
-    site = ensureSite(cli, options, config, generatedDescription)
+    site = ensureSite(cli, options, config, generatedDescription, runEnv)
   } catch (error) {
     fail(`站点准备失败：${error.message}`)
   }
@@ -414,6 +538,7 @@ async function main() {
       String(config.appTags || '123,167'),
     ],
     'deployments create',
+    runEnv,
   )
   if (created.json?.ok === false) {
     const code = created.json?.error?.code || ''
@@ -431,14 +556,18 @@ async function main() {
   }
 
   log('等待构建与发布 …')
-  const waited = runCli(cli, [
-    'deployments',
-    'wait',
-    '--deployment-id',
-    deploymentId,
-    '--timeout-seconds',
-    String(config.waitTimeoutSeconds || 600),
-  ])
+  const waited = runCli(
+    cli,
+    [
+      'deployments',
+      'wait',
+      '--deployment-id',
+      deploymentId,
+      '--timeout-seconds',
+      String(config.waitTimeoutSeconds || 600),
+    ],
+    runEnv,
+  )
   const status = waited.json?.data?.deployment?.status
   const reason = waited.json?.data?.wait_reason
   if (waited.status !== 0 || status !== 9) {

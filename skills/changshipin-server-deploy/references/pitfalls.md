@@ -80,3 +80,32 @@ trae-deploy logs runtime --site-id <id> --since 30m
 
 `deployments create` 返回网络错误时，先 `deployments list --site-id <id>` 确认是否已经创建成功，
 不要直接重试，避免同时跑两个部署。
+
+## 10. 在 DSH / 普通终端里部署：缺 Trae 运行上下文
+
+`trae-deploy` 没有独立的账号密码登录，它靠 Trae Agent 会话注入的变量 + 本机 JWT 文件：
+
+| 依赖 | 位置 / 说明 |
+|---|---|
+| `TRAE_PROJECT_ID` | 项目 ID，稳定，本项目为 `6aff20291b78165869310b56` |
+| `TRAE_CHAT_SESSION_ID` | 会话 ID，每次对话不同；显式传 `--site-id` 时可用任意 uuid 代替 |
+| `TRAE_REGION` | `cn`；`check` 不需要，但 `sites get/list`、`deployments create` 需要 |
+| `TRAE_BRAND_NAME` / `TRAE_LANE` | `Trae CN` / `prod` |
+| `TRAE_JWT_TOKEN_PATH` | `~/.trae-cn/trae-jwt-token`，JWT，约 7 天有效，Trae 运行时会续期 |
+
+缺任何一个都会报 `MISSING_RUNTIME_CONTEXT: ... restart the deployment from Trae`；
+token 缺失或过期则是 `SERVICE_401 authentication required`。
+
+`scripts/deploy.mjs` 的解决方式：第一次在 Trae 里运行时把非敏感上下文写到
+`.tmp/changshipin-deploy-session.json`，之后在 DSH 里自动读取并注入；token 始终留在
+`~/.trae-cn/trae-jwt-token`，不复制、不进仓库。用法：
+
+```powershell
+# 在 Trae 里执行一次
+node skills\changshipin-server-deploy\scripts\deploy.mjs --auth-check
+
+# 之后在 DSH 里直接部署（同一台机器、token 未过期）
+node skills\changshipin-server-deploy\scripts\deploy.mjs
+```
+
+token 过期后在 Trae 里打开一次即可续期；换机器要在新机器的 Trae 里重跑 `--auth-check`。
