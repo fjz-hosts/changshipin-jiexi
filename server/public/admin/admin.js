@@ -234,7 +234,7 @@
       $('#ov-events'),
       [
         { name: '长视频解析', value: data.today.parse },
-        { name: '短视视频解析', value: data.today.short },
+        { name: '短视频解析', value: data.today.short },
         { name: '音乐解析', value: data.today.music },
         { name: '下载', value: data.today.download },
         { name: '错误上报', value: data.today.error },
