@@ -97,15 +97,15 @@ trae-deploy logs runtime --site-id <id> --since 30m
 token 缺失或过期则是 `SERVICE_401 authentication required`。
 
 `scripts/deploy.mjs` 的解决方式：第一次在 Trae 里运行时把非敏感上下文写到
-`.tmp/changshipin-deploy-session.json`，之后在 DSH 里自动读取并注入；token 始终留在
+`.tmp/trae-deploy-session.json`，之后在 DSH 里自动读取并注入；token 始终留在
 `~/.trae-cn/trae-jwt-token`，不复制、不进仓库。用法：
 
 ```powershell
 # 在 Trae 里执行一次
-node skills\changshipin-server-deploy\scripts\deploy.mjs --auth-check
+node skills\trae-site-infra\scripts\deploy.mjs --auth-check
 
 # 之后在 DSH 里直接部署（同一台机器、token 未过期）
-node skills\changshipin-server-deploy\scripts\deploy.mjs
+node skills\trae-site-infra\scripts\deploy.mjs
 ```
 
 token 过期后在 Trae 里打开一次即可续期；换机器要在新机器的 Trae 里重跑 `--auth-check`。

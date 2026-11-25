@@ -30,6 +30,6 @@
 ## 换密钥 / 换邮箱的步骤
 
 1. 改本地 `server/.env`（或 `deploy.config.json` 的 `env`）；
-2. 重新跑 `node skills/changshipin-server-deploy/scripts/deploy.mjs`；
+2. 重新跑 `node skills/trae-site-infra/scripts/deploy.mjs`；
 3. 站点会自动用新配置重启，数据库数据不受影响；
 4. 如果换的是 `AUTH_KEY`，所有已登录客户端的 token 会失效，需要重新登录（这是预期行为）。

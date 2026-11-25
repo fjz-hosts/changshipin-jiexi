@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * 音视频解析 · 服务端一键部署
+ * Trae 站点一键部署（建站 + 部署 + 健康检查）
  *
  * 用法（在仓库根目录执行）：
- *   node skills/changshipin-server-deploy/scripts/deploy.mjs
- *   node skills/changshipin-server-deploy/scripts/deploy.mjs --dry-run
- *   node skills/changshipin-server-deploy/scripts/deploy.mjs --verify-only
+ *   node skills/trae-site-infra/scripts/deploy.mjs
+ *   node skills/trae-site-infra/scripts/deploy.mjs --dry-run
+ *   node skills/trae-site-infra/scripts/deploy.mjs --verify-only
  *
  * 只依赖 Node.js 20+ 与 trae-deploy CLI，不额外安装包。
  */
@@ -184,7 +184,7 @@ function cliJson(cli, args, action, env) {
 // ---------------------------------------------------------------------------
 // 运行上下文：trae-deploy 依赖 Trae Agent 注入的 TRAE_* 变量 + 本机 JWT 文件。
 // 在 DSH / 普通终端里这些变量不存在，所以第一次在 Trae 里运行时把非敏感上下文
-// 存到 ~/.trae-cn/changshipin-deploy-session.json，之后 DSH 直接用这份文件。
+// 存到项目 .tmp/trae-deploy-session.json，之后 DSH 直接用这份文件。
 // 真实凭据始终留在 Trae 自己维护的 ~/.trae-cn/trae-jwt-token，不复制、不写入仓库。
 // ---------------------------------------------------------------------------
 function defaultTokenPath() {
@@ -194,7 +194,7 @@ function defaultTokenPath() {
 function sessionFilePath(config) {
   if (config.sessionFile) return path.resolve(projectRootForConfig, config.sessionFile)
   // 放在项目 .tmp 下：工作区可写、已被 .gitignore 忽略，也不会被打进技能包
-  return path.join(projectRootForConfig, '.tmp', 'changshipin-deploy-session.json')
+  return path.join(projectRootForConfig, '.tmp', 'trae-deploy-session.json')
 }
 
 let projectRootForConfig = process.cwd()
@@ -269,7 +269,7 @@ function checkAuth(cli, env, context) {
   if (!context.projectId) {
     return {
       ok: false,
-      message: '缺少 TRAE_PROJECT_ID：请先在 Trae 里运行一次本脚本（脚本会自动记录运行上下文），或手动在项目的 .tmp/changshipin-deploy-session.json 里补齐。',
+      message: '缺少 TRAE_PROJECT_ID：请先在 Trae 里运行一次本脚本（脚本会自动记录运行上下文），或手动在项目的 .tmp/trae-deploy-session.json 里补齐。',
     }
   }
   const result = runCli(cli, ['check'], env)
