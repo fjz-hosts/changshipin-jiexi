@@ -59,6 +59,22 @@ node skills\changshipin-server-deploy\scripts\deploy.mjs --auth-check
 看到「鉴权检查通过」并生成 `.tmp/changshipin-deploy-session.json` 后，DSH 里就能一键部署了。
 如果把项目换到另一台机器，在那台机器的 Trae 里重跑一次 `--auth-check` 即可。
 
+### 在 DSH 里从零建站 + 部署
+
+不需要先在 Trae 里手动建站点，脚本会自己完成「建站 → 切 public → 部署 → 健康检查」：
+
+```powershell
+# 全新项目：deploy.config.json 里 siteId 留空，填好 siteName
+node skills\changshipin-server-deploy\scripts\deploy.mjs
+
+# 或者临时指定站点名（不改配置文件也可以）
+node skills\changshipin-server-deploy\scripts\deploy.mjs --site-name "我的数据后台" --access-policy public
+```
+
+成功后会把新的 `siteId` 和 `baseUrl` 写回配置文件，后续部署直接复用，不会重复建站。
+`--access-policy` 默认 `public`（客户端要能直接访问 API 和 `/admin`）；如果只想自己看，可传 `private`，
+但那样客户端接口会拿到平台的安全挑战页。
+
 ### 安装到 Deepseek Harness
 
 整个 `changshipin-server-deploy/` 目录就是技能本体，复制到 DSH 的技能目录即可
@@ -92,7 +108,8 @@ node skills\changshipin-server-deploy\scripts\deploy.mjs
 2. 把密钥类变量改名后注入运行时环境（见下节「环境变量」）；
 3. 复制 `server/` 到系统临时目录（排除 `node_modules`、`.env`、`dist`、日志）；
 4. 生成执行配置（`build.sh` / `dist` / `run.sh` / 端口 8000）；
-5. 复用或创建站点，并确保访问策略是 `public`；
+5. 解析站点：优先用 `siteId`；不存在 / 没填时按 `siteName` 查找；都没有才**新建站点**（默认 `public`），
+   新建或复用的 `siteId` / `baseUrl` 会自动写回 `deploy.config.json`，下次直接复用；
 6. `deployments create` + `deployments wait`；
 7. 轮询 `https://<站点域名>/api/health`，再检查 `/admin/` 是否返回首页 HTML。
 
@@ -104,6 +121,9 @@ node skills\changshipin-server-deploy\scripts\deploy.mjs --dry-run
 
 # 指定配置文件 / 项目目录 / 站点
 node skills\changshipin-server-deploy\scripts\deploy.mjs --config .\deploy.config.json --project . --site-id 37lmtdy5bz2ga6o5ozv
+
+# 从零创建站点（名字不存在时自动建，建完写回配置）
+node skills\changshipin-server-deploy\scripts\deploy.mjs --site-name "音视频解析 · 数据后台" --access-policy public
 
 # 只创建部署、不等结果（CI 里自己轮询）
 node skills\changshipin-server-deploy\scripts\deploy.mjs --no-wait

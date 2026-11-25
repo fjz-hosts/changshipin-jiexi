@@ -51,6 +51,8 @@ function parseArgs(argv) {
     config: '',
     project: '',
     siteId: '',
+    siteName: '',
+    accessPolicy: '',
     dryRun: false,
     noWait: false,
     skipVerify: false,
@@ -64,6 +66,8 @@ function parseArgs(argv) {
     if (arg === '--config') options.config = argv[++i] || ''
     else if (arg === '--project') options.project = argv[++i] || ''
     else if (arg === '--site-id') options.siteId = argv[++i] || ''
+    else if (arg === '--site-name') options.siteName = argv[++i] || ''
+    else if (arg === '--access-policy') options.accessPolicy = argv[++i] || ''
     else if (arg === '--title') options.title = argv[++i] || ''
     else if (arg === '--description') options.description = argv[++i] || ''
     else if (arg === '--dry-run') options.dryRun = true
@@ -78,6 +82,8 @@ function parseArgs(argv) {
           '  --config <file>        配置文件（默认 skill 目录下的 deploy.config.json）',
           '  --project <dir>        项目根目录（默认 skill 的上两级）',
           '  --site-id <id>         指定站点，跳过配置文件里的 siteId',
+          '  --site-name <name>     指定站点名；不存在时自动创建并写回配置',
+          '  --access-policy <p>    public（默认）或 private',
           '  --title <text>         本次部署标题',
           '  --description <text>   本次部署说明',
           '  --dry-run              只打印计划，不调用部署',
@@ -354,42 +360,91 @@ async function verify(baseUrl) {
   return false
 }
 
-function ensureSite(cli, options, config, description, cliRunEnv) {
+function ensureSite(cli, options, config, description, cliRunEnv, configPath) {
+  const policy = options.accessPolicy || config.accessPolicy || 'public'
+  const siteName = options.siteName || config.siteName || ''
   const siteId = options.siteId || config.siteId
+
+  const applyPolicy = (targetId) => {
+    if (policy !== 'public') return
+    log('确保站点为公开访问（public）…')
+    cliJson(
+      cli,
+      ['sites', 'update-config', '--site-id', targetId, '--access-policy', 'public'],
+      'sites update-config',
+      cliRunEnv,
+    )
+  }
+
   if (siteId) {
     const result = cliJson(cli, ['sites', 'get', '--site-id', siteId], 'sites get', cliRunEnv)
-    if (result.json?.ok === false) fail(`站点 ${siteId} 不可用：${result.json?.error?.message || '未知错误'}`)
-    const site = result.json.data
-    const publicPolicy = site.access_policy === 2
-    if (!publicPolicy) {
-      log(`站点当前不是公开访问，切换为 public …`)
-      cliJson(cli, ['sites', 'update-config', '--site-id', siteId, '--access-policy', 'public'], 'sites update-config', cliRunEnv)
+    if (result.json?.ok !== false) {
+      const site = result.json.data
+      if (site.access_policy !== 2) applyPolicy(siteId)
+      persistSite(configPath, config, siteId, site.site_config?.hostname || '')
+      return { siteId, hostname: site.site_config?.hostname || '', created: false }
     }
-    return { siteId, hostname: site.site_config?.hostname || '', accessPolicy: 2 }
+    // 站点不存在（换了项目 / 被删）时不直接失败，继续按名字找或新建
+    warn(`站点 ${siteId} 不可用（${result.json?.error?.message || '未知错误'}），改为按名称查找`)
+  }
+
+  if (!siteName) {
+    fail('没有可用的站点：请在 deploy.config.json 里填 siteId 或 siteName，或用 --site-name 指定站点名')
   }
 
   const list = cliJson(cli, ['sites', 'list'], 'sites list', cliRunEnv)
   const items = list.json?.data?.items || []
-  const matched = items.find((item) => item.display_name === config.siteName)
+  const matched = items.find((item) => item.display_name === siteName)
   if (matched) {
-    if (matched.access_policy !== 2) {
-      log('站点不是公开访问，切换为 public …')
-      cliJson(cli, ['sites', 'update-config', '--site-id', matched.deploy_target_id, '--access-policy', 'public'], 'sites update-config', cliRunEnv)
-    }
-    return { siteId: matched.deploy_target_id, hostname: matched.site_config?.hostname || '', accessPolicy: 2 }
+    if (matched.access_policy !== 2) applyPolicy(matched.deploy_target_id)
+    persistSite(configPath, config, matched.deploy_target_id, matched.site_config?.hostname || '')
+    log(`复用已有站点「${siteName}」：${matched.deploy_target_id}`)
+    return { siteId: matched.deploy_target_id, hostname: matched.site_config?.hostname || '', created: false }
   }
 
-  log(`没有找到站点「${config.siteName}」，创建新站点 …`)
+  log(`没有找到站点「${siteName}」，创建新站点（${policy}）…`)
   const created = cliJson(
     cli,
-    ['sites', 'create', '--name', config.siteName, '--description', description, '--access-policy', 'public'],
+    ['sites', 'create', '--name', siteName, '--description', description, '--access-policy', policy],
     'sites create',
     cliRunEnv,
   )
-  const site = created.json?.data
-  const newId = site?.deploy_target_id || site?.site_id || ''
+  const createdSite = created.json?.data || {}
+  const newId = createdSite.deploy_target_id || createdSite.site_id || ''
   if (!newId) fail('创建站点后没有拿到站点 ID，请到 Trae 控制台确认')
-  return { siteId: newId, hostname: site?.site_config?.hostname || '', accessPolicy: 2 }
+
+  // 新建站点后立刻取一次详情，拿域名并写回配置，之后 DSH 直接按 siteId 复用
+  let hostname = createdSite.site_config?.hostname || ''
+  try {
+    const detail = cliJson(cli, ['sites', 'get', '--site-id', newId], 'sites get', cliRunEnv)
+    hostname = detail.json?.data?.site_config?.hostname || hostname
+  } catch {
+    /* 拿不到域名不影响部署，部署结果里也会给 */
+  }
+  persistSite(configPath, config, newId, hostname)
+  log(`已创建站点：${newId}${hostname ? ` · https://${hostname}` : ''}`)
+  return { siteId: newId, hostname, created: true }
+}
+
+function persistSite(configPath, config, siteId, hostname) {
+  const next = { ...config }
+  let changed = false
+  if (siteId && next.siteId !== siteId) {
+    next.siteId = siteId
+    changed = true
+  }
+  const baseUrl = hostname ? `https://${hostname}` : ''
+  if (baseUrl && next.baseUrl !== baseUrl) {
+    next.baseUrl = baseUrl
+    changed = true
+  }
+  if (!changed) return
+  try {
+    fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+    log(`已把站点信息写回 ${configPath}`)
+  } catch (error) {
+    warn(`写回配置失败（不影响部署）：${error.message}`)
+  }
 }
 
 function siteBaseUrl(hostname, fallback) {
@@ -509,12 +564,12 @@ async function main() {
 
   let site
   try {
-    site = ensureSite(cli, options, config, generatedDescription, runEnv)
+    site = ensureSite(cli, options, config, generatedDescription, runEnv, configPath)
   } catch (error) {
     fail(`站点准备失败：${error.message}`)
   }
   const siteUrl = siteBaseUrl(site.hostname, config.baseUrl)
-  log(`站点：${site.siteId}（public）· ${siteUrl || '域名未知'}`)
+  log(`站点：${site.siteId}${site.created ? '（新建）' : ''} · ${siteUrl || '域名未知'}`)
 
   log('创建部署 …')
   const created = cliJson(

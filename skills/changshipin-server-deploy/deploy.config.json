@@ -1,6 +1,7 @@
 {
   "siteId": "37lmtdy5bz2ga6o5ozv",
   "siteName": "音视频解析 · 数据后台",
+  "accessPolicy": "public",
   "siteDescription": "项目根目录 f:\\Desktop\\长视频解析，应用目录 server/，Node.js 20 + Express 账号/反馈/使用统计服务与管理员数据后台，入口 server/src/index.js，部署类型 function-web",
   "baseUrl": "https://37lmtdy5bz2ga6o5ozv.traesite.cn",
   "serverDir": "server",
