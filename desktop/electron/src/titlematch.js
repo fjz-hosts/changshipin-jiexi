@@ -62,8 +62,12 @@ function titleCandidates(rawTitle) {
     // 感叹号前面是营销标语，真正的剧名在后面
     const tail = part.replace(/^.*?[！!？?]\s*/, '')
     if (tail !== part) push(tail)
-    if (/\s/.test(part)) {
-      for (const piece of part.split(/\s+/)) push(piece)
+    // 空格分隔的中文标题（「斗破苍穹剧场版 双帝之战」）拆开当候选；
+    // 英文标题不拆，否则 "The Last of Us" 会拆出 "Us" 这种会撞名的词
+    if (/\s/.test(part) && /[\u4e00-\u9fa5]/.test(part)) {
+      for (const piece of part.split(/\s+/)) {
+        if (/[\u4e00-\u9fa5]/.test(piece)) push(piece)
+      }
     }
   }
   push(raw)
