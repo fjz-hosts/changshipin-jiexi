@@ -2942,18 +2942,39 @@
     $('#source-url').title = videoUrl
     $('#stage-title-text').textContent = platform ? `${platform.name} · 准备解析` : '准备解析'
     $('#btn-parse').classList.add('busy')
+    const failures = []
+    const runStartedAt = Date.now()
+    // 只拿到试看的线路先记下来：优先继续试下一条，所有线路都不行时再播放最长的那条试看。
+    let bestTrial = null
+    let reported = false
+    // 使用统计只在整条换线链跑完后上报一次：资源站没有冷门视频是常态，后面第三方线路
+    // 能播就不该算解析失败；只有所有线路都失败时才记一条错误。
+    const reportParse = (ok, { line = currentLine(), errorCode = '', title = '' } = {}) => {
+      if (reported) return
+      reported = true
+      window.desktop
+        .reportParse({
+          result: ok ? 'ok' : 'fail',
+          platform: platform?.name || '',
+          lineName: line?.name || '',
+          lineKind: line?.kind || '',
+          durationMs: Date.now() - runStartedAt,
+          title: cleanTitle(title || state.currentTitle || '') || '',
+          errorCode: String(errorCode || ''),
+          url: videoUrl,
+        })
+        .catch(() => {})
+    }
     clearRunWatchdog()
     state.runWatchdog = setTimeout(() => {
       if (token !== state.runToken) return
       state.running = false
       clearRunWatchdog()
+      reportParse(false, { errorCode: '解析超时：线路 90 秒没有响应' })
       showError('解析超时', '线路长时间没有响应，可能网络或解析接口卡住了。可以点「重新解析」或「换线路」。')
     }, 90000)
     setStatus('正在解析…')
 
-    const failures = []
-    // 只拿到试看的线路先记下来：优先继续试下一条，所有线路都不行时再播放最长的那条试看。
-    let bestTrial = null
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index]
       if (token !== state.runToken) return
@@ -2982,6 +3003,7 @@
         if (line.platform === 'mgtv' && /地区限制|版权限制|会员|登录|地域/i.test(errorText)) {
           state.running = false
           clearRunWatchdog()
+          reportParse(false, { line, errorCode: errorText })
           showError(
             '芒果TV 无法解析',
             `${errorText}\n\n芒果TV 当前把本机网络判定为境外/地区受限。请使用中国大陆网络，或先切换到国内线路后再试；` +
@@ -3005,6 +3027,7 @@
           if (index < lines.length - 1) continue
         }
         playStream(result)
+        reportParse(true, { line, title: result.title || '' })
         onParseSuccess(line)
         if (looksTrial) showTrialTip(seconds, line.name)
         return
@@ -3018,6 +3041,7 @@
       }
       setView('webview')
       $('#live-dot').classList.add('playing')
+      reportParse(true, { line })
       onParseSuccess(line)
       detectWebviewTrial(token, line.name)
       return
@@ -3044,6 +3068,7 @@
           if (!looksTrial) {
             state.lastResult = nativeResult
             playStream(nativeResult)
+            reportParse(true, { line: nativeLine, title: nativeResult.title || '' })
             onParseSuccess(nativeLine)
             hideTrialTip()
             toast('网页线路失败，已改用平台原生解析', 'ok', 5200)
@@ -3064,6 +3089,7 @@
       clearRunWatchdog()
       state.lastResult = bestTrial.result
       playStream(bestTrial.result)
+      reportParse(true, { line: bestTrial.line, title: bestTrial.result.title || '' })
       onParseSuccess(bestTrial.line)
       showTrialTip(bestTrial.seconds, bestTrial.line.name)
       toast('所有线路都只拿到试看；换线或登录会员后可在官网看完整版', 'warn', 6500)
@@ -3072,6 +3098,9 @@
 
     state.running = false
     clearRunWatchdog()
+    reportParse(false, {
+      errorCode: failures.length ? `全部 ${failures.length} 条线路失败｜${failures[0]}` : '所有线路都没能解析成功',
+    })
     showError(
       '所有线路都没能解析成功',
       `已按顺序尝试 ${failures.length} 条线路：\n${failures.slice(0, 4).join('\n')}\n\n` +

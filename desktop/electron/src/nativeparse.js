@@ -158,6 +158,46 @@ function pickTencentStream(vi) {
   return null
 }
 
+// 真取一次 HLS 播放列表确认加密方式：腾讯的 fl.fi 里 drm 标记偶尔会误标免费档，
+// 播放列表里没有 SAMPLE-AES / Widevine 就说明内置播放器能解，不该直接判失败。
+async function probeHlsEncrypted(streamUrl, timeout = 8000) {
+  const load = async (target) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout)
+    try {
+      const response = await fetch(target, {
+        signal: controller.signal,
+        redirect: 'follow',
+        headers: { 'user-agent': UA, referer: 'https://v.qq.com/', accept: '*/*' },
+      })
+      if (!response.ok) return null
+      const text = await response.text()
+      return text.includes('#EXTM3U') ? text : null
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  let text = await load(streamUrl)
+  if (!text) return null
+  if (/#EXT-X-STREAM-INF/i.test(text)) {
+    const lines = text.split(/\r?\n/)
+    const index = lines.findIndex((line) => /^#EXT-X-STREAM-INF/i.test(line))
+    const variantLine = lines.slice(index + 1).find((line) => line.trim() && !line.startsWith('#'))
+    if (!variantLine) return null
+    let variant = ''
+    try {
+      variant = new URL(variantLine.trim(), streamUrl).href
+    } catch {
+      return null
+    }
+    text = await load(variant)
+    if (!text) return null
+  }
+  return /#EXT-X-(?:SESSION-)?KEY:[^\n]*METHOD=(?!NONE|AES-128)/i.test(text)
+}
+
 function tencentError(detail) {
   const message = String(detail?.msg || detail?.err_msg || '').trim()
   if (/区域|地区|版权|country|region/i.test(message)) {
@@ -210,13 +250,25 @@ async function extractTencent({ url, cookie = '' }) {
 
   const vi = detail?.vl?.vi?.[0] || {}
   const quality = tencentQuality(detail)
+  const picked = pickTencentStream(vi)
   if (quality.drm) {
+    // 先别急着报 DRM：真取播放列表看看，接口标记误标的情况能救回来
+    const encrypted = picked && picked.kind === 'hls' ? await probeHlsEncrypted(picked.streamUrl) : null
+    if (encrypted === false) {
+      return {
+        kind: 'stream',
+        streamUrl: picked.streamUrl,
+        referer: 'https://v.qq.com/',
+        title: String(vi.ti || '').trim(),
+        duration: Number(vi.td) || 0,
+        note: `${quality.resolution || quality.name || 'HLS'} · 已通过加密校验`,
+      }
+    }
     return {
       kind: 'none',
       error: `腾讯视频返回的是 DRM 加密流（${quality.resolution || quality.name || '会员/付费内容'}），内置播放器不支持，请使用第三方线路或官网观看`,
     }
   }
-  const picked = pickTencentStream(vi)
   if (!picked) {
     return { kind: 'none', error: '腾讯视频没有返回可播放地址（可能需要登录会员；付费/云影院内容只给试看）' }
   }

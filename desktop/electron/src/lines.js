@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto')
 const { net } = require('electron')
+const { parseTitleInfo, isMovieTitle, matchCmsList, pickCmsStream } = require('./titlematch')
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0'
@@ -411,6 +412,20 @@ async function fetchJson(target, headers, timeout = 15000) {
   }
 }
 
+// 网络抖动时 fetch 会直接抛 "fetch failed"：芒果接口偶发一次就成功，重试一次更划算
+async function fetchJsonRetry(target, headers, timeout = 15000, attempts = 2) {
+  let lastError = null
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetchJson(target, headers, timeout)
+    } catch (error) {
+      lastError = error
+      if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 400))
+    }
+  }
+  throw lastError
+}
+
 function mergeCookieHeader(existing, setCookies = []) {
   const jar = new Map()
   for (const part of String(existing || '').split(';')) {
@@ -449,7 +464,7 @@ async function extractMango(videoUrl, cookieHeader = '') {
 
   let player
   try {
-    player = await fetchJson(
+    player = await fetchJsonRetry(
       `https://pcweb.api.mgtv.com/player/video?tk2=${encodeURIComponent(tk2)}&video_id=${videoId}&type=pch5`,
       headersFor(),
     )
@@ -471,13 +486,13 @@ async function extractMango(videoUrl, cookieHeader = '') {
 
   let source
   try {
-    source = await fetchJson(
+    source = await fetchJsonRetry(
       `https://tinker.glb.mgtv.com/player/getSource?_support=10000000&tk2=${encodeURIComponent(tk2)}&pm2=${encodeURIComponent(pm2)}&video_id=${videoId}&type=pch5&auth_mode=1&cxid=&supportMse=1&src=mgtv&abroad=10&allowedRC=1`,
       headersFor(),
     )
     jar = mergeCookieHeader(jar, source.setCookies)
   } catch (error) {
-    return { kind: 'none', error: `芒果TV 取流接口失败：${String(error?.message || error).slice(0, 60)}` }
+    return { kind: 'none', error: `芒果TV 取流接口失败（已重试）：${String(error?.message || error).slice(0, 60)}` }
   }
   if (source.json?.code === 40005 || /地区|country|region/i.test(source.json?.msg || '')) {
     return { kind: 'none', error: '芒果TV 提示地区限制（需要在中国大陆网络下使用）' }
@@ -525,95 +540,108 @@ async function extractMango(videoUrl, cookieHeader = '') {
 // 128 kbps 音轨、带宽 16.5 kHz，音质明显更好。匹配不到时仍然回落到网页线路。
 // ---------------------------------------------------------------------------
 
-function parseTitleInfo(rawTitle) {
-  const text = String(rawTitle || '').replace(/\s+/g, ' ').trim()
-  if (!text) return { name: '', episode: 0 }
-  const episode = Number((text.match(/第\s*(\d+)\s*[集话期]/) || [])[1]) || 0
-  let name = text.split(/[-_|–—]/).map((part) => part.trim()).filter(Boolean)[0] || text
-  name = name.replace(/第\s*\d+\s*[集话期].*$/, '')
-  name = name
-    .replace(/[《》]/g, '')
-    .replace(/(电视剧|全集|完整版|在线观看|免费观看|高清|超清|蓝光|1080P|4K|国语|普通话)/gi, '')
-    .trim()
-  return { name, episode }
-}
+const USELESS_TITLE = /^(?:electron|video|视频|腾讯视频|爱奇艺|优酷|芒果tv|芒果TV)$/i
 
-function pickCmsEpisode(playUrl, episode) {
-  const groups = String(playUrl || '').split('$$$').filter(Boolean)
-  let best = null
-  for (const group of groups) {
-    const items = group
-      .split('#')
-      .map((part) => {
-        const index = part.indexOf('$')
-        if (index <= 0) return null
-        return { label: part.slice(0, index), url: part.slice(index + 1) }
-      })
-      .filter((item) => item && /^https?:\/\//i.test(item.url))
-    if (!items.length) continue
-    const hit = items.find((item) => {
-      const num = Number((String(item.label).match(/(\d+)/) || [])[1])
-      return num === Number(episode)
-    })
-    if (hit && (!best || items.length > best.count)) best = { url: hit.url, count: items.length }
+async function fetchCmsList(api, name, timeout = 9000) {
+  const target = `${api}${api.includes('?') ? '&' : '?'}ac=detail&wd=${encodeURIComponent(name)}`
+  let response = null
+  let lastError = null
+  // 采集站偶尔几秒不回包，重试一次比直接失败更划算
+  for (let attempt = 0; attempt < 2 && !response; attempt += 1) {
+    try {
+      response = await fetchText(target, attempt === 0 ? timeout : timeout + 4000)
+    } catch (error) {
+      lastError = error
+    }
   }
-  return best ? best.url : ''
+  if (!response) {
+    return { ok: false, error: `资源站搜索失败：${String(lastError?.message || lastError).slice(0, 50)}` }
+  }
+  try {
+    const data = JSON.parse(response.text)
+    return { ok: true, list: Array.isArray(data?.list) ? data.list : [] }
+  } catch (error) {
+    return { ok: false, error: `资源站返回内容无法解析：${String(error?.message || error).slice(0, 40)}` }
+  }
 }
 
 async function extractCms(videoUrl, line, titleHint = '', episodeHint = '') {
   const api = String(line?.url || '').trim()
   if (!api) return { kind: 'none', error: '资源站接口地址为空' }
   let pageTitle = String(titleHint || '').trim()
-  if (!parseTitleInfo(pageTitle).episode && !Number(episodeHint)) {
+  const hintEpisode = Number((String(episodeHint || '').match(/(\d+)/) || [])[1]) || 0
+  const hinted = parseTitleInfo(pageTitle)
+  // 只有「标题信息太少」时才回源抓页面：标题已经能拆出剧名 + 集数就不要再等一次页面请求
+  if (!hintEpisode && !hinted.episode && (USELESS_TITLE.test(pageTitle) || hinted.names.length <= 1)) {
     try {
       // 用 Chromium 的 net.fetch：部分采集站的 CDN 对 Node 的 TLS 握手会直接重置连接
       const page = await fetchText(videoUrl, 12000)
       const raw = (page.text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || [])[1] || ''
       const tag = (page.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''
-      pageTitle = pageTitle || raw || tag
+      const fetched = String(raw || tag || '').trim()
+      if (fetched) {
+        // 不要丢掉渲染层已经传来的准确标题：拼在后面一起当候选（也用来补集数）
+        pageTitle = pageTitle && !USELESS_TITLE.test(pageTitle) ? `${pageTitle}_${fetched}` : fetched
+      }
     } catch {
-      /* 页面拿不到就用下面的报错 */
+      /* 页面拿不到就用标题提示继续匹配 */
     }
   }
   const info = parseTitleInfo(pageTitle)
-  if (!info.episode) info.episode = Number((String(episodeHint || '').match(/(\d+)/) || [])[1]) || 0
-  if (!info.name) return { kind: 'none', error: '没能从页面标题识别出剧名' }
-  if (!info.episode) return { kind: 'none', error: `页面标题里没有集数：${pageTitle.slice(0, 40) || '空标题'}` }
+  if (!info.names.length) return { kind: 'none', error: '没能从页面标题识别出剧名' }
+  const episode = hintEpisode || info.episode
+  const movie = isMovieTitle(pageTitle)
 
-  const searchUrl = `${api}${api.includes('?') ? '&' : '?'}ac=detail&wd=${encodeURIComponent(info.name)}`
-  let data = null
-  let lastError = null
-  // 采集站偶尔几秒不回包，重试一次比直接失败更划算
-  for (let attempt = 0; attempt < 2 && !data; attempt += 1) {
-    try {
-      const response = await fetchText(searchUrl, attempt === 0 ? 12000 : 16000)
-      data = JSON.parse(response.text)
-    } catch (error) {
-      lastError = error
+  // 平台页面标题的第一段经常是营销标语（如「九年青春，终极一战！_动漫_… 双帝之战」），
+  // 依次用候选剧名搜资源站，命中就停，避免拿标语去搜导致「资源站没有」。
+  const collected = []
+  const seen = new Set()
+  let searchError = ''
+  const deadline = Date.now() + 20000
+  for (const name of info.names.slice(0, 4)) {
+    if (Date.now() > deadline) break
+    const searched = await fetchCmsList(api, name, 9000)
+    if (!searched.ok) {
+      searchError = searched.error
+      continue
     }
+    for (const item of searched.list) {
+      const key = `${item?.vod_id || ''}|${item?.vod_name || ''}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      collected.push(item)
+    }
+    if (matchCmsList(collected, info.names).items.length) break
   }
-  if (!data) {
-    return { kind: 'none', error: `资源站搜索失败：${String(lastError?.message || lastError).slice(0, 50)}` }
-  }
-  const list = Array.isArray(data?.list) ? data.list : []
-  // 剧名必须完全一致，避免撞同名剧；再挑集数最全的那条源
-  const exact = list
-    .filter((item) => String(item?.vod_name || '').trim() === info.name)
-    .sort((a, b) => String(b?.vod_play_url || '').split('#').length - String(a?.vod_play_url || '').split('#').length)
-  if (!exact.length) return { kind: 'none', error: `资源站没有《${info.name}》` }
+  if (!collected.length) return { kind: 'none', error: searchError || `资源站没有《${info.name}》` }
 
-  for (const item of exact) {
-    const streamUrl = pickCmsEpisode(item.vod_play_url, info.episode)
-    if (!streamUrl) continue
+  const matched = matchCmsList(collected, info.names)
+  if (!matched.items.length) return { kind: 'none', error: `资源站没有《${info.name}》` }
+  // 集数最全的那条源优先
+  const ordered = [...matched.items].sort(
+    (left, right) => String(right?.vod_play_url || '').split('#').length - String(left?.vod_play_url || '').split('#').length,
+  )
+  for (const item of ordered) {
+    const picked = pickCmsStream(item.vod_play_url, episode, { movie })
+    if (!picked.url) continue
     let referer = ''
     try {
-      referer = `${new URL(streamUrl).origin}/`
+      referer = `${new URL(picked.url).origin}/`
     } catch {
       /* 没有 referer 也能试 */
     }
-    return { kind: 'stream', streamUrl, referer, title: `${info.name} 第${info.episode}集` }
+    const showName = String(item.vod_name || info.name)
+      .replace(/\s+/g, ' ')
+      .replace(/[?？]+$/, '')
+      .trim()
+    return { kind: 'stream', streamUrl: picked.url, referer, title: episode ? `${showName} 第${episode}集` : showName }
   }
-  return { kind: 'none', error: `《${info.name}》没有第 ${info.episode} 集` }
+  return {
+    kind: 'none',
+    error: episode
+      ? `《${info.name}》没有第 ${episode} 集`
+      : `《${info.name}》是剧集，缺少集数（请从选集里点某一集再解析）`,
+  }
 }
 
 async function parseWithLine({ videoUrl, line, cookieHeader = '', titleHint = '', episodeHint = '' }) {

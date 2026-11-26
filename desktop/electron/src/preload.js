@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('desktop', {
   readClipboard: () => ipcRenderer.invoke('clipboard:read'),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   parse: (payload) => ipcRenderer.invoke('parse:run', payload),
+  reportParse: (payload) => ipcRenderer.invoke('parse:report', payload),
   authStatus: (keys) => ipcRenderer.invoke('auth:status', keys),
   // 账号 / 反馈 / 使用统计
   accountState: () => ipcRenderer.invoke('account:state'),

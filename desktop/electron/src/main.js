@@ -1399,27 +1399,6 @@ function registerIpc() {
     const lines = store.get('lines') || []
     const line = lines.find((item) => item.id === payload.lineId) || lines.find((item) => item.enabled)
     if (!line) return { ok: false, error: '没有可用的解析线路，请先在「线路管理」里启用一条线路' }
-    // 上报：平台 / 线路类型 / 成功失败 / 耗时 / 标题（不存完整带参数的链接）
-    const started = Date.now()
-    const platformInfo = detectPlatformByUrl(url)
-    const trackParse = (result, extra = {}) => {
-      account?.track('parse', {
-        platform: platformInfo?.name || '',
-        lineKind: line.kind || '',
-        result,
-        durationMs: Date.now() - started,
-        url,
-        ...extra,
-      })
-      if (result === 'fail') {
-        account?.track('error', {
-          platform: platformInfo?.name || '',
-          lineKind: line.kind || '',
-          errorCode: String(extra.errorCode || '解析失败'),
-          url,
-        })
-      }
-    }
     try {
       let cookieHeader = ''
       if (line.kind === 'mgtv' || line.kind === 'native') {
@@ -1471,7 +1450,6 @@ function registerIpc() {
       if (result.kind === 'page') {
         clearParseMedia()
         log(`解析 ${line.name} → 页面 ${result.url}`)
-        trackParse('ok')
         return { ok: true, kind: 'page', url: result.url, line: publicLine(line), platform: detectPlatformByUrl(url)?.name || '未知' }
       }
       if (result.kind === 'stream') {
@@ -1500,7 +1478,6 @@ function registerIpc() {
           duration: Number(media.duration) || 0,
         }
         log(`解析 ${line.name} → 流地址 ${result.streamUrl}（${media.duration || '?'} 秒${trial ? ' · 试看' : ''}）`)
-        trackParse('ok', { title: result.title || '' })
         return {
           ok: true,
           kind: 'stream',
@@ -1517,13 +1494,33 @@ function registerIpc() {
       if (result.kind === 'none') {
         log(`解析失败 ${line.name}：${result.error || '没有返回可播放地址'}`)
       }
-      trackParse('fail', { errorCode: result.error || '线路没有返回可播放地址' })
       return { ok: false, error: result.error || '线路没有返回可播放的地址' }
     } catch (error) {
       log(`解析失败 ${line.name}：${error?.message || error}`)
-      trackParse('fail', { errorCode: String(error?.message || error) })
       return { ok: false, error: String(error?.message || error).slice(0, 160) }
     }
+  })
+
+  // 解析结果上报：由渲染层在「整条换线链跑完」后调用一次。
+  // 资源站没有冷门视频、某条线路抽风都属正常回退，只有所有线路都失败才算一次解析失败。
+  ipcMain.handle('parse:report', (_event, payload = {}) => {
+    const result = payload.result === 'ok' ? 'ok' : 'fail'
+    const platform = String(payload.platform || '')
+    const lineKind = String(payload.lineKind || '')
+    const title = String(payload.title || '')
+    const url = String(payload.url || '')
+    const durationMs = Number(payload.durationMs) || 0
+    account?.track('parse', { platform, lineKind, result, durationMs, title, url })
+    if (result === 'fail') {
+      account?.track('error', {
+        platform,
+        lineKind,
+        errorCode: String(payload.errorCode || '所有线路都没能解析成功'),
+        title,
+        url,
+      })
+    }
+    return { ok: true }
   })
 
   ipcMain.handle('download:start', (_event, payload = {}) => {

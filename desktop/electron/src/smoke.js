@@ -449,6 +449,40 @@ async function runSmoke({ app, window, proxy, store }) {
   const unsupported = await series.resolveSeries({ url: 'https://example.com/not-video' })
   check('选集：不支持的平台返回明确错误', unsupported.ok === false && /平台/.test(unsupported.error || ''), JSON.stringify(unsupported))
 
+  // ---- 3.4 资源站剧名匹配 / 解析失败判定 ----
+  const titlematch = require('./titlematch')
+  const movieInfo = titlematch.parseTitleInfo(
+    '九年青春，终极一战！_动漫_高清完整版视频在线观看 斗破苍穹剧场版 双帝之战',
+  )
+  check(
+    '资源站：从「标语_分类_剧名」标题里拆出真实剧名',
+    movieInfo.names.includes('斗破苍穹剧场版 双帝之战') && movieInfo.names.includes('斗破苍穹剧场版'),
+    JSON.stringify(movieInfo.names),
+  )
+  const movieMatch = titlematch.matchCmsList(
+    [{ vod_name: '斗破苍穹剧场版 双帝之战?', vod_play_url: '第01集$https://example.test/a.m3u8' }],
+    movieInfo.names,
+  )
+  check(
+    '资源站：剧名多一个「?」也能匹配',
+    movieMatch.mode === 'exact' && movieMatch.items.length === 1,
+    JSON.stringify(movieMatch),
+  )
+  const moviePick = titlematch.pickCmsStream(movieMatch.items[0].vod_play_url, 0, { movie: true })
+  check('资源站：剧场版没有集数也能取正片', /example\.test/.test(moviePick.url), JSON.stringify(moviePick))
+  const cmsSeriesUrl = Array.from({ length: 8 }, (_, i) => `第0${i + 1}集$https://example.test/${i + 1}.m3u8`).join('#')
+  check(
+    '资源站：剧集按集数精确取流，不串集',
+    titlematch.pickCmsStream(cmsSeriesUrl, 5).url.endsWith('/5.m3u8') &&
+      titlematch.pickCmsStream(cmsSeriesUrl, 0).url === '',
+    JSON.stringify({ five: titlematch.pickCmsStream(cmsSeriesUrl, 5), zero: titlematch.pickCmsStream(cmsSeriesUrl, 0) }),
+  )
+  const reportParseResult = await window.webContents.executeJavaScript(
+    "window.desktop.reportParse({ result: 'ok', platform: '测试', lineKind: 'cms', url: 'https://v.qq.com/x/cover/a/b.html' })",
+  )
+  check('埋点：解析结果上报接口可用', reportParseResult?.ok === true, JSON.stringify(reportParseResult))
+
+
   // 渲染层：选集条渲染 / 高亮
   const seriesBar = await window.webContents.executeJavaScript(`(() => {
     const fake = {
