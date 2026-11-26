@@ -2875,7 +2875,14 @@
       platformKey && nativePlatforms.has(platformKey)
         ? ordered.find((line) => line.platform === platformKey && (line.kind === 'mgtv' || line.kind === 'native'))
         : null
-    const primary = platformNative || ordered.find((line) => line.id === primaryId) || ordered[0]
+    // 爱奇艺 / 腾讯视频 / 优酷：第三方解析站的音轨普遍被二次压到 64~70kbps，
+    // 优先走资源站（实测 128kbps），匹配不到再按原顺序回落到网页线路。
+    const cmsPlatforms = new Set(['iqiyi', 'qq', 'youku'])
+    const cmsLine =
+      platformKey && cmsPlatforms.has(platformKey) ? ordered.find((line) => line.kind === 'cms' && !isDead(line)) : null
+    // 默认线路被设成资源站时，其他平台（搜狐等）不要跟着走资源站，按普通线路顺序来
+    const preferred = ordered.find((line) => line.id === primaryId)
+    const primary = platformNative || cmsLine || (preferred && preferred.kind !== 'cms' ? preferred : null) || ordered.find((line) => line.kind !== 'cms') || ordered[0]
     const chain = [primary, ...ordered.filter((line) => line.id !== primary.id)]
     return state.config?.autoFallback === false ? [primary] : chain
   }
@@ -2961,7 +2968,7 @@
 
       let result = null
       try {
-        result = await window.desktop.parse({ url: videoUrl, lineId: line.id })
+        result = await window.desktop.parse({ url: videoUrl, lineId: line.id, title: state.currentTitle || '', episode: state.currentEpisode || '' })
       } catch (error) {
         result = { ok: false, error: String(error?.message || error) }
       }
@@ -3787,6 +3794,7 @@
   const LINE_KINDS = [
     { value: 'page', label: '网页' },
     { value: 'api', label: '接口' },
+    { value: 'cms', label: '资源站' },
     { value: 'mgtv', label: '芒果内置' },
     { value: 'native', label: '原生解析' },
     { value: 'direct', label: '直连' },

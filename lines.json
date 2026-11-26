@@ -1,8 +1,16 @@
 {
-    "version":  8,
-    "updatedAt":  "2026-11-21",
+    "version":  9,
+    "updatedAt":  "2026-11-26",
     "note":  "在线线路清单：程序「设置 → 解析线路 → 在线更新线路」会拉取本文件；id 保持不变可沿用本地的启用/停用状态。",
     "lines":  [
+                  {
+                      "id":  "builtin-cms-baide",
+                      "name":  "白得资源站",
+                      "kind":  "cms",
+                      "url":  "https://api.apibdzy.com/api.php/provide/vod/",
+                      "enabled":  true,
+                      "note":  "按剧名+集数匹配采集源，实测 1080P + 128kbps 音轨（解析站只有 64~70kbps）；匹配不到会自动回落到网页线路"
+                  },
                   {
                       "id":  "builtin-789",
                       "name":  "789解析",

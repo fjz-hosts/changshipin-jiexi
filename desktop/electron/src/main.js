@@ -1438,7 +1438,36 @@ function registerIpc() {
           }
         }
       }
-      const result = await parseWithLine({ videoUrl: url, line, cookieHeader })
+      // 资源站按「剧名 + 集数」匹配：集数优先用渲染层传来的（选集中切换时最准），
+      // 没有就查一次选集列表，再退回到页面标题里的「第N集」。
+      let titleHint = String(payload.title || '').trim()
+      let episodeHint = String(payload.episode || '').trim()
+      if (line.kind === 'cms') {
+        if (!titleHint) titleHint = await resolvePageTitle(url)
+        if (!episodeHint && !/第\s*\d+\s*[集话期]/.test(titleHint)) {
+          try {
+            const series = await resolveSeries({ url, hint: { title: titleHint } })
+            if (series?.ok) {
+              const norm = (raw) => {
+                try {
+                  const item = new URL(raw)
+                  return `${item.hostname.toLowerCase()}${item.pathname}`
+                } catch {
+                  return ''
+                }
+              }
+              const target = norm(url)
+              const hit = series.episodes.find((item) => norm(item.url) === target)
+              const episodeNo = Number(hit?.index) || Number((String(hit?.label || hit?.title || '').match(/(\d+)/) || [])[1]) || 0
+              if (episodeNo) episodeHint = String(episodeNo)
+              if (!titleHint || titleHint === 'Electron') titleHint = series.title || ''
+            }
+          } catch {
+            /* 拿不到集数就交给页面标题判断，失败会正常回落到网页线路 */
+          }
+        }
+      }
+      const result = await parseWithLine({ videoUrl: url, line, cookieHeader, titleHint, episodeHint })
       if (result.kind === 'page') {
         clearParseMedia()
         log(`解析 ${line.name} → 页面 ${result.url}`)

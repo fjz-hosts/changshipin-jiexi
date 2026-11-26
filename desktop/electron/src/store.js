@@ -70,7 +70,7 @@ function historySeriesKey(item) {
 
 function normalizeLine(raw, index) {
   if (!raw || typeof raw !== 'object') return null
-  const kind = ['page', 'api', 'mgtv', 'direct', 'native'].includes(raw.kind) ? raw.kind : 'page'
+  const kind = ['page', 'api', 'mgtv', 'direct', 'native', 'cms'].includes(raw.kind) ? raw.kind : 'page'
   const url = cleanText(raw.url, 600)
   if (!url) return null
   const id = cleanText(raw.id, 80) || `line-${Date.now()}-${index}`

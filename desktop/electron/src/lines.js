@@ -20,6 +20,15 @@ const SAMPLE_URLS = {
 // 失效时请换一条线路，或在设置里填入你自己可用的接口。
 const DEFAULT_LINES = [
   {
+    id: 'builtin-cms-baide',
+    name: '白得资源站',
+    kind: 'cms',
+    url: 'https://api.apibdzy.com/api.php/provide/vod/',
+    enabled: true,
+    builtin: true,
+    note: '按剧名+集数匹配采集源，实测 1080P + 128kbps 音轨（解析站只有 64~70kbps）；匹配不到会自动回落到网页线路',
+  },
+  {
     id: 'builtin-789',
     name: '789解析',
     kind: 'page',
@@ -508,10 +517,110 @@ async function extractMango(videoUrl, cookieHeader = '') {
   return { kind: 'none', error: '芒果TV 播放地址解析失败（可能需要在芒果内置窗口登录会员）' }
 }
 
-async function parseWithLine({ videoUrl, line, cookieHeader = '' }) {
+// ---------------------------------------------------------------------------
+// 资源站（苹果CMS 采集接口）解析：按「剧名 + 集数」匹配直链 m3u8
+//
+// 为什么需要它：第三方「解析」站基本都把音轨二次压到 64~70 kbps（实测 789 / 盘古
+// 同一后端 69 kbps、带宽只有 12.5 kHz），而采集站给的是搬运源，实测 1080P +
+// 128 kbps 音轨、带宽 16.5 kHz，音质明显更好。匹配不到时仍然回落到网页线路。
+// ---------------------------------------------------------------------------
+
+function parseTitleInfo(rawTitle) {
+  const text = String(rawTitle || '').replace(/\s+/g, ' ').trim()
+  if (!text) return { name: '', episode: 0 }
+  const episode = Number((text.match(/第\s*(\d+)\s*[集话期]/) || [])[1]) || 0
+  let name = text.split(/[-_|–—]/).map((part) => part.trim()).filter(Boolean)[0] || text
+  name = name.replace(/第\s*\d+\s*[集话期].*$/, '')
+  name = name
+    .replace(/[《》]/g, '')
+    .replace(/(电视剧|全集|完整版|在线观看|免费观看|高清|超清|蓝光|1080P|4K|国语|普通话)/gi, '')
+    .trim()
+  return { name, episode }
+}
+
+function pickCmsEpisode(playUrl, episode) {
+  const groups = String(playUrl || '').split('$$$').filter(Boolean)
+  let best = null
+  for (const group of groups) {
+    const items = group
+      .split('#')
+      .map((part) => {
+        const index = part.indexOf('$')
+        if (index <= 0) return null
+        return { label: part.slice(0, index), url: part.slice(index + 1) }
+      })
+      .filter((item) => item && /^https?:\/\//i.test(item.url))
+    if (!items.length) continue
+    const hit = items.find((item) => {
+      const num = Number((String(item.label).match(/(\d+)/) || [])[1])
+      return num === Number(episode)
+    })
+    if (hit && (!best || items.length > best.count)) best = { url: hit.url, count: items.length }
+  }
+  return best ? best.url : ''
+}
+
+async function extractCms(videoUrl, line, titleHint = '', episodeHint = '') {
+  const api = String(line?.url || '').trim()
+  if (!api) return { kind: 'none', error: '资源站接口地址为空' }
+  let pageTitle = String(titleHint || '').trim()
+  if (!parseTitleInfo(pageTitle).episode && !Number(episodeHint)) {
+    try {
+      // 用 Chromium 的 net.fetch：部分采集站的 CDN 对 Node 的 TLS 握手会直接重置连接
+      const page = await fetchText(videoUrl, 12000)
+      const raw = (page.text.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || [])[1] || ''
+      const tag = (page.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || ''
+      pageTitle = pageTitle || raw || tag
+    } catch {
+      /* 页面拿不到就用下面的报错 */
+    }
+  }
+  const info = parseTitleInfo(pageTitle)
+  if (!info.episode) info.episode = Number((String(episodeHint || '').match(/(\d+)/) || [])[1]) || 0
+  if (!info.name) return { kind: 'none', error: '没能从页面标题识别出剧名' }
+  if (!info.episode) return { kind: 'none', error: `页面标题里没有集数：${pageTitle.slice(0, 40) || '空标题'}` }
+
+  const searchUrl = `${api}${api.includes('?') ? '&' : '?'}ac=detail&wd=${encodeURIComponent(info.name)}`
+  let data = null
+  let lastError = null
+  // 采集站偶尔几秒不回包，重试一次比直接失败更划算
+  for (let attempt = 0; attempt < 2 && !data; attempt += 1) {
+    try {
+      const response = await fetchText(searchUrl, attempt === 0 ? 12000 : 16000)
+      data = JSON.parse(response.text)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (!data) {
+    return { kind: 'none', error: `资源站搜索失败：${String(lastError?.message || lastError).slice(0, 50)}` }
+  }
+  const list = Array.isArray(data?.list) ? data.list : []
+  // 剧名必须完全一致，避免撞同名剧；再挑集数最全的那条源
+  const exact = list
+    .filter((item) => String(item?.vod_name || '').trim() === info.name)
+    .sort((a, b) => String(b?.vod_play_url || '').split('#').length - String(a?.vod_play_url || '').split('#').length)
+  if (!exact.length) return { kind: 'none', error: `资源站没有《${info.name}》` }
+
+  for (const item of exact) {
+    const streamUrl = pickCmsEpisode(item.vod_play_url, info.episode)
+    if (!streamUrl) continue
+    let referer = ''
+    try {
+      referer = `${new URL(streamUrl).origin}/`
+    } catch {
+      /* 没有 referer 也能试 */
+    }
+    return { kind: 'stream', streamUrl, referer, title: `${info.name} 第${info.episode}集` }
+  }
+  return { kind: 'none', error: `《${info.name}》没有第 ${info.episode} 集` }
+}
+
+async function parseWithLine({ videoUrl, line, cookieHeader = '', titleHint = '', episodeHint = '' }) {
   if (!videoUrl || !isHttpUrl(videoUrl)) throw new Error('视频链接格式不正确')
   if (!line) throw new Error('没有可用的解析线路')
   if (line.kind === 'direct') return { kind: 'page', url: videoUrl, note: '官网页面模式' }
+  if (line.kind === 'cms') return await extractCms(videoUrl, line, titleHint, episodeHint)
   if (line.kind === 'mgtv') return await extractMango(videoUrl, cookieHeader)
   if (line.kind === 'native') {
     const { parseNative } = require('./nativeparse')
@@ -548,6 +657,26 @@ async function testLine(line, sampleUrl = SAMPLE_URL) {
       const ms = Date.now() - started
       if (result.kind === 'stream') return { ok: true, ms, note: '已解析出芒果TV 播放地址' }
       return { ok: false, ms, note: result.error || '芒果TV 解析失败' }
+    }
+    if (line.kind === 'cms') {
+      // 资源站要看「剧名 + 集数」才能出结果，体检只验证接口是否可访问，
+      // 否则固定样例链接会被误判成失效，把这条线路排到换线链末尾。
+      const api = String(line.url || '').trim()
+      const url = `${api}${api.includes('?') ? '&' : '?'}ac=detail&wd=${encodeURIComponent('测试')}`
+      let response = null
+      let lastError = null
+      for (let attempt = 0; attempt < 2 && !response; attempt += 1) {
+        try {
+          response = await fetchText(url, attempt === 0 ? 9000 : 12000)
+        } catch (error) {
+          lastError = error
+        }
+      }
+      const ms = Date.now() - started
+      if (!response) return { ok: false, ms, note: String(lastError?.message || lastError).slice(0, 60) }
+      if (!response.ok) return { ok: false, ms, note: `HTTP ${response.status}` }
+      if (!/"list"/.test(response.text)) return { ok: false, ms, note: '资源站返回内容不是采集接口格式' }
+      return { ok: true, ms, note: '资源站接口可访问（播放时按剧名+集数匹配）' }
     }
     if (line.kind === 'api') {
       const result = await parseWithLine({ videoUrl: sampleUrl, line })

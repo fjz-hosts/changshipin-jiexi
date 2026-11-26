@@ -329,14 +329,13 @@ def capture_playing(c, http_port):
     line_panel = rect(c, '.side .panel:first-child')
     line_crop = None
     if line_panel:
-        line_crop = {'x': line_panel['x'] - 8, 'y': line_panel['y'] - 6, 'w': 1290 - line_panel['x'] + 8,
-                     'h': line_panel['h'] + 12}
+        # 顶部留一点空，别把面板标题切掉
+        line_crop = {'x': line_panel['x'] - 8, 'y': max(0, line_panel['y'] - 18), 'w': 1290 - line_panel['x'] + 8,
+                     'h': line_panel['h'] + 26}
     snap(c, 'g-lines', 'guide-06-lines',
          [box(c, '#line-list', 1),
-          box(c, '#line-list .line-item:not(.enabled):not(.dead)', 2, badge='right'),
-          box(c, '#line-list .line-item.dead', 3, badge='right'),
-          box(c, '#btn-toggle-dead', 4, badge='top'),
-          box(c, '#btn-test-all', 5, badge='top')],
+          box(c, '#line-list .line-item.disabled', 2, badge='right'),
+          box(c, '#line-list .line-item.dead', 3, badge='right')],
          dim=0.44, crop=line_crop, width=800)
 
     js(c, """(() => {
